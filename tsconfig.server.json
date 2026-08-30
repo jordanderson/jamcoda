@@ -1,0 +1,28 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "target": "ES2020",
+    "lib": ["ES2020"],
+    "jsx": "preserve",
+    "noEmit": false,
+    "outDir": "./dist",
+
+    /* Path aliases for server */
+    "baseUrl": ".",
+    "paths": {
+      "@server/*": ["server/*"],
+      "@models/*": ["server/models/*"],
+      "@routes/*": ["server/routes/*"],
+      "@utils/*": ["server/utils/*"],
+      "@config/*": ["server/config/*"]
+    },
+
+    /* Allow extensions to be omitted */
+    "allowImportingTsExtensions": false,
+    "resolveJsonModule": true
+  },
+  "include": ["server/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

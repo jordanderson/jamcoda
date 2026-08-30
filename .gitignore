@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+*.tsbuildinfo
+coverage/
+
+# Local runtime data (SQLite DB, synced MIDI, ML artifacts)
+data/
+
+# Logs and OS files
+*.log
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+.nvmrc
+
+# But keep the template as an example
+!.env.example

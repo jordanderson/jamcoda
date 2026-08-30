@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JamCoda</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Shim for libraries expecting Node.js globals
+      window.global = window;
+      window.process = {
+        env: {},
+        hrtime: function(previousTimestamp) {
+          var clocktime = performance.now() * 1e-3;
+          var seconds = Math.floor(clocktime);
+          var nanoseconds = Math.floor((clocktime % 1) * 1e9);
+          if (previousTimestamp) {
+            seconds = seconds - previousTimestamp[0];
+            nanoseconds = nanoseconds - previousTimestamp[1];
+            if (nanoseconds < 0) {
+              seconds--;
+              nanoseconds += 1e9;
+            }
+          }
+          return [seconds, nanoseconds];
+        }
+      };
+      window.Buffer = window.Buffer || {
+        isBuffer: function() { return false; }
+      };
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "name": "jamcoda",
+  "private": true,
+  "version": "0.0.1",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup": "node --import tsx scripts/setup.ts",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "tsx watch --tsconfig tsconfig.server.json server/index.ts",
+    "dev:client": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test:server": "NODE_ENV=test tsx --tsconfig tsconfig.server.json --test server/**/*.test.ts",
+    "test:client": "vitest run",
+    "db:migrate": "node --import tsx server/scripts/migrate.ts",
+    "ml:train": "node --import tsx ml/train.ts",
+    "ml:predict": "node --import tsx ml/predict.ts",
+    "ml:predict-import": "node --import tsx ml/predictAndImport.ts",
+    "ml:eval": "node --import tsx ml/eval.ts"
+  },
+  "dependencies": {
+    "@magenta/music": "^1.23.1",
+    "@tanstack/react-query": "^5.102.8",
+    "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "got": "^15.1.0",
+    "lucide-react": "^0.563.0",
+    "midi-file": "^1.2.4",
+    "node-fetch": "^2.7.0",
+    "pako": "^3.0.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "uuid": "^14.0.2"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.6",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
+    "autoprefixer": "^10.5.4",
+    "concurrently": "^10.0.5",
+    "jsdom": "^29.1.1",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.13",
+    "typescript": "~5.6.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}
