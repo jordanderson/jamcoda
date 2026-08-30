@@ -6,7 +6,8 @@ const router = express.Router();
 
 router.post('/start', async (req, res) => {
   try {
-    const syncId = await syncService.startSync();
+    const full = req.query.full === '1' || req.body?.full === true;
+    const syncId = await syncService.startSync(full);
     res.json({ syncId, status: 'in_progress' });
   } catch (error) {
     console.error('Error starting sync:', error);

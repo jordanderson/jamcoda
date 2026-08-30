@@ -8,6 +8,7 @@ coverage/
 
 # Local runtime data (SQLite DB, synced MIDI, ML artifacts)
 data/
+data.backup/
 
 # Logs and OS files
 *.log

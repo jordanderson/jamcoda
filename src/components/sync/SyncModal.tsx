@@ -18,6 +18,8 @@ export function SyncModal({ syncId, onComplete }: SyncModalProps) {
 
   if (!progress) return null;
 
+  const errors = progress.errors ?? [];
+  const warnings = progress.warnings ?? [];
   const isDiscovering = progress.filesFound === 0 && progress.status === 'in_progress';
   const percentage = progress.filesFound > 0
     ? (progress.filesDownloaded / progress.filesFound) * 100
@@ -78,15 +80,28 @@ export function SyncModal({ syncId, onComplete }: SyncModalProps) {
               <XCircle className="w-5 h-5 mr-2" />
               Sync failed
             </p>
-            {progress.errors.length > 0 && (
+            {errors.length > 0 && (
               <div className="mt-2 text-sm text-gray-700 max-h-40 overflow-y-auto">
-                {progress.errors.map((err: { file: string; error: string }, i: number) => (
+                {errors.map((err: { file: string; error: string }, i: number) => (
                   <div key={i} className="py-1">
                     <span className="font-medium">{err.file}:</span> {err.error}
                   </div>
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {warnings.length > 0 && (
+          <div className="mt-4">
+            <p className="text-amber-600 font-medium">Warnings</p>
+            <div className="mt-2 text-sm text-gray-700 max-h-40 overflow-y-auto">
+              {warnings.map((w: { file: string; warning: string }, i: number) => (
+                <div key={i} className="py-1">
+                  <span className="font-medium">{w.file}:</span> {w.warning}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

@@ -1,11 +1,11 @@
 import express from 'express';
 import cors from 'cors';
-import { initializeDatabase, closeDatabase } from './config/database.js';
-import syncRoutes from './routes/sync.routes.js';
-import filesRoutes from './routes/files.routes.js';
-import annotationsRoutes from './routes/annotations.routes.js';
-import predictionReviewsRoutes from './routes/predictionReviews.routes.js';
-import ignoredSectionsRoutes from './routes/ignoredSections.routes.js';
+import { initializeDatabase, closeDatabase } from './config/database';
+import syncRoutes from './routes/sync.routes';
+import filesRoutes from './routes/files.routes';
+import annotationsRoutes from './routes/annotations.routes';
+import predictionReviewsRoutes from './routes/predictionReviews.routes';
+import ignoredSectionsRoutes from './routes/ignoredSections.routes';
 
 const app = express();
 const PORT = 3001;

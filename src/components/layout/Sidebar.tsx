@@ -5,7 +5,7 @@ import { useSoundfontCacheStatus } from '../../hooks/useSoundfontCacheStatus'
 import { useRebuildPredictionModel } from '../../hooks/usePredictionReviews'
 
 interface SidebarProps {
-  onStartSync: () => void
+  onStartSync: (full?: boolean) => void
   isSyncStarting: boolean
 }
 
@@ -34,8 +34,8 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
     window.location.hash = path
   }
 
-  const handleSyncClick = () => {
-    onStartSync()
+  const handleSyncClick = (full = false) => {
+    onStartSync(full)
   }
 
   const handleRebuildModel = () => {
@@ -125,7 +125,7 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
           )}
         </button>
         <button
-          onClick={handleSyncClick}
+          onClick={() => handleSyncClick()}
           disabled={isSyncStarting}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 disabled:bg-gray-900 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium"
         >
@@ -140,6 +140,14 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
               Sync Now
             </>
           )}
+        </button>
+        <button
+          onClick={() => handleSyncClick(true)}
+          disabled={isSyncStarting}
+          title="Re-examine every asset on the device, ignoring the high-water mark"
+          className="w-full text-left px-1 text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-50"
+        >
+          Full re-sync (re-check all device files)
         </button>
         <div className="text-xs text-gray-500 space-y-1">
           {mlFeedback && (

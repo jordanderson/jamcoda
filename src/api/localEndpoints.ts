@@ -24,8 +24,8 @@ import type {
 } from './localTypes';
 
 export const syncApi = {
-  start: async () => {
-    const response = await fetch('/api/sync/start', { method: 'POST' });
+  start: async (full = false) => {
+    const response = await fetch(`/api/sync/start${full ? '?full=1' : ''}`, { method: 'POST' });
     if (!response.ok) throw new Error('Failed to start sync');
     return response.json();
   },

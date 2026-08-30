@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { runMigrations } from './migrations.js';
+import { runMigrations } from './migrations/index';
 
 const APP_DB_PATH = './data/jamcoda.db';
 let db: Database.Database | undefined;

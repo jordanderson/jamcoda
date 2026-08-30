@@ -37,24 +37,106 @@
 - `POST /api/files/list/overview` with `{"filepath": "/"}` lists the root. The
   response is `{ dir, files }`, where `dir` is the listed directory and `files`
   is an array of names; subdirectory entries end with `/`.
+- `POST /api/files/list/detailed` with `{"filepath": "/"}` is the same but each
+  entry carries `filename`, `isDirectory`, `sizeBytes`, and `modifiedLocalTime`.
+  Prefer it for anything that needs sizes. `modifiedLocalTime` is a firmware
+  counter, not a Unix timestamp; do not use it for wall-clock comparisons.
 - Paths returned by the file endpoints are device-absolute, but the download
   endpoints want them prefixed with `/sdcard/` — e.g. list returns
   `/JAMC/2025/<uuid>/Jmx-A00001-Oct-14-2025.mid`, download wants
   `/sdcard/JAMC/2025/<uuid>/Jmx-A00001-Oct-14-2025.mid`. This prefix is not
   part of the on-device layout; it is a quirk of the download endpoints.
+  **On current firmware (verified live) the `/sdcard/` prefix is NOT required** —
+  pass the API-returned path as-is. The official docs agree: "Use paths returned
+  by the API rather than assuming an SD-card mount name."
 - The recording path and filename convention itself is specified in the JMX
   format docs (`/JAMC/<year>/<jamcorderUuid>/Jmx-A<assetIdx>-<Mon>-<DD>-<YYYY>.mid`).
-  Our sync layer only relies on the trailing `-<Mon>-<DD>-<YYYY>` portion to
-  derive the recording date; see `extractDate` in
-  `server/services/sync.service.ts`.
+  Our sync layer uses the `jmxAsset.time` meta event as the authoritative
+  recording date, falling back to the trailing `-<Mon>-<DD>-<YYYY>` filename
+  portion; see `server/utils/jmxParser.ts`.
+
+## Library API (fallback; filesystem walk is primary)
+
+- `POST /api/library/list/assets` is the authoritative catalog of recorded JMX
+  assets. It is flat (no tree traversal) and supports pagination.
+- **On this device the library list is crash-prone**: sustained pagination (even
+  10-asset pages) repeatedly crashed the firmware (HTTP 000 / reboot loop). Our
+  sync therefore uses a recursive `list/detailed` walk as the primary discovery
+  source (a handful of cheap directory reads that still return real sizes) and
+  keeps the library API as a fallback and for `?full=1` passes.
+- Request shape: `{ "getJmxEof": bool, "getFilesize": bool, "getAllDevices": bool,
+  "preferredCount": int, "midiPathContinue"?: string }`. **`getAllDevices` is
+  required** — omitting it is a hard 400 ("Missing key: getAllDevices").
+- Response is a bare JSON array of `{ midiPath, dsel, assetIdx, isCurrentAsset,
+  filesize, jmxEof? }`, newest asset first. To fetch the next page, send
+  `midiPathContinue` = the last `midiPath` of the previous page. Stop when a
+  page returns fewer than `preferredCount` entries (or zero).
+- `getJmxEof` is expensive on low-power firmware (parses EOF summaries for every
+  asset) and can crash the device at large page sizes. Our sync leaves it off —
+  duration is parsed locally from each downloaded file anyway.
+- **This firmware is resource-constrained (Pi-class)**: `preferredCount` of 100+
+  crashed the device (HTTP 000). Our client uses `preferredCount` 10 with a
+  250 ms inter-page delay and retries each page up to 3 times
+  (`JAMCORDER_LIBRARY_PAGE_SIZE`, `JAMCORDER_LIBRARY_PAGE_DELAY_MS`).
+- `GET /api/library/list/years` returns the years present.
+- `GET /api/library/download/newest/midi` returns the newest recording as MIDI.
+
+## Sync model: high-water mark and change detection
+
+- Discovery is library-first. After a sync completes with **zero errors**, a
+  high-water mark is recorded (`high_water_asset_idx` + the owning device's
+  `jamcorderUuid` in `sync_metadata`). Later syncs pass it to the library list,
+  which stops as soon as it reaches an already-synced asset — a steady-state
+  sync is a single page instead of the whole library. The mark is ignored if
+  the newest asset belongs to a different device (new SD card / reprovisioned
+  device), and `POST /api/sync/start?full=1` forces a full pass.
+- Change detection uses `filesize` from the library API. A device file that is
+  **larger** than the synced copy (recording resumed / reopened asset) is
+  re-synced; one that is **smaller** is skipped with a warning — on the
+  observed device old files sometimes exist as truncated, header-only stubs,
+  and overwriting good local data with them would lose data.
+- Active recordings occasionally download as an empty body (file is mid-write);
+  our sync treats that as an error for the file and retries it next sync.
 
 ## Download quirk (firmware bug)
 
-- The file download endpoint can respond with both `Content-Length` and
-  `Transfer-Encoding: chunked` (an HTTP/1.1 violation). Strict HTTP clients
-  (e.g. `got`) reject the response. This project works around it by shelling
-  out to `curl -s`. The downloaded body may also be deflate-compressed, so the
-  same inflate-then-fallback logic applies.
+- The file download endpoints (`download/simple`, `download/offset`) can respond
+  with both `Content-Length` and `Transfer-Encoding: chunked` (an HTTP/1.1
+  violation). Strict HTTP clients (e.g. `got`) reject the response even with
+  `strictContentLength: false`; this project works around it by shelling out to
+  `curl -s`. The downloaded body may also be deflate-compressed, so the same
+  inflate-then-fallback logic applies. We use `execFile` (async) so downloads
+  don't block the server's event loop.
+- `POST /api/files/download/offset` takes `{"filepath", "offset", "length"}`
+  (`length <= 0` means through EOF; negative `offset` is relative to EOF). Our
+  incremental re-sync fetches the bytes after the JMX trailer offset and splices
+  them onto the local file, which is byte-identical to a fresh full download.
+
+## MIDI stones
+
+- `POST /api/midi-stones/download/stone` takes `{"midiPath", "stoneIdx"}` and
+  returns a deflate-compressed ~45 KiB stone. Stone indices are **1-based**
+  (0 is an error); negative indices count backward from the newest stone.
+- **Current firmware rejects stone downloads for the actively-growing asset**
+  ("expected size (N) != actual size (M)") because it validates the cached file
+  size at open. Stones are reliable for completed assets. Our sync therefore
+  uses `download/offset` for live-asset incremental sync and keeps stones as an
+  available primitive for completed-file use.
+
+## JMX parsing gotchas
+
+- SMF variable-length quantities encode the **first byte as the most-significant
+  7-bit group** — a naive little-endian VLQ reader silently skips events past
+  the first large delta and misses `jmxEof`. See `server/utils/jmxParser.ts`.
+- JMX meta JSON is pretty-printed (tabs/newlines) and NUL-terminated; parse from
+  the first `{` to the first NUL.
+- `jmxAsset` is a `FF 01` text meta event (no leading zero byte); all other JMX
+  events are `FF 7F` with a leading `00` prefix. `jmxAsset` holds the local
+  creation `time`; `jmxStoneHdr` holds `asset.assetUuid` (stable sync key) and
+  `identities.jamcorderUuid`; `jmxEof` holds `fileOffset` (renewable-trailer
+  start) and `totalMillis` (silence-compressed duration).
+- Empty recordings are real: files of a few hundred bytes (header + one stone +
+  EOT) are valid, opened-but-unused assets.
 
 ## WebSocket MIDI streaming
 

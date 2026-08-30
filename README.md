@@ -176,6 +176,9 @@ fill these in interactively, or copy `.env.example` to `.env` and edit it by han
 | `JAMCORDER_URL` | `http://jamcorder.local` | Backend, Vite proxy, frontend | Base URL of your Jamcorder device (mDNS name or IP). |
 | `JAMCODA_DB_PATH` | `./data/jamcoda.db` | Backend + ML scripts | Override the SQLite database location. |
 | `JAMCODA_MIDI_DIR` | `./data/midi` | Backend (sync) | Where synced MIDI files are written. Absolute paths are supported, so the library can live outside the repo. |
+| `JAMCORDER_LIBRARY_PAGE_SIZE` | `5` | Backend (sync) | Assets per library API page during sync. Keep small — large pages can crash low-power firmware. |
+| `JAMCORDER_LIBRARY_PAGE_DELAY_MS` | `1000` | Backend (sync) | Pause between library pages to keep low-power firmware responsive. |
+| `JAMCODA_SYNC_DOWNLOAD_PACE_MS` | `300` | Backend (sync) | Pause between individual file downloads during sync. |
 
 Note: the local backend always runs on `http://localhost:3001`.
 

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { closeDatabase, initializeDatabase } from '../config/database.js';
+import { closeDatabase, initializeDatabase } from '../config/database';
 
 function readArg(flag: string): string | undefined {
   const idx = process.argv.indexOf(flag);

@@ -23,7 +23,7 @@ export function WelcomeModal({ isOpen, isSyncing, onSync, onDismiss }: WelcomeMo
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={onSync}
+            onClick={() => onSync()}
             disabled={isSyncing}
             className="px-4 py-2 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-500 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
           >

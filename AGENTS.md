@@ -63,6 +63,9 @@ Core frontend routes:
   - mark merged source rows `invalid`
 - Song rename updates both annotations and prediction review name fields.
 - Playback is normalized to grand piano (`useMidiPlayer`), and soundfont cache worker stores piano assets only.
+- Sync uses a cheap filesystem walk over the detailed file listing (real sizes → skip-unchanged), falls back to the library API when the walk fails, skips unchanged assets by size, and records a high-water mark so a library-API fallback is fast. `POST /api/sync/start?full=1` forces a full pass. The library API is crash-prone on low-power firmware, so it is never the primary discovery source.
+- A device file that is smaller than the synced copy is skipped with a warning (device-side truncation hazard); do not overwrite local data with it.
+- The Jamcorder firmware is resource-constrained and may drop requests or crash; the sync client uses small library pages, generous inter-page/inter-download delays, and per-page/per-file retries.
 
 ## Typical Workflow Changes
 
@@ -70,6 +73,7 @@ Core frontend routes:
 - If user reports `no such table: prediction_reviews`, run `npm run db:migrate`.
 - If CLI prediction output does not appear in UI, use `Run Predictions` in detail page or `ml:predict-import`.
 - If predictions are over-fragmented, prefer merge and threshold tuning over manual DB edits.
+- If the user needs to re-check every device file (e.g. after a device reprovision or fresh SD card), use the sidebar's "Full re-sync" button rather than editing the high-water mark.
 
 ## Validation Checklist
 

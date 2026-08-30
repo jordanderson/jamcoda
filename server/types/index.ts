@@ -14,6 +14,8 @@ export interface FileRecord {
   is_complete: number;
   completed_at: number | null;
   midi_duration: number | null;
+  asset_uuid: string | null;
+  jmx_eof_offset: number | null;
 }
 
 /** Payload used when creating a new synced file row. */
@@ -24,6 +26,19 @@ export interface CreateFileData {
   fileSize: number;
   jamcorderModified: number;
   dateRecorded: string;
+  midiDuration?: number | null;
+  /** Stable asset identity from the JMX stone header. */
+  assetUuid?: string | null;
+  /** Byte offset of the JMX renewable trailer (for incremental re-sync). */
+  jmxEofOffset?: number | null;
+}
+
+/** Payload for updating a re-synced file row. */
+export interface UpdateSyncedFileData {
+  fileSize?: number;
+  jamcorderModified?: number;
+  assetUuid?: string | null;
+  jmxEofOffset?: number | null;
   midiDuration?: number | null;
 }
 
@@ -108,6 +123,8 @@ export interface SyncProgress {
   filesDownloaded: number;
   currentFile: string | null;
   errors: Array<{ file: string; error: string }>;
+  /** Non-fatal issues (e.g. skipped because the device copy is smaller). */
+  warnings: Array<{ file: string; warning: string }>;
 }
 
 /** Jamcorder API file entry returned by remote directory listing calls. */
@@ -117,6 +134,45 @@ export interface JamcorderFileEntry {
   size: number;
   modified: number;
   type: 'file' | 'directory';
+  /** Enrichment from the library API when available. */
+  totalMillis?: number | null;
+  isCurrentAsset?: boolean;
+  assetIdx?: number;
+}
+
+/** Entry returned by POST /api/files/list/detailed. */
+export interface JamcorderDetailedFile {
+  filename: string;
+  isDirectory: boolean;
+  sizeBytes: number;
+  modifiedLocalTime: number;
+}
+
+/** Entry returned by POST /api/library/list/assets (the recording catalog). */
+export interface JamcorderAsset {
+  midiPath: string;
+  dsel?: number;
+  assetIdx?: number;
+  isCurrentAsset?: boolean;
+  filesize?: number;
+  jmxEof?: {
+    totalMillis?: number;
+    totalNotes?: number;
+    totalMsgs?: number;
+    stoneOffsetPrev?: number;
+    stoneIdxPrev?: number;
+    stoneUuidPrev?: string;
+  } | null;
+}
+
+/** Parsed JMX meta-event metadata. */
+export interface JmxMetadata {
+  assetUuid?: string;
+  jamcorderUuid?: string;
+  time?: string;
+  assetIdx?: number;
+  totalMillis?: number;
+  eofFileOffset?: number;
 }
 
 /** Allowed review lifecycle states for prediction rows. */

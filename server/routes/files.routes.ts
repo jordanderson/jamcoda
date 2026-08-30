@@ -111,6 +111,7 @@ router.get('/:id', async (req, res) => {
       localPath: file.local_path,
       jamcorderPath: file.jamcorder_path,
       syncedAt: file.synced_at,
+      assetUuid: file.asset_uuid ?? undefined,
       isComplete: file.is_complete === 1,
       completedAt: file.completed_at,
       annotations,

@@ -18,7 +18,7 @@ import {
   type SongSegment,
   type PredictConfig,
   type TrainConfig
-} from '../../ml/songSegmentation.js';
+} from '../../ml/songSegmentation';
 
 const router = express.Router();
 

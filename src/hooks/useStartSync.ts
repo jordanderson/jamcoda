@@ -5,7 +5,7 @@ export function useStartSync() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: syncApi.start,
+    mutationFn: (full?: boolean) => syncApi.start(full ?? false),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
     }

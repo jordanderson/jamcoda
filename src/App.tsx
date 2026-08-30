@@ -42,10 +42,10 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
-  const handleStartSync = () => {
+  const handleStartSync = (full = false) => {
     if (startSync.isPending) return
 
-    startSync.mutate(undefined, {
+    startSync.mutate(full, {
       onSuccess: (data) => {
         setSyncId(data.syncId)
         setIsWelcomeDismissed(true)
