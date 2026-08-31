@@ -1,6 +1,7 @@
 import { useFilesByDate } from '@/hooks/useFilesByDate';
 import { ChevronRight } from 'lucide-react';
 import type { FileByDateRow } from '@/api/localTypes';
+import { formatDate, formatDuration, formatTime } from '@/utils/format'
 
 interface DateBrowserProps {
   onFileSelect: (fileId: number, startTime?: number) => void;
@@ -57,27 +58,6 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
       </div>
     );
   }
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   // Flatten files from all dates
   const allFiles = data.dates.flatMap(({ date, files }) =>

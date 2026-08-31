@@ -21,7 +21,8 @@
       "@/components/*": ["src/components/*"],
       "@/hooks/*": ["src/hooks/*"],
       "@/api/*": ["src/api/*"],
-      "@/utils/*": ["src/utils/*"]
+      "@/utils/*": ["src/utils/*"],
+      "@core/*": ["core/*"]
     },
 
     /* Linting */
@@ -31,5 +32,12 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  /*
+   * The browser program. `core/` is included here as well as in
+   * tsconfig.server.json so the shared module is checked against both the DOM
+   * and the Node lib -- that is what keeps it genuinely isomorphic. `core/cli`
+   * is the one deliberately Node-only corner, so it is excluded.
+   */
+  "include": ["src", "core"],
+  "exclude": ["core/cli"]
 }

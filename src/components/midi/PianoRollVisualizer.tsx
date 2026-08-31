@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import * as mm from '@magenta/music'
 import { Trash2 } from 'lucide-react'
 import { usePianoRollInteraction } from '@/hooks/usePianoRollInteraction'
+import type { NoteSequence } from '@core/midi/noteSequence'
+import { clamp } from '@core/math'
+import { buildPianoRollLayout } from './pianoRollGeometry'
+import { PianoRollNotes } from './PianoRollNotes'
 
 interface Annotation {
   id: number
@@ -12,7 +15,7 @@ interface Annotation {
 }
 
 interface PianoRollVisualizerProps {
-  sequence: mm.INoteSequence | null
+  sequence: NoteSequence | null
   currentTime?: number
   isPlaying?: boolean
   annotations?: Annotation[]
@@ -87,8 +90,12 @@ export function PianoRollVisualizer({
 }: PianoRollVisualizerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const visualizerRef = useRef<mm.PianoRollSVGVisualizer | null>(null)
-  const configRef = useRef({ pixelsPerTimeStep: 50, noteHeight: 3 })
+  const configRef = useRef({
+    pixelsPerTimeStep: 50,
+    noteHeight: 3,
+    noteSpacing: 1,
+    noteRGB: '148, 152, 229' // Matches theme color #9198E5
+  })
   const [hoverX, setHoverX] = useState<number | null>(null)
   const lastScrollTimeRef = useRef<number>(0)
   const programmaticScrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -165,28 +172,12 @@ export function PianoRollVisualizer({
     }
   }, [svgContainerRef, sequence])
 
-  // Rebuild visualizer when sequence changes so note geometry matches the active file.
-  useEffect(() => {
-    if (!sequence || !svgRef.current) return
-
-    try {
-      svgRef.current.innerHTML = ''
-      visualizerRef.current = new mm.PianoRollSVGVisualizer(
-        sequence,
-        svgRef.current,
-        {
-          noteHeight: configRef.current.noteHeight,
-          pixelsPerTimeStep: configRef.current.pixelsPerTimeStep,
-          noteSpacing: 1,
-          noteRGB: '148, 152, 229', // Matches theme color #9198E5
-          activeNoteRGB: '230, 100, 101' // Matches theme color #E66465
-        }
-      )
-      visualizerRef.current.redraw()
-    } catch (err) {
-      console.error('Error initializing piano roll visualizer:', err)
-    }
-  }, [sequence])
+  // Note geometry is derived from the active sequence and rendered as SVG
+  // rects below, so it stays in sync without any imperative redraw step.
+  const noteLayout = useMemo(
+    () => buildPianoRollLayout(sequence?.notes ?? [], configRef.current),
+    [sequence]
+  )
 
   useEffect(() => {
     if (!isResizingAnnotation) return
@@ -471,7 +462,7 @@ export function PianoRollVisualizer({
       <div className="relative" style={{ minWidth: `${timelineWidth}px` }}>
         <div className="relative">
           {/* Annotation overlays positioned behind SVG */}
-          {displayedAnnotations.length > 0 && visualizerRef.current && (
+          {displayedAnnotations.length > 0 && noteLayout.rects.length > 0 && (
             <div className="absolute top-0 left-0 pointer-events-none z-0">
               {displayedAnnotations.map((annotation) => {
                 const startX = annotation.start_time * pixelsPerTimeStep
@@ -618,11 +609,15 @@ export function PianoRollVisualizer({
               ref={svgRef}
               onClick={handleSvgClick}
               className="block"
+              width={timelineWidth}
+              height={noteLayout.height}
               {...(isAnnotationMode
                 ? handlers
                 : { onMouseMove: handleMouseMove }
               )}
-            />
+            >
+              <PianoRollNotes rects={noteLayout.rects} />
+            </svg>
           </div>
         </div>
 
@@ -901,9 +896,6 @@ function buildRepeatingLabelOffsets(widthPx: number): number[] {
   return offsets
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
-}
 
 function roundToMillis(value: number): number {
   return Math.round(value * 1000) / 1000

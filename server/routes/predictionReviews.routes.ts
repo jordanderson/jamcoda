@@ -1,21 +1,19 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import * as PredictionReviewModel from '@models/PredictionReview';
-import * as FileModel from '@models/File';
-import * as AnnotationModel from '@models/Annotation';
-import * as IgnoredSectionModel from '@models/IgnoredSection';
 import type { PredictionReviewStatus } from '@server/types';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { clamp } from '@core/cli/args';
+import {
+  PredictionImportError,
+  runPredictionImport
+} from '../services/predictionImport';
 import {
   evaluateLeaveOneOut,
   loadAnnotatedMidiFiles,
-  loadModel,
-  predictWindows,
   saveModel,
   trainModel,
-  windowsToSegments,
-  type SongSegment,
   type PredictConfig,
   type TrainConfig
 } from '../../ml/songSegmentation';
@@ -51,100 +49,8 @@ function parseOptionalBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 function isValidTimeRange(start: number, end: number): boolean {
   return Number.isFinite(start) && Number.isFinite(end) && start < end;
-}
-
-interface TimeRange {
-  startTime: number;
-  endTime: number;
-}
-
-function normalizeRanges(ranges: TimeRange[]): TimeRange[] {
-  if (ranges.length === 0) return [];
-  const sorted = [...ranges]
-    .filter((range) => Number.isFinite(range.startTime) && Number.isFinite(range.endTime) && range.endTime > range.startTime)
-    .sort((a, b) => a.startTime - b.startTime || a.endTime - b.endTime);
-
-  if (sorted.length === 0) return [];
-  const merged: TimeRange[] = [{ ...sorted[0] }];
-
-  for (let i = 1; i < sorted.length; i++) {
-    const current = sorted[i];
-    const last = merged[merged.length - 1];
-    if (current.startTime <= last.endTime) {
-      last.endTime = Math.max(last.endTime, current.endTime);
-      continue;
-    }
-    merged.push({ ...current });
-  }
-
-  return merged;
-}
-
-function removeExcludedRangesFromSegments(
-  segments: SongSegment[],
-  excludedRanges: TimeRange[],
-  minSegmentSec: number
-): SongSegment[] {
-  if (segments.length === 0 || excludedRanges.length === 0) {
-    return segments;
-  }
-
-  const normalizedExcluded = normalizeRanges(excludedRanges);
-  if (normalizedExcluded.length === 0) {
-    return segments;
-  }
-
-  const kept: SongSegment[] = [];
-
-  for (const segment of segments) {
-    let cursor = segment.startTime;
-    for (const excluded of normalizedExcluded) {
-      if (excluded.endTime <= cursor) {
-        continue;
-      }
-      if (excluded.startTime >= segment.endTime) {
-        break;
-      }
-
-      const keptEnd = Math.min(excluded.startTime, segment.endTime);
-      if (keptEnd > cursor) {
-        const durationSec = keptEnd - cursor;
-        if (durationSec >= minSegmentSec) {
-          kept.push({
-            ...segment,
-            startTime: cursor,
-            endTime: keptEnd,
-            durationSec
-          });
-        }
-      }
-
-      cursor = Math.max(cursor, excluded.endTime);
-      if (cursor >= segment.endTime) {
-        break;
-      }
-    }
-
-    if (cursor < segment.endTime) {
-      const durationSec = segment.endTime - cursor;
-      if (durationSec >= minSegmentSec) {
-        kept.push({
-          ...segment,
-          startTime: cursor,
-          endTime: segment.endTime,
-          durationSec
-        });
-      }
-    }
-  }
-
-  return kept;
 }
 
 function parseSongName(value: unknown): string | undefined {
@@ -408,25 +314,7 @@ router.post('/run', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'fileId is required' });
     }
 
-    const file = FileModel.findById(fileId);
-    if (!file) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-    if (file.is_complete === 1) {
-      return res.status(400).json({
-        error: 'File is marked complete. Mark it incomplete to run predictions.'
-      });
-    }
-
     const projectRoot = process.cwd();
-    const midiPath = path.isAbsolute(file.local_path)
-      ? file.local_path
-      : path.resolve(projectRoot, file.local_path);
-    if (!existsSync(midiPath)) {
-      return res.status(400).json({
-        error: `MIDI file does not exist on disk: ${midiPath}`
-      });
-    }
 
     const modelPathArg = typeof req.body.modelPath === 'string' && req.body.modelPath.trim().length > 0
       ? req.body.modelPath.trim()
@@ -449,57 +337,33 @@ router.post('/run', async (req: Request, res: Response) => {
     };
     const clearUnpromoted = parseOptionalBoolean(req.body.clearUnpromoted) ?? true;
 
-    const model = loadModel(modelPath);
-    const windows = predictWindows(model, midiPath, config);
-    const rawSegments = windowsToSegments(windows, {
-      minSegmentSec: config.minSegmentSec,
-      minSegmentConfidence: config.minSegmentConfidence,
-      mergeGapSec: config.mergeGapSec
-    });
-    const annotatedRanges = AnnotationModel.listRangesByFileId(fileId);
-    const ignoredRanges = IgnoredSectionModel.listRangesByFileId(fileId);
-    const excludedRanges = [...annotatedRanges, ...ignoredRanges];
-    const segments = removeExcludedRangesFromSegments(
-      rawSegments,
-      excludedRanges,
-      config.minSegmentSec
-    );
-    const excludedSegmentCount = Math.max(0, rawSegments.length - segments.length);
-
-    const clearedCount = clearUnpromoted
-      ? PredictionReviewModel.deleteUnpromotedByFileId(fileId)
-      : 0;
-
-    const modelVersion = `${model.modelType}@${model.createdAt}`;
-    const createdIds = segments.length > 0
-      ? PredictionReviewModel.createMany(
-        segments.map((segment) => ({
-          fileId,
-          predictedSongName: segment.songName,
-          predictedStartTime: segment.startTime,
-          predictedEndTime: segment.endTime,
-          predictedConfidence: segment.confidence,
-          status: 'unsure',
-          modelVersion
-        }))
-      )
-      : [];
-
-    res.json({
+    const result = runPredictionImport({
       fileId,
-      filename: file.filename,
-      modelVersion,
+      modelPath,
       config,
       clearUnpromoted,
-      clearedCount,
-      insertedCount: createdIds.length,
-      segmentCount: segments.length,
-      annotatedRangeCount: annotatedRanges.length,
-      ignoredRangeCount: ignoredRanges.length,
-      excludedSegmentCount,
-      ignoredSegmentCount: excludedSegmentCount
+      rootDir: projectRoot
+    });
+
+    res.json({
+      fileId: result.fileId,
+      filename: result.filename,
+      modelVersion: result.modelVersion,
+      config: result.config,
+      clearUnpromoted,
+      clearedCount: result.clearedCount,
+      insertedCount: result.insertedCount,
+      segmentCount: result.segments.length,
+      annotatedRangeCount: result.annotatedRangeCount,
+      ignoredRangeCount: result.ignoredRangeCount,
+      excludedSegmentCount: result.excludedSegmentCount
     });
   } catch (error) {
+    if (error instanceof PredictionImportError) {
+      return res
+        .status(error.code === 'not_found' ? 404 : 400)
+        .json({ error: error.message });
+    }
     console.error('Error running predictions for file:', error);
     res.status(500).json({ error: 'Failed to run predictions for file' });
   }

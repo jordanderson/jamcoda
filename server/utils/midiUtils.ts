@@ -1,14 +1,8 @@
 import { readFileSync } from 'fs';
-import * as toneMidiPkg from '@tonejs/midi';
-import { normalizeJamcorderTempoMap } from '../../lib/midiTempoNormalization';
+import { parseNoteSequence } from '@core/midi/noteSequence';
 
 // Cache for MIDI durations to avoid re-parsing
 const durationCache = new Map<string, number>();
-const Midi = (
-  (toneMidiPkg as any).Midi
-  ?? (toneMidiPkg as any).default?.Midi
-  ?? (toneMidiPkg as any).default
-);
 
 // Export function to clear cache if needed (useful for debugging)
 export function clearDurationCache() {
@@ -22,10 +16,8 @@ export function getMidiDuration(filePath: string): number {
   }
 
   try {
-    const rawBytes = new Uint8Array(readFileSync(filePath));
-    const normalizedBytes = normalizeJamcorderTempoMap(rawBytes);
-    const midi = new Midi(normalizedBytes);
-    const duration = Number.isFinite(midi.duration) ? midi.duration : 0;
+    const sequence = parseNoteSequence(new Uint8Array(readFileSync(filePath)));
+    const duration = Number.isFinite(sequence.totalTime) ? sequence.totalTime : 0;
 
     // Cache the result
     durationCache.set(filePath, duration);

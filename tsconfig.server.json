@@ -1,13 +1,17 @@
 {
-  "extends": "./tsconfig.json",
   "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "target": "ES2020",
-    "lib": ["ES2020"],
-    "jsx": "preserve",
-    "noEmit": false,
-    "outDir": "./dist",
+    "skipLibCheck": true,
+    "types": ["node"],
+
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": false,
 
     /* Path aliases for server */
     "baseUrl": ".",
@@ -16,13 +20,17 @@
       "@models/*": ["server/models/*"],
       "@routes/*": ["server/routes/*"],
       "@utils/*": ["server/utils/*"],
-      "@config/*": ["server/config/*"]
+      "@config/*": ["server/config/*"],
+      "@core/*": ["core/*"]
     },
 
-    /* Allow extensions to be omitted */
-    "allowImportingTsExtensions": false,
-    "resolveJsonModule": true
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
   },
-  "include": ["server/**/*"],
+  "include": ["server/**/*", "ml/**/*", "core/**/*"],
   "exclude": ["node_modules", "dist"]
 }

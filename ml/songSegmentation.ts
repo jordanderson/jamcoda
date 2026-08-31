@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import Database from 'better-sqlite3';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import * as toneMidiPkg from '@tonejs/midi';
-import { normalizeJamcorderTempoMap } from '../lib/midiTempoNormalization';
+import { parseNoteSequence } from '@core/midi/noteSequence';
+import { clamp, ensureDirForFile, roundTo } from '@core/cli/args';
 
 export const NO_SONG_LABEL = '__none__';
 
@@ -131,40 +131,25 @@ interface AnnotationSqlRow {
   filename: string;
 }
 
-const Midi = (
-  (toneMidiPkg as any).Midi
-  ?? (toneMidiPkg as any).default?.Midi
-  ?? (toneMidiPkg as any).default
-);
-
 function toNum(value: unknown): number {
   if (typeof value === 'number') return value;
   return Number(value);
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function roundTo(value: number, digits = 3): number {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
-}
-
-function ensureDirForFile(filePath: string) {
-  const dir = path.dirname(filePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-}
-
+/**
+ * Read-only query against the app database.
+ *
+ * Previously this shelled out to the `sqlite3` CLI, an undeclared system
+ * requirement that made `ml:train` fail on a fresh clone without it. The
+ * server already depends on better-sqlite3, so use that instead.
+ */
 function sqliteJsonQuery<T>(dbPath: string, sql: string): T[] {
-  const stdout = execFileSync('sqlite3', ['-json', dbPath, sql], {
-    encoding: 'utf8'
-  }).trim();
-
-  if (!stdout) return [];
-  return JSON.parse(stdout) as T[];
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    return db.prepare(sql).all() as T[];
+  } finally {
+    db.close();
+  }
 }
 
 export function loadAnnotatedMidiFiles(dbPath: string, rootDir: string): AnnotatedMidiFile[] {
@@ -219,31 +204,16 @@ export function loadAnnotatedMidiFiles(dbPath: string, rootDir: string): Annotat
 }
 
 export function extractNotesFromMidi(midiPath: string): NoteEvent[] {
-  const notes: NoteEvent[] = [];
-  const rawBytes = new Uint8Array(readFileSync(midiPath));
-  const normalizedBytes = normalizeJamcorderTempoMap(rawBytes);
-  const parsedMidi = new Midi(normalizedBytes);
+  const sequence = parseNoteSequence(new Uint8Array(readFileSync(midiPath)));
 
-  for (const track of parsedMidi.tracks) {
-    for (const note of track.notes) {
-      const startSec = toNum(note.time);
-      const durationSec = toNum(note.duration);
-      const endSec = startSec + durationSec;
-      if (!Number.isFinite(startSec) || !Number.isFinite(endSec) || endSec <= startSec) {
-        continue;
-      }
-
-      notes.push({
-        pitch: toNum(note.midi),
-        velocity: Math.round(clamp(toNum(note.velocity), 0, 1) * 127),
-        startSec,
-        endSec
-      });
-    }
-  }
-
-  notes.sort((a, b) => (a.startSec - b.startSec) || (a.pitch - b.pitch));
-  return notes;
+  // `core` yields absolute start/end times; the feature extractor works in
+  // `startSec`/`endSec`, so adapt here rather than in the shared module.
+  return sequence.notes.map((note) => ({
+    pitch: note.pitch,
+    velocity: note.velocity,
+    startSec: note.startTime,
+    endSec: note.endTime
+  }));
 }
 
 function buildWindowStarts(maxTime: number, windowSec: number, stepSec: number): number[] {

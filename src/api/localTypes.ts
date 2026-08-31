@@ -1,26 +1,23 @@
-/** Allowed status values for prediction review rows in the UI and API. */
-export type PredictionReviewStatus = 'confirmed' | 'edited' | 'invalid' | 'unsure';
+/**
+ * Response and request shapes for the local backend API.
+ *
+ * The underlying DB row types come from `core/types`, shared with the server,
+ * so the two sides cannot drift -- they previously did: `IgnoredSection.reason`
+ * was `string | null` on the server but `reason?: string` here.
+ */
+export type {
+  Annotation,
+  IgnoredSection,
+  PredictionReview,
+  PredictionReviewStatus,
+  SongPlayHistoryRow
+} from '@core/types';
 
-/** Raw prediction review row shape returned by local backend endpoints. */
-export interface PredictionReview {
-  id: number;
-  file_id: number;
-  predicted_song_name: string;
-  predicted_start_time: number;
-  predicted_end_time: number;
-  predicted_confidence: number | null;
-  status: PredictionReviewStatus;
-  reviewed_song_name: string | null;
-  reviewed_start_time: number | null;
-  reviewed_end_time: number | null;
-  review_notes: string | null;
-  model_version: string | null;
-  promoted_annotation_id: number | null;
-  created_at: number;
-  updated_at: number;
-  reviewed_at: number | null;
-  promoted_at: number | null;
-}
+import type {
+  IgnoredSection,
+  PredictionReview,
+  SongPlayHistoryRow
+} from '@core/types';
 
 /** Paginated prediction review list response. */
 export interface PredictionReviewListResponse {
@@ -148,18 +145,6 @@ export interface RebuildPredictionModelResponse {
 }
 
 /** One annotated song segment used by the Songs page table/modal. */
-export interface SongPlayHistoryRow {
-  annotation_id: number;
-  file_id: number;
-  song_name: string;
-  start_time: number;
-  end_time: number;
-  filename: string;
-  date_recorded: string;
-  created_at: number;
-  updated_at: number;
-}
-
 /** Songs page list payload. */
 export interface SongPlayHistoryResponse {
   songs: SongPlayHistoryRow[];
@@ -226,16 +211,6 @@ export interface FileDetailAnnotation {
 }
 
 /** Ignored section row shape embedded in file detail responses. */
-export interface IgnoredSection {
-  id: number;
-  file_id: number;
-  start_time: number;
-  end_time: number;
-  reason?: string;
-  created_at: number;
-  updated_at: number;
-}
-
 /** Standalone ignored-sections list response. */
 export interface IgnoredSectionListResponse {
   sections: IgnoredSection[];

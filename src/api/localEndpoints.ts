@@ -26,19 +26,19 @@ import type {
 export const syncApi = {
   start: async (full = false) => {
     const response = await fetch(`/api/sync/start${full ? '?full=1' : ''}`, { method: 'POST' });
-    if (!response.ok) throw new Error('Failed to start sync');
+    if (!response.ok) return throwApiError(response, 'Failed to start sync');
     return response.json();
   },
 
   getProgress: async (syncId: string) => {
     const response = await fetch(`/api/sync/progress/${syncId}`);
-    if (!response.ok) throw new Error('Failed to get sync progress');
+    if (!response.ok) return throwApiError(response, 'Failed to get sync progress');
     return response.json();
   },
 
   getStatus: async () => {
     const response = await fetch('/api/sync/status');
-    if (!response.ok) throw new Error('Failed to get sync status');
+    if (!response.ok) return throwApiError(response, 'Failed to get sync status');
     return response.json();
   }
 };
@@ -50,13 +50,13 @@ export const localFilesApi = {
     if (endDate) params.set('endDate', endDate);
 
     const response = await fetch(`/api/files/by-date?${params}`);
-    if (!response.ok) throw new Error('Failed to get files');
+    if (!response.ok) return throwApiError(response, 'Failed to get files');
     return response.json();
   },
 
   getDetail: async (id: number): Promise<FileDetailResponse> => {
     const response = await fetch(`/api/files/${id}`);
-    if (!response.ok) throw new Error('Failed to get file detail');
+    if (!response.ok) return throwApiError(response, 'Failed to get file detail');
     return response.json();
   },
 
@@ -74,7 +74,7 @@ export const localFilesApi = {
 
   download: async (id: number) => {
     const response = await fetch(`/api/files/${id}/download`);
-    if (!response.ok) throw new Error('Failed to download file');
+    if (!response.ok) return throwApiError(response, 'Failed to download file');
     return response.blob();
   }
 };
@@ -114,19 +114,19 @@ export const ignoredSectionsApi = {
 export const annotationsApi = {
   list: async (fileId: number) => {
     const response = await fetch(`/api/annotations/${fileId}`);
-    if (!response.ok) throw new Error('Failed to get annotations');
+    if (!response.ok) return throwApiError(response, 'Failed to get annotations');
     return response.json();
   },
 
   getUniqueSongNames: async (): Promise<string[]> => {
     const response = await fetch('/api/annotations/song-names/unique');
-    if (!response.ok) throw new Error('Failed to get song names');
+    if (!response.ok) return throwApiError(response, 'Failed to get song names');
     return response.json();
   },
 
   getSongPlayHistory: async (): Promise<SongPlayHistoryResponse> => {
     const response = await fetch('/api/annotations/songs');
-    if (!response.ok) throw new Error('Failed to get song play history');
+    if (!response.ok) return throwApiError(response, 'Failed to get song play history');
     return response.json();
   },
 
@@ -136,7 +136,7 @@ export const annotationsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!response.ok) throw new Error('Failed to create annotation');
+    if (!response.ok) return throwApiError(response, 'Failed to create annotation');
     return response.json();
   },
 
@@ -146,13 +146,13 @@ export const annotationsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!response.ok) throw new Error('Failed to update annotation');
+    if (!response.ok) return throwApiError(response, 'Failed to update annotation');
     return response.json();
   },
 
   delete: async (id: number) => {
     const response = await fetch(`/api/annotations/${id}`, { method: 'DELETE' });
-    if (!response.ok) throw new Error('Failed to delete annotation');
+    if (!response.ok) return throwApiError(response, 'Failed to delete annotation');
   },
 
   renameSongName: async (data: RenameSongNameRequest): Promise<RenameSongNameResponse> => {

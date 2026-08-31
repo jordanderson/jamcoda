@@ -8,14 +8,14 @@ import predictionReviewsRoutes from './routes/predictionReviews.routes';
 import ignoredSectionsRoutes from './routes/ignoredSections.routes';
 
 const app = express();
-const PORT = 3001;
+const PORT = Number(process.env.JAMCODA_SERVER_PORT || 3001);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
 // Request logging
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
   console.log(`${req.method} ${req.path}`);
   next();
 });
@@ -31,12 +31,12 @@ app.use('/api/prediction-reviews', predictionReviewsRoutes);
 app.use('/api/ignored-sections', ignoredSectionsRoutes);
 
 // Health check
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Error handler
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });

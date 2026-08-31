@@ -23,7 +23,7 @@ router.get('/progress/:syncId', (req, res) => {
   res.json(progress);
 });
 
-router.get('/status', (req, res) => {
+router.get('/status', (_req, res) => {
   try {
     const metadata = FileModel.getSyncMetadata();
     res.json({

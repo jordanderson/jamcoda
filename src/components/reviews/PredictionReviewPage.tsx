@@ -21,9 +21,11 @@ import {
 } from '@/hooks/usePredictionReviews';
 import { useUniqueSongNames } from '@/hooks/useAnnotations';
 import { useLocalFileDownload } from '@/hooks/useLocalFileDownload';
-import { useMidiPlayer } from '@/hooks/useMidiPlayer';
+import { useSegmentPlayer, toSegmentBounds } from '@/hooks/useSegmentPlayer';
+import { resolveReviewFields } from '@core/predictionReview';
 import { AnnotationModal } from '@/components/annotations/AnnotationModal';
 import type { PredictionReview, PredictionReviewStatus } from '@/api/localTypes';
+import { formatTime, formatDate } from '@/utils/format'
 
 type ReviewFilter = 'needs-review' | 'all';
 
@@ -41,42 +43,6 @@ interface DateGroup {
     filename: string;
     unreviewedPredictionCount: number;
   }>;
-}
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-function formatDate(dateStr: string): string {
-  const date = new Date(`${dateStr}T00:00:00`);
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
-}
-
-function getDisplaySongName(review: PredictionReview): string {
-  if (review.status === 'edited' && review.reviewed_song_name) {
-    return review.reviewed_song_name;
-  }
-  return review.predicted_song_name;
-}
-
-function getDisplayStart(review: PredictionReview): number {
-  if (review.status === 'edited' && review.reviewed_start_time !== null) {
-    return review.reviewed_start_time;
-  }
-  return review.predicted_start_time;
-}
-
-function getDisplayEnd(review: PredictionReview): number {
-  if (review.status === 'edited' && review.reviewed_end_time !== null) {
-    return review.reviewed_end_time;
-  }
-  return review.predicted_end_time;
 }
 
 function getStatusBadgeClasses(status: PredictionReviewStatus): string {
@@ -107,6 +73,11 @@ function getReviewSortScore(review: PredictionReview): number {
   return 3;
 }
 
+// Thin adapters over the shared resolver so call sites stay readable.
+const getDisplaySongName = (review: PredictionReview): string => resolveReviewFields(review).songName
+const getDisplayStart = (review: PredictionReview): number => resolveReviewFields(review).startTime
+const getDisplayEnd = (review: PredictionReview): number => resolveReviewFields(review).endTime
+
 export function PredictionReviewPage() {
   const [selectedFileId, setSelectedFileId] = useState<number | undefined>(getInitialFileIdFromHash());
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('needs-review');
@@ -115,8 +86,6 @@ export function PredictionReviewPage() {
   const [editModalData, setEditModalData] = useState<EditModalData | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [loadedFileId, setLoadedFileId] = useState<number | null>(null);
-  const [segmentSeekValue, setSegmentSeekValue] = useState<number | null>(null);
-  const [isScrubbingSegment, setIsScrubbingSegment] = useState(false);
 
   const { data: filesByDate } = useFilesByDate();
   const {
@@ -238,10 +207,7 @@ export function PredictionReviewPage() {
   );
   const activeSegmentBounds = useMemo(() => {
     if (!activeReview) return null;
-    const start = getDisplayStart(activeReview);
-    const end = getDisplayEnd(activeReview);
-    if (!(end > start)) return null;
-    return { start, end, duration: end - start };
+    return toSegmentBounds(getDisplayStart(activeReview), getDisplayEnd(activeReview));
   }, [activeReview]);
   const activeFileId = activeReview?.file_id ?? null;
   const {
@@ -250,16 +216,26 @@ export function PredictionReviewPage() {
     error: midiDownloadError
   } = useLocalFileDownload(activeFileId, !!activeFileId);
   const {
-    playSegment,
     pause,
     stop,
     loadMidi,
     seekTo,
     isPlaying,
     isLoaded,
-    currentTime,
-    error: playerError
-  } = useMidiPlayer();
+    error: playerError,
+    segmentCurrentTime,
+    segmentElapsed,
+    onScrubStart,
+    onScrubChange,
+    onScrubCommit,
+    playFromStart,
+    restart,
+    playbackError: segmentPlaybackError
+  } = useSegmentPlayer(activeSegmentBounds);
+
+  // Load/decoding failures surface as `playerError`; segment transport
+  // failures come from the segment hook.
+  const playbackError = playerError ?? segmentPlaybackError;
 
   const isPendingAction = (
     updateReview.isPending
@@ -303,11 +279,6 @@ export function PredictionReviewPage() {
     // `stop` identity is not stable, and including it here causes playback
     // to stop immediately on each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeReviewId]);
-
-  useEffect(() => {
-    setSegmentSeekValue(null);
-    setIsScrubbingSegment(false);
   }, [activeReviewId]);
 
   useEffect(() => {
@@ -502,13 +473,7 @@ export function PredictionReviewPage() {
   };
 
   const handlePlaySegment = async () => {
-    if (!activeSegmentBounds || !isLoaded) return;
-
-    try {
-      await playSegment(activeSegmentBounds.start, activeSegmentBounds.end);
-    } catch (error) {
-      console.error('Failed to start segment playback:', error);
-    }
+    await playFromStart();
   };
 
   const handlePauseSegment = () => {
@@ -520,8 +485,7 @@ export function PredictionReviewPage() {
   };
 
   const handleJumpToStart = async () => {
-    if (!activeSegmentBounds || !isLoaded) return;
-    await seekTo(activeSegmentBounds.start);
+    await restart();
   };
 
   const handleJumpToEnd = async () => {
@@ -529,50 +493,8 @@ export function PredictionReviewPage() {
     await seekTo(activeSegmentBounds.end);
   };
 
-  const segmentCurrentTime = useMemo(() => {
-    if (!activeSegmentBounds) return 0;
-    const sourceTime = isScrubbingSegment && segmentSeekValue !== null
-      ? segmentSeekValue
-      : currentTime;
-    return Math.min(activeSegmentBounds.end, Math.max(activeSegmentBounds.start, sourceTime));
-  }, [activeSegmentBounds, currentTime, isScrubbingSegment, segmentSeekValue]);
-
-  const segmentElapsed = activeSegmentBounds
-    ? Math.max(0, segmentCurrentTime - activeSegmentBounds.start)
-    : 0;
-
-  const seekWithinSegment = async (targetTime: number) => {
-    if (!activeSegmentBounds || !isLoaded) return;
-    const clampedTarget = Math.min(activeSegmentBounds.end, Math.max(activeSegmentBounds.start, targetTime));
-
-    try {
-      if (isPlaying) {
-        if (clampedTarget >= activeSegmentBounds.end) {
-          stop();
-          return;
-        }
-        await playSegment(clampedTarget, activeSegmentBounds.end);
-      } else {
-        await seekTo(clampedTarget);
-      }
-    } catch (error) {
-      console.error('Failed to seek within segment:', error);
-    }
-  };
-
-  const commitSegmentSeek = async () => {
-    if (segmentSeekValue === null) {
-      setIsScrubbingSegment(false);
-      return;
-    }
-    const target = segmentSeekValue;
-    setIsScrubbingSegment(false);
-    setSegmentSeekValue(null);
-    await seekWithinSegment(target);
-  };
-
   const selectedFileLabel = fileOptions.find((file) => file.id === selectedFileId);
-  const showPlaybackError = midiDownloadError || playerError;
+  const showPlaybackError = midiDownloadError || playbackError;
 
   return (
     <div className="space-y-5">
@@ -885,24 +807,14 @@ export function PredictionReviewPage() {
                     step={0.01}
                     value={segmentCurrentTime}
                     disabled={!isLoaded || isDownloadingMidi || !activeSegmentBounds}
-                    onChange={(event) => {
-                      const next = Number(event.target.value);
-                      setSegmentSeekValue(next);
-                      if (!isScrubbingSegment) {
-                        void seekWithinSegment(next);
-                      }
-                    }}
-                    onMouseDown={() => setIsScrubbingSegment(true)}
-                    onTouchStart={() => setIsScrubbingSegment(true)}
-                    onMouseUp={() => {
-                      void commitSegmentSeek();
-                    }}
-                    onTouchEnd={() => {
-                      void commitSegmentSeek();
-                    }}
+                    onChange={(event) => onScrubChange(Number(event.target.value))}
+                    onMouseDown={onScrubStart}
+                    onTouchStart={onScrubStart}
+                    onMouseUp={onScrubCommit}
+                    onTouchEnd={onScrubCommit}
                     onKeyUp={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
-                        void commitSegmentSeek();
+                        onScrubCommit();
                       }
                     }}
                     className="w-full accent-gray-900"

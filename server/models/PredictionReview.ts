@@ -1,4 +1,10 @@
 import { getDb } from '@config/database';
+import {
+  RESOLVED_END_TIME_SQL,
+  RESOLVED_START_TIME_SQL,
+  isPredictionReviewStatus as isStatus,
+  resolveReviewFields
+} from '@core/predictionReview';
 import type {
   CreatePredictionReviewData,
   ListPredictionReviewsFilters,
@@ -9,12 +15,8 @@ import type {
   UpdatePredictionReviewData
 } from '@server/types';
 
-const VALID_STATUSES: PredictionReviewStatus[] = ['confirmed', 'edited', 'invalid', 'unsure'];
-
 /** Type guard for validating untrusted status input. */
-export function isPredictionReviewStatus(value: unknown): value is PredictionReviewStatus {
-  return typeof value === 'string' && VALID_STATUSES.includes(value as PredictionReviewStatus);
-}
+export const isPredictionReviewStatus = isStatus;
 
 function nowUnix(): number {
   return Math.floor(Date.now() / 1000);
@@ -338,8 +340,8 @@ export function deleteUnpromotedOverlappingRange(
     DELETE FROM prediction_reviews
     WHERE file_id = ?
       AND promoted_annotation_id IS NULL
-      AND COALESCE(reviewed_end_time, predicted_end_time) > ?
-      AND COALESCE(reviewed_start_time, predicted_start_time) < ?
+      AND ${RESOLVED_END_TIME_SQL} > ?
+      AND ${RESOLVED_START_TIME_SQL} < ?
   `).run(fileId, startTime, endTime);
   return result.changes;
 }
@@ -418,7 +420,7 @@ export function mergeReviews(reviewIds: number[]): MergePredictionReviewsResult 
 
     const resolved = reviews.map((review) => ({
       review,
-      promotion: resolvePromotionFields(review)
+      promotion: resolveReviewFields(review)
     }));
 
     const mergedSongName = resolved[0].promotion.songName;
@@ -513,32 +515,6 @@ export function mergeReviews(reviewIds: number[]): MergePredictionReviewsResult 
   return tx();
 }
 
-/** Resolve the effective song/time fields that would be promoted to annotations. */
-function resolvePromotionFields(review: PredictionReview): {
-  songName: string;
-  startTime: number;
-  endTime: number;
-} {
-  const useReviewed = review.status === 'edited';
-  const songName = useReviewed && review.reviewed_song_name
-    ? review.reviewed_song_name
-    : review.predicted_song_name;
-
-  const startTime = useReviewed && review.reviewed_start_time !== null
-    ? review.reviewed_start_time
-    : review.predicted_start_time;
-
-  const endTime = useReviewed && review.reviewed_end_time !== null
-    ? review.reviewed_end_time
-    : review.predicted_end_time;
-
-  if (!(Number.isFinite(startTime) && Number.isFinite(endTime) && startTime < endTime)) {
-    throw new Error('Cannot promote review with invalid time range.');
-  }
-
-  return { songName, startTime, endTime };
-}
-
 /**
  * Promote a confirmed/edited review into `annotations`.
  * Reuses existing promoted annotation when available; otherwise creates one.
@@ -553,7 +529,15 @@ export function promoteToAnnotation(id: number): PromotePredictionReviewResult {
     throw new Error('Only confirmed or edited reviews can be promoted.');
   }
 
-  const promotion = resolvePromotionFields(existing);
+  const promotion = resolveReviewFields(existing);
+  if (!(
+    Number.isFinite(promotion.startTime)
+    && Number.isFinite(promotion.endTime)
+    && promotion.startTime < promotion.endTime
+  )) {
+    throw new Error('Cannot promote review with invalid time range.');
+  }
+
   const now = nowUnix();
 
   const tx = db.transaction(() => {

@@ -1,38 +1,44 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowDown, ArrowUp, Pause, Play, RefreshCw, Square, X } from 'lucide-react';
 import { useRenameSongName, useSongPlayHistory, useUniqueSongNames } from '@/hooks/useAnnotations';
-import { useMidiPlayer } from '@/hooks/useMidiPlayer';
+import { useSegmentPlayer, toSegmentBounds } from '@/hooks/useSegmentPlayer';
 import { useRebuildPredictionModel } from '@/hooks/usePredictionReviews';
 import { localFilesApi } from '@/api/localEndpoints';
 import type { SongPlayHistoryRow } from '@/api/localTypes';
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-function formatDate(dateRecorded: string): string {
-  const date = new Date(`${dateRecorded}T00:00:00`);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
-}
+import { formatTime, formatDate } from '@/utils/format'
 
 export function SongsPage() {
   const { data, isLoading, error, refetch, isFetching } = useSongPlayHistory();
   const { data: uniqueSongNames = [] } = useUniqueSongNames();
   const renameSongName = useRenameSongName();
   const rebuildModel = useRebuildPredictionModel();
-  const { playSegment, pause, seekTo, loadMidi, stop, isPlaying, isLoaded, currentTime } = useMidiPlayer();
   const [loadedFileId, setLoadedFileId] = useState<number | null>(null);
   const [activeSong, setActiveSong] = useState<SongPlayHistoryRow | null>(null);
   const [preparingPlaybackId, setPreparingPlaybackId] = useState<number | null>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
-  const [segmentSeekValue, setSegmentSeekValue] = useState<number | null>(null);
-  const [isScrubbingSegment, setIsScrubbingSegment] = useState(false);
+  const activeSegmentBounds = useMemo(
+    () => (activeSong ? toSegmentBounds(activeSong.start_time, activeSong.end_time) : null),
+    [activeSong]
+  );
+  const {
+    loadMidi,
+    pause,
+    playSegment,
+    seekTo,
+    stop,
+    isLoaded,
+    isPlaying,
+    segmentCurrentTime,
+    segmentElapsed,
+    onScrubStart,
+    onScrubChange,
+    onScrubCommit,
+    playbackError: segmentPlaybackError,
+    clearPlaybackError
+  } = useSegmentPlayer(activeSegmentBounds);
+
+  // Load failures are tracked here; playback failures come from the hook.
+  const displayedPlaybackError = playbackError ?? segmentPlaybackError;
   const [showRenamePanel, setShowRenamePanel] = useState(false);
   const [renameFrom, setRenameFrom] = useState('');
   const [renameTo, setRenameTo] = useState('');
@@ -74,32 +80,10 @@ export function SongsPage() {
       : <ArrowDown className="w-3.5 h-3.5" />;
   };
 
-  const activeSegmentBounds = useMemo(() => {
-    if (!activeSong || !(activeSong.end_time > activeSong.start_time)) return null;
-    return {
-      start: activeSong.start_time,
-      end: activeSong.end_time,
-      duration: activeSong.end_time - activeSong.start_time
-    };
-  }, [activeSong]);
-
-  const segmentCurrentTime = useMemo(() => {
-    if (!activeSegmentBounds) return 0;
-    const sourceTime = isScrubbingSegment && segmentSeekValue !== null
-      ? segmentSeekValue
-      : currentTime;
-    return Math.min(activeSegmentBounds.end, Math.max(activeSegmentBounds.start, sourceTime));
-  }, [activeSegmentBounds, currentTime, isScrubbingSegment, segmentSeekValue]);
-
-  const segmentElapsed = activeSegmentBounds
-    ? Math.max(0, segmentCurrentTime - activeSegmentBounds.start)
-    : 0;
-
   const closeModal = () => {
     stop();
     setActiveSong(null);
-    setSegmentSeekValue(null);
-    setIsScrubbingSegment(false);
+    clearPlaybackError();
   };
 
   useEffect(() => {
@@ -126,62 +110,21 @@ export function SongsPage() {
     setLoadedFileId(row.file_id);
   };
 
-  const playWithinSegment = async (startTime: number, endTime: number) => {
-    try {
-      await playSegment(startTime, endTime);
-    } catch (err) {
-      setPlaybackError(err instanceof Error ? err.message : 'Failed to play selected segment');
-    }
-  };
-
   const handlePlayRow = async (row: SongPlayHistoryRow) => {
     setPlaybackError(null);
     setActiveSong(row);
-    setSegmentSeekValue(null);
-    setIsScrubbingSegment(false);
     setPreparingPlaybackId(row.annotation_id);
 
     try {
       await ensureLoaded(row);
       await seekTo(row.start_time);
       setPreparingPlaybackId(null);
-      void playWithinSegment(row.start_time, row.end_time);
+      void playSegment(row.start_time, row.end_time);
     } catch (err) {
       setPlaybackError(err instanceof Error ? err.message : 'Failed to play selected segment');
     } finally {
       setPreparingPlaybackId((current) => (current === row.annotation_id ? null : current));
     }
-  };
-
-  const seekWithinActiveSegment = async (targetTime: number) => {
-    if (!activeSegmentBounds || !isLoaded) return;
-    const clampedTarget = Math.min(activeSegmentBounds.end, Math.max(activeSegmentBounds.start, targetTime));
-
-    try {
-      if (isPlaying) {
-        if (clampedTarget >= activeSegmentBounds.end) {
-          stop();
-          await seekTo(activeSegmentBounds.end);
-          return;
-        }
-        void playWithinSegment(clampedTarget, activeSegmentBounds.end);
-      } else {
-        await seekTo(clampedTarget);
-      }
-    } catch (err) {
-      setPlaybackError(err instanceof Error ? err.message : 'Failed to seek within segment');
-    }
-  };
-
-  const commitSegmentSeek = async () => {
-    if (segmentSeekValue === null) {
-      setIsScrubbingSegment(false);
-      return;
-    }
-    const target = segmentSeekValue;
-    setIsScrubbingSegment(false);
-    setSegmentSeekValue(null);
-    await seekWithinActiveSegment(target);
   };
 
   const handlePlayInModal = async () => {
@@ -193,7 +136,7 @@ export function SongsPage() {
       const startTime = segmentCurrentTime >= activeSegmentBounds.end
         ? activeSegmentBounds.start
         : segmentCurrentTime;
-      void playWithinSegment(startTime, activeSegmentBounds.end);
+      void playSegment(startTime, activeSegmentBounds.end);
     } catch (err) {
       setPlaybackError(err instanceof Error ? err.message : 'Failed to play selected segment');
     }
@@ -372,10 +315,10 @@ export function SongsPage() {
         </div>
       )}
 
-      {playbackError && (
+      {displayedPlaybackError && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
           <AlertCircle className="w-5 h-5 text-red-700 flex-shrink-0" />
-          <p className="text-red-700 text-sm">{playbackError}</p>
+          <p className="text-red-700 text-sm">{displayedPlaybackError}</p>
         </div>
       )}
 
@@ -489,9 +432,9 @@ export function SongsPage() {
               </button>
             </div>
 
-            {playbackError && (
+            {displayedPlaybackError && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-red-700 text-sm">{playbackError}</p>
+                <p className="text-red-700 text-sm">{displayedPlaybackError}</p>
               </div>
             )}
 
@@ -507,24 +450,14 @@ export function SongsPage() {
                 step={0.01}
                 value={segmentCurrentTime}
                 disabled={!isLoaded || !!preparingPlaybackId || !activeSegmentBounds}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  setSegmentSeekValue(next);
-                  if (!isScrubbingSegment) {
-                    void seekWithinActiveSegment(next);
-                  }
-                }}
-                onMouseDown={() => setIsScrubbingSegment(true)}
-                onTouchStart={() => setIsScrubbingSegment(true)}
-                onMouseUp={() => {
-                  void commitSegmentSeek();
-                }}
-                onTouchEnd={() => {
-                  void commitSegmentSeek();
-                }}
+                onChange={(event) => onScrubChange(Number(event.target.value))}
+                onMouseDown={onScrubStart}
+                onTouchStart={onScrubStart}
+                onMouseUp={onScrubCommit}
+                onTouchEnd={onScrubCommit}
                 onKeyUp={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
-                    void commitSegmentSeek();
+                    onScrubCommit();
                   }
                 }}
                 className="w-full accent-gray-900"

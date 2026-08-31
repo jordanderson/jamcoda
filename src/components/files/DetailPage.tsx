@@ -20,6 +20,8 @@ import {
 import { PianoRollVisualizer } from '@/components/midi/PianoRollVisualizer';
 import { AnnotationModal } from '@/components/annotations/AnnotationModal';
 import type { PredictionReview } from '@/api/localTypes';
+import { formatTime } from '@/utils/format'
+import { resolveReviewFields } from '@core/predictionReview';
 
 interface DetailPageProps {
   fileId: number;
@@ -39,32 +41,10 @@ interface AnnotationGap {
   durationSec: number;
 }
 
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-function getPredictionDisplaySongName(review: PredictionReview): string {
-  if (review.status === 'edited' && review.reviewed_song_name) {
-    return review.reviewed_song_name;
-  }
-  return review.predicted_song_name;
-}
-
-function getPredictionDisplayStart(review: PredictionReview): number {
-  if (review.status === 'edited' && review.reviewed_start_time !== null) {
-    return review.reviewed_start_time;
-  }
-  return review.predicted_start_time;
-}
-
-function getPredictionDisplayEnd(review: PredictionReview): number {
-  if (review.status === 'edited' && review.reviewed_end_time !== null) {
-    return review.reviewed_end_time;
-  }
-  return review.predicted_end_time;
-}
+// Thin adapters over the shared resolver so call sites stay readable.
+const getPredictionDisplaySongName = (review: PredictionReview): string => resolveReviewFields(review).songName
+const getPredictionDisplayStart = (review: PredictionReview): number => resolveReviewFields(review).startTime
+const getPredictionDisplayEnd = (review: PredictionReview): number => resolveReviewFields(review).endTime
 
 function getLargeAnnotationGaps(
   start: number,
@@ -856,26 +836,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
   const predictionTimelineSegments = (reviewListResponse?.reviews ?? [])
     .filter((review) => review.status !== 'invalid')
     .map((review) => {
-      const songName = (
-        review.status === 'edited'
-        && review.reviewed_song_name
-      )
-        ? review.reviewed_song_name
-        : review.predicted_song_name;
-
-      const startTime = (
-        review.status === 'edited'
-        && review.reviewed_start_time !== null
-      )
-        ? review.reviewed_start_time
-        : review.predicted_start_time;
-
-      const endTime = (
-        review.status === 'edited'
-        && review.reviewed_end_time !== null
-      )
-        ? review.reviewed_end_time
-        : review.predicted_end_time;
+      const { songName, startTime, endTime } = resolveReviewFields(review);
 
       if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
         return null;

@@ -208,8 +208,13 @@ Rebuild model after new annotations using sidebar `Rebuild Model` or `npm run ml
 
 - `ml/songSegmentation.ts`: feature extraction, training, prediction, smoothing, segmentation
 - `ml/train.ts`: CLI training entrypoint
-- `ml/predict.ts`: CLI prediction entrypoint
-- `ml/predictAndImport.ts`: CLI prediction + DB import entrypoint
+- `ml/predict.ts`: CLI prediction entrypoint (model only, no DB writes)
+- `ml/predictAndImport.ts`: CLI wrapper around the shared import pipeline
+- `server/services/predictionImport.ts`: the prediction + import pipeline itself,
+  shared with `POST /api/prediction-reviews/run` so the CLI and the API cannot
+  drift. Schema is the migration runner's job; nothing here creates tables.
+- `core/timeRanges.ts`: annotated/ignored range exclusion
+- `core/cli/args.ts`: shared CLI argument parsing
 - `server/scripts/migrate.ts`: DB migration entrypoint
 - `server/routes/predictionReviews.routes.ts`: API workflow glue
 - `server/models/PredictionReview.ts`: merge/promote/status semantics

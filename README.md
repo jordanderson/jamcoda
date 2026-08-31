@@ -120,22 +120,36 @@ Main tables:
 
 ## Playback Notes
 
-- Playback uses Magenta `SoundFontPlayer`.
-- MIDI tracks are normalized to acoustic grand piano for consistency.
+- Playback uses a small Web Audio sampler (`src/audio/pianoSampler.ts`) with no
+  audio dependencies.
+- Everything sounds as acoustic grand piano; that is the only instrument the
+  sampler loads.
+- Samples come from the `sgm_plus` soundfont
+  (`{pitch}_v{velocity}.mp3`, pitches 21-108, 8 velocity layers).
 - Service worker caches only grand piano soundfont assets (`public/soundfont-cache-sw.js`).
 - Sidebar shows cache registration and cached asset count.
+- The piano roll draws its own SVG note rects (`src/components/midi/pianoRollGeometry.ts`).
 
 ## Development
 
 ### Prerequisites
-- Node.js 22+
+- Node.js 22+ (`.nvmrc` pins 22; run `nvm use` if you use nvm)
 - Jamcorder reachable at `http://jamcorder.local` (or set `JAMCORDER_URL`)
-- `sqlite3` CLI installed (required for some ML scripts in `ml/`)
 
 ### Install
 
 ```bash
 npm install
+```
+
+`better-sqlite3` is a native module, so its compiled binary is tied to the Node
+major version that installed it. If you later switch Node versions, the server
+will fail at startup with `ERR_DLOPEN_FAILED` and a `NODE_MODULE_VERSION`
+mismatch. The client and build are unaffected, which makes it easy to
+misdiagnose. Fix with:
+
+```bash
+nvm use && npm rebuild better-sqlite3
 ```
 
 ### Set up
@@ -206,7 +220,15 @@ Note: the local backend always runs on `http://localhost:3001`.
 
 ## Coding Agent Quick Start
 
-Read these first:
+The shared module is the place to start — anything needed on more than one
+side of a tier boundary lives there:
+- `core/types.ts` — DB row shapes used by both the server and the browser
+- `core/predictionReview.ts` — how a review resolves to effective values
+- `core/timeRanges.ts` — segment/range algebra used by the API and the CLI
+- `core/midi/` — MIDI decoding and the Jamcorder tempo-map fix
+- `core/cli/args.ts` — argument parsing shared by every CLI entrypoint
+
+Then:
 - `src/App.tsx`
 - `src/components/layout/Sidebar.tsx`
 - `src/components/files/DateBrowser.tsx`
@@ -218,6 +240,8 @@ Read these first:
 - `server/routes/annotations.routes.ts`
 - `server/routes/predictionReviews.routes.ts`
 - `server/models/PredictionReview.ts`
+- `server/services/predictionImport.ts` — the prediction pipeline, shared by the
+  API route and `ml:predict-import`
 - `ml/songSegmentation.ts`
 
 Important behavior constraints:
@@ -244,24 +268,27 @@ Important behavior constraints:
 
 ## Security Notes
 
-`npm audit` reports known vulnerabilities in transitive dependencies of
-`@magenta/music@1.23.1` (the last published release, from 2021):
+`npm audit` should report zero vulnerabilities. If that changes, treat it as a
+regression rather than an accepted risk.
 
-- `protobufjs@6.x` (critical, no patched release for the 6.x line)
-- `minimist@0.0.8` via `quote-stream` → `static-module` → `cwise` (critical)
-- `static-eval@0.2.4` (high) via the same `cwise` chain
+This used to read differently. `@magenta/music@1.23.1` (last published in 2021)
+was used for MIDI decoding, playback and the piano roll, and it pinned an
+ancient `@tensorflow/tfjs` tree that carried four critical and five high
+advisories (`protobufjs@6.x`, and `static-eval` / `minimist` via
+`cwise` → `static-module`) with no upstream fix available.
 
-There is no upstream fix — `@magenta/music` pins an ancient `@tensorflow/tfjs`
-tree, so neither `npm audit fix` nor `overrides` can clear these. Accepted
-risk: these packages are only reachable in the client-side MIDI playback /
-piano roll bundle (`src/hooks/useMidiPlayer.ts`,
-`src/components/midi/PianoRollVisualizer.tsx`), the vulnerable code paths
-require crafted/protobuf input, and the app only ever parses MIDI files from
-the user's own Jamcorder. Resolve this properly by replacing `@magenta/music`
-(`midi-file` is already a dependency and could drive parsing; playback and the
-piano roll renderer can be built on Web Audio + custom SVG).
+It has been removed. The three things it provided were replaced in place:
 
-All other advisories from `npm audit` are expected to be clear.
+| Was | Now |
+| --- | --- |
+| `midiToSequenceProto` | `core/midi/noteSequence.ts` on `@tonejs/midi` |
+| `SoundFontPlayer` | `src/audio/pianoSampler.ts` (Web Audio) |
+| `PianoRollSVGVisualizer` | `src/components/midi/pianoRollGeometry.ts` (SVG rects) |
+
+The sampler fetches the same soundfont URLs Magenta used, so existing service
+worker caches keep working. Dropping the dependency also removed TensorFlow.js,
+protobufjs and Tone.js from the tree: 361 → 257 packages, 485 MB → 239 MB
+installed.
 
 ## License
 

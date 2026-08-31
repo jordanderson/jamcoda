@@ -11,7 +11,7 @@ function parseSongName(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-router.get('/song-names/unique', async (req, res) => {
+router.get('/song-names/unique', async (_req, res) => {
   try {
     const songNames = AnnotationModel.getUniqueSongNames();
     res.json(songNames);
@@ -52,7 +52,7 @@ router.post('/song-names/rename', async (req, res) => {
   }
 });
 
-router.get('/songs', async (req, res) => {
+router.get('/songs', async (_req, res) => {
   try {
     const history = AnnotationModel.getSongPlayHistory();
     res.json({ songs: history });

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { hasFlag, parseInt_, parseNum, pct, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import {
   evaluateLeaveOneOut,
   loadAnnotatedMidiFiles,
@@ -27,27 +28,6 @@ Options:
 `);
 }
 
-function readArg(flag: string): string | undefined {
-  const idx = process.argv.indexOf(flag);
-  if (idx === -1) return undefined;
-  return process.argv[idx + 1];
-}
-
-function hasFlag(flag: string): boolean {
-  return process.argv.includes(flag);
-}
-
-function parseNum(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const num = Number(value);
-  if (!Number.isFinite(num)) return fallback;
-  return num;
-}
-
-function pct(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
 async function main() {
   if (hasFlag('--help')) {
     usage();
@@ -55,14 +35,14 @@ async function main() {
   }
 
   const rootDir = path.resolve(readArg('--root') || '.');
-  const dbPath = path.resolve(readArg('--db') || process.env.JAMCODA_DB_PATH || 'data/jamcoda.db');
+  const dbPath = resolveDbPath();
   const outPath = path.resolve(readArg('--out') || 'data/ml/model.json');
   const skipEval = hasFlag('--skip-eval');
 
   const config: TrainConfig = {
     windowSec: parseNum(readArg('--window'), 4),
     stepSec: parseNum(readArg('--step'), 1),
-    k: Math.max(1, Math.floor(parseNum(readArg('--k'), 7))),
+    k: parseInt_(readArg('--k'), 7),
     maxNoneToSongRatio: Math.max(0, parseNum(readArg('--none-ratio'), 1.5))
   };
 
@@ -107,7 +87,4 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error('Training failed:', error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+runMain('Training failed', main);

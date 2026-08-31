@@ -1,22 +1,20 @@
 /**
- * DB row stored in `files`.
- * Uses snake_case to match SQLite column names.
+ * Server-side types.
+ *
+ * Row shapes that cross the HTTP boundary live in `core/types` so the browser
+ * client imports the same definitions instead of re-declaring them; they are
+ * re-exported here so existing `@server/types` imports keep working.
  */
-export interface FileRecord {
-  id: number;
-  jamcorder_path: string;
-  local_path: string;
-  filename: string;
-  file_size: number;
-  jamcorder_modified: number;
-  synced_at: number;
-  date_recorded: string;
-  is_complete: number;
-  completed_at: number | null;
-  midi_duration: number | null;
-  asset_uuid: string | null;
-  jmx_eof_offset: number | null;
-}
+export type {
+  Annotation,
+  FileRecord,
+  IgnoredSection,
+  PredictionReview,
+  PredictionReviewStatus,
+  SongPlayHistoryRow
+} from '@core/types';
+
+import type { PredictionReview, PredictionReviewStatus } from '@core/types';
 
 /** Payload used when creating a new synced file row. */
 export interface CreateFileData {
@@ -40,45 +38,6 @@ export interface UpdateSyncedFileData {
   assetUuid?: string | null;
   jmxEofOffset?: number | null;
   midiDuration?: number | null;
-}
-
-/** DB row stored in `annotations`. */
-export interface Annotation {
-  id: number;
-  file_id: number;
-  song_name: string;
-  start_time: number;
-  end_time: number;
-  notes: string | null;
-  created_at: number;
-  updated_at: number;
-}
-
-/** DB row stored in `ignored_sections`. */
-export interface IgnoredSection {
-  id: number;
-  file_id: number;
-  start_time: number;
-  end_time: number;
-  reason: string | null;
-  created_at: number;
-  updated_at: number;
-}
-
-/**
- * Flattened annotation + file metadata used by the Songs page.
- * Represents one playable annotated segment.
- */
-export interface SongPlayHistoryRow {
-  annotation_id: number;
-  file_id: number;
-  song_name: string;
-  start_time: number;
-  end_time: number;
-  filename: string;
-  date_recorded: string;
-  created_at: number;
-  updated_at: number;
 }
 
 /** Payload for creating a new annotation segment. */
@@ -176,29 +135,6 @@ export interface JmxMetadata {
 }
 
 /** Allowed review lifecycle states for prediction rows. */
-export type PredictionReviewStatus = 'confirmed' | 'edited' | 'invalid' | 'unsure';
-
-/** DB row stored in `prediction_reviews`. */
-export interface PredictionReview {
-  id: number;
-  file_id: number;
-  predicted_song_name: string;
-  predicted_start_time: number;
-  predicted_end_time: number;
-  predicted_confidence: number | null;
-  status: PredictionReviewStatus;
-  reviewed_song_name: string | null;
-  reviewed_start_time: number | null;
-  reviewed_end_time: number | null;
-  review_notes: string | null;
-  model_version: string | null;
-  promoted_annotation_id: number | null;
-  created_at: number;
-  updated_at: number;
-  reviewed_at: number | null;
-  promoted_at: number | null;
-}
-
 /** Payload for creating one prediction review row. */
 export interface CreatePredictionReviewData {
   fileId: number;

@@ -21,7 +21,6 @@ data.backup/
 # Environment files
 .env
 .env.*
-.nvmrc
 
 # But keep the template as an example
 !.env.example

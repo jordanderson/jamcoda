@@ -1,5 +1,8 @@
 import path from 'node:path';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
+import {
+  clamp, ensureDirForFile, hasFlag, parseNum, pct, readArg, resolveDbPath, roundTo
+} from '@core/cli/args';
 import {
   NO_SONG_LABEL,
   buildSamplesForFile,
@@ -83,43 +86,8 @@ Options:
 `);
 }
 
-function readArg(flag: string): string | undefined {
-  const idx = process.argv.indexOf(flag);
-  if (idx === -1) return undefined;
-  return process.argv[idx + 1];
-}
-
-function hasFlag(flag: string): boolean {
-  return process.argv.includes(flag);
-}
-
-function parseNum(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const num = Number(value);
-  if (!Number.isFinite(num)) return fallback;
-  return num;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function roundTo(value: number, digits = 6): number {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
-}
-
-function pct(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
 function formatCount(value: number): string {
   return value.toLocaleString('en-US');
-}
-
-function ensureDirForFile(filePath: string) {
-  const dir = path.dirname(filePath);
-  mkdirSync(dir, { recursive: true });
 }
 
 type EvalMode = 'insample' | 'loo';
@@ -159,7 +127,7 @@ async function main() {
   }
 
   const modelPath = path.resolve(readArg('--model') || 'data/ml/model.json');
-  const dbPath = path.resolve(readArg('--db') || process.env.JAMCODA_DB_PATH || 'data/jamcoda.db');
+  const dbPath = resolveDbPath();
   const rootDir = path.resolve(readArg('--root') || '.');
   const outPath = path.resolve(readArg('--out') || 'data/ml/eval-report.json');
   const includeNone = hasFlag('--include-none');

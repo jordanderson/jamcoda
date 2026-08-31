@@ -1,15 +1,6 @@
 import path from 'node:path';
+import { hasFlag, readArg } from '@core/cli/args';
 import { closeDatabase, initializeDatabase } from '../config/database';
-
-function readArg(flag: string): string | undefined {
-  const idx = process.argv.indexOf(flag);
-  if (idx === -1) return undefined;
-  return process.argv[idx + 1];
-}
-
-function hasFlag(flag: string): boolean {
-  return process.argv.includes(flag);
-}
 
 function usage() {
   console.log(`

@@ -1,24 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import * as mm from '@magenta/music'
-import { normalizeJamcorderTempoMap } from '../../lib/midiTempoNormalization'
-
-const GRAND_PIANO_PROGRAM = 0
-const GRAND_PIANO_INSTRUMENT = 0
-
-/**
- * Rewrites all note programs to acoustic grand piano so playback is consistent
- * regardless of original MIDI instrument assignments.
- */
-function forceGrandPianoSequence(sequence: mm.INoteSequence): mm.INoteSequence {
-  const normalized = mm.sequences.clone(sequence)
-  normalized.notes = (normalized.notes || []).map((note) => ({
-    ...note,
-    program: GRAND_PIANO_PROGRAM,
-    instrument: GRAND_PIANO_INSTRUMENT,
-    isDrum: false,
-  }))
-  return normalized
-}
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  parseNoteSequence,
+  sequenceFrom,
+  sliceSequence,
+  type NoteSequence
+} from '@core/midi/noteSequence'
+import { PianoSampler } from '@/audio/pianoSampler'
 
 /** Reactive playback state exposed by `useMidiPlayer`. */
 interface PlayerState {
@@ -27,14 +14,6 @@ interface PlayerState {
   error: string | null
   currentTime: number
   duration: number
-  activeNote: mm.NoteSequence.Note | null
-}
-
-/** Optional callback hooks fired during note playback lifecycle. */
-interface PlayerCallbacks {
-  onNotePlay?: (note: mm.NoteSequence.Note) => void
-  onPlaybackStop?: () => void
-  onTimeUpdate?: (time: number) => void
 }
 
 /** Public API returned by `useMidiPlayer`. */
@@ -45,330 +24,248 @@ interface UseMidiPlayerResult extends PlayerState {
   stop: () => void
   loadMidi: (blob: Blob) => Promise<void>
   seekTo: (time: number) => Promise<void>
-  sequence: mm.INoteSequence | null
-  setCallbacks: (callbacks: PlayerCallbacks) => void
+  sequence: NoteSequence | null
+}
+
+/** What the animation frame loop needs to derive the playhead. */
+interface ActivePlayback {
+  /** AudioContext timestamp the sequence was scheduled against. */
+  origin: number
+  /** Position in the original sequence that `origin` corresponds to. */
+  offset: number
+  /** Position in the original sequence at which playback should end. */
+  stopAt: number
+  /** Full-track playback rewinds on completion; segments hold at the end. */
+  rewindOnEnd: boolean
 }
 
 /**
- * Local MIDI playback controller built on Magenta `SoundFontPlayer`.
+ * Local MIDI playback controller.
  *
- * Behavior notes:
- * - Normalizes Jamcorder tempo maps before parsing.
- * - Forces all tracks to grand piano.
- * - Supports full-track play, segment play, pause/resume, stop, and seek.
- * - Emits optional note/time callbacks for visualizers.
+ * Built on `PianoSampler` (Web Audio) since dropping `@magenta/music`. All
+ * notes sound as grand piano, which is the only instrument the sampler loads
+ * -- previously this was enforced by rewriting each note's program number.
+ *
+ * Supports full-track play, segment play, pause/resume, stop, and seek.
  */
 export function useMidiPlayer(): UseMidiPlayerResult {
-  const playerRef = useRef<mm.SoundFontPlayer | null>(null)
-  const sequenceRef = useRef<mm.INoteSequence | null>(null)
-  const callbacksRef = useRef<PlayerCallbacks>({})
-  const isPausedRef = useRef<boolean>(false)
-  const seekPositionRef = useRef<number>(0) // Track seek position for next play
-  const timeOffsetRef = useRef<number>(0) // Track time offset for display
+  const samplerRef = useRef<PianoSampler | null>(null)
+  const sequenceRef = useRef<NoteSequence | null>(null)
+  const playbackRef = useRef<ActivePlayback | null>(null)
+  const frameRef = useRef<number | null>(null)
+  /** Where a resume should pick up, when paused or after a seek. */
+  const resumeFromRef = useRef<number>(0)
+  /**
+   * Mirrors `state.isLoaded` for the guards below.
+   *
+   * A caller typically does `await loadMidi(blob)` then immediately
+   * `playSegment(...)` inside one handler. Reading `state.isLoaded` there sees
+   * the value captured when the handler's closure was created -- still false --
+   * so the play call silently no-ops and the first click does nothing.
+   */
+  const isLoadedRef = useRef(false)
+
   const [state, setState] = useState<PlayerState>({
     isPlaying: false,
     isLoaded: false,
     error: null,
     currentTime: 0,
-    duration: 0,
-    activeNote: null,
+    duration: 0
   })
 
-  // Initialize player once
-  useEffect(() => {
-    if (!playerRef.current) {
-      playerRef.current = new mm.SoundFontPlayer(
-        'https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus',
-        undefined, undefined, undefined,
-        {
-          run: (note: mm.NoteSequence.Note) => {
-            // Add time offset back to get actual position in original sequence
-            const actualTime = (note.startTime ?? 0) + timeOffsetRef.current
-
-            // Create a note with adjusted times for the visualizer
-            // The visualizer needs note times that match the original sequence
-            const adjustedNote = {
-              ...note,
-              startTime: actualTime,
-              endTime: (note.endTime ?? 0) + timeOffsetRef.current
-            } as mm.NoteSequence.Note
-
-            setState(prev => ({
-              ...prev,
-              activeNote: adjustedNote,
-              currentTime: actualTime
-            }))
-            callbacksRef.current.onNotePlay?.(adjustedNote)
-            callbacksRef.current.onTimeUpdate?.(actualTime)
-          },
-          stop: () => {
-            setState(prev => ({ ...prev, activeNote: null }))
-            callbacksRef.current.onPlaybackStop?.()
-          }
-        }
-      )
+  const getSampler = useCallback((): PianoSampler => {
+    if (!samplerRef.current) {
+      samplerRef.current = new PianoSampler()
     }
+    return samplerRef.current
+  }, [])
 
-    return () => {
-      if (playerRef.current) {
-        playerRef.current.stop()
-      }
+  const cancelFrame = useCallback(() => {
+    if (frameRef.current !== null) {
+      cancelAnimationFrame(frameRef.current)
+      frameRef.current = null
     }
   }, [])
 
-  const setCallbacks = (callbacks: PlayerCallbacks) => {
-    callbacksRef.current = callbacks
-  }
+  /** Halt audio and the playhead loop without touching reactive state. */
+  const haltPlayback = useCallback(() => {
+    cancelFrame()
+    playbackRef.current = null
+    samplerRef.current?.stop()
+  }, [cancelFrame])
 
-  const loadMidi = async (blob: Blob) => {
+  useEffect(() => {
+    return () => {
+      cancelFrame()
+      samplerRef.current?.dispose()
+      samplerRef.current = null
+    }
+  }, [cancelFrame])
+
+  /**
+   * Drive `currentTime` from the AudioContext clock, which is the same clock
+   * the notes are scheduled against, and end playback at `stopAt`.
+   */
+  const runPlayhead = useCallback(() => {
+    const tick = () => {
+      const playback = playbackRef.current
+      const sampler = samplerRef.current
+      if (!playback || !sampler) return
+
+      const elapsed = Math.max(0, sampler.now() - playback.origin)
+      const position = playback.offset + elapsed
+
+      if (position >= playback.stopAt) {
+        const { rewindOnEnd, stopAt } = playback
+        haltPlayback()
+        resumeFromRef.current = rewindOnEnd ? 0 : stopAt
+        setState((prev) => ({
+          ...prev,
+          isPlaying: false,
+          currentTime: rewindOnEnd ? 0 : stopAt
+        }))
+        return
+      }
+
+      setState((prev) => (prev.currentTime === position ? prev : { ...prev, currentTime: position }))
+      frameRef.current = requestAnimationFrame(tick)
+    }
+
+    cancelFrame()
+    frameRef.current = requestAnimationFrame(tick)
+  }, [cancelFrame, haltPlayback])
+
+  /** Schedule `[fromTime, stopAt)` of the loaded sequence and start the playhead. */
+  const beginPlayback = useCallback(async (
+    fromTime: number,
+    stopAt: number,
+    rewindOnEnd: boolean
+  ) => {
+    const sequence = sequenceRef.current
+    if (!sequence) return
+
+    const sampler = getSampler()
+    haltPlayback()
+
+    const slice = rewindOnEnd
+      ? sequenceFrom(sequence, fromTime)
+      : sliceSequence(sequence, fromTime, stopAt)
+
+    await sampler.resumeContext()
+    await sampler.preload(slice)
+
+    // A stop/seek may have landed while samples were loading.
+    if (sequenceRef.current !== sequence) return
+
+    const origin = sampler.start(slice)
+    playbackRef.current = { origin, offset: fromTime, stopAt, rewindOnEnd }
+
+    setState((prev) => ({ ...prev, isPlaying: true, error: null, currentTime: fromTime }))
+    runPlayhead()
+  }, [getSampler, haltPlayback, runPlayhead])
+
+  const withPlaybackError = useCallback((fallback: string) => (err: unknown) => {
+    const message = err instanceof Error ? err.message : fallback
+    haltPlayback()
+    setState((prev) => ({ ...prev, error: message, isPlaying: false }))
+    console.error(fallback, err)
+  }, [haltPlayback])
+
+  const loadMidi = useCallback(async (blob: Blob) => {
     try {
+      haltPlayback()
+      isLoadedRef.current = false
       setState((prev) => ({ ...prev, isLoaded: false, error: null }))
 
       const arrayBuffer = await blob.arrayBuffer()
-      const normalizedBytes = normalizeJamcorderTempoMap(new Uint8Array(arrayBuffer))
-      const sequence = mm.midiToSequenceProto(normalizedBytes)
-      const pianoSequence = forceGrandPianoSequence(sequence)
+      const sequence = parseNoteSequence(new Uint8Array(arrayBuffer))
 
-      sequenceRef.current = pianoSequence
-      isPausedRef.current = false
-
-      // Calculate duration
-      const duration = sequence.totalTime || pianoSequence.totalTime || 0
+      sequenceRef.current = sequence
+      resumeFromRef.current = 0
+      isLoadedRef.current = true
 
       setState((prev) => ({
         ...prev,
         isLoaded: true,
         error: null,
-        duration,
+        duration: sequence.totalTime,
         currentTime: 0,
+        isPlaying: false
       }))
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load MIDI file'
-      setState((prev) => ({
-        ...prev,
-        error: errorMessage,
-        isLoaded: false,
-      }))
+      const message = err instanceof Error ? err.message : 'Failed to load MIDI file'
+      isLoadedRef.current = false
+      setState((prev) => ({ ...prev, error: message, isLoaded: false }))
       console.error('Error loading MIDI:', err)
     }
-  }
+  }, [haltPlayback])
 
-  const play = async () => {
-    if (!playerRef.current || !sequenceRef.current || !state.isLoaded) {
-      return
-    }
+  const play = useCallback(async () => {
+    const sequence = sequenceRef.current
+    if (!sequence || !isLoadedRef.current) return
 
-    try {
-      setState((prev) => ({ ...prev, isPlaying: true, error: null }))
-
-      if (isPausedRef.current) {
-        await playerRef.current.resume()
-        isPausedRef.current = false
-        seekPositionRef.current = 0
-        timeOffsetRef.current = 0
-        setState((prev) => ({ ...prev, isPlaying: false, currentTime: 0, activeNote: null }))
-        return
-      }
-
-      // If there's a seek position, start from there
-      let sequenceToPlay = sequenceRef.current
-      if (seekPositionRef.current > 0) {
-        timeOffsetRef.current = seekPositionRef.current
-        sequenceToPlay = mm.sequences.clone(sequenceRef.current)
-
-        // Offset notes
-        if (sequenceToPlay.notes) {
-          sequenceToPlay.notes = sequenceToPlay.notes
-            .map(note => ({
-              ...note,
-              startTime: (note.startTime ?? 0) - seekPositionRef.current,
-              endTime: (note.endTime ?? 0) - seekPositionRef.current
-            }))
-            .filter(note => (note.endTime ?? 0) > 0)
-        }
-
-        // Offset control changes (sustain pedal, etc.)
-        if (sequenceToPlay.controlChanges) {
-          sequenceToPlay.controlChanges = sequenceToPlay.controlChanges
-            .map(cc => ({
-              ...cc,
-              time: (cc.time ?? 0) - seekPositionRef.current
-            }))
-            .filter(cc => (cc.time ?? 0) >= 0)
-        }
-      } else {
-        timeOffsetRef.current = 0
-      }
-
-      await playerRef.current.start(sequenceToPlay)
-
-      // When playback completes
-      isPausedRef.current = false
-      seekPositionRef.current = 0
-      timeOffsetRef.current = 0
-      setState((prev) => ({ ...prev, isPlaying: false, currentTime: 0, activeNote: null }))
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Playback failed'
-      setState((prev) => ({
-        ...prev,
-        error: errorMessage,
-        isPlaying: false,
-      }))
-      isPausedRef.current = false
-      console.error('Playback error:', err)
-    }
-  }
-
-  const playSegment = async (startTime: number, endTime: number) => {
-    if (!playerRef.current || !sequenceRef.current || !state.isLoaded) {
-      return
-    }
-
-    if (!(Number.isFinite(startTime) && Number.isFinite(endTime) && endTime > startTime)) {
-      return
-    }
+    const from = resumeFromRef.current
+    // Resuming at (or past) the end restarts from the top.
+    const startAt = from >= sequence.totalTime ? 0 : from
 
     try {
-      playerRef.current.stop()
-      isPausedRef.current = false
-
-      const segmentDuration = endTime - startTime
-      const segmentSequence = mm.sequences.clone(sequenceRef.current)
-
-      segmentSequence.notes = (segmentSequence.notes || [])
-        .filter(note => (note.endTime ?? 0) > startTime && (note.startTime ?? 0) < endTime)
-        .map(note => ({
-          ...note,
-          startTime: Math.max(0, (note.startTime ?? 0) - startTime),
-          endTime: Math.min(segmentDuration, (note.endTime ?? 0) - startTime)
-        }))
-        .filter(note => (note.endTime ?? 0) > 0)
-
-      if (segmentSequence.controlChanges) {
-        segmentSequence.controlChanges = segmentSequence.controlChanges
-          .filter(cc => (cc.time ?? 0) >= startTime && (cc.time ?? 0) <= endTime)
-          .map(cc => ({
-            ...cc,
-            time: Math.max(0, (cc.time ?? 0) - startTime)
-          }))
-      }
-
-      timeOffsetRef.current = startTime
-      seekPositionRef.current = 0
-
-      setState((prev) => ({
-        ...prev,
-        isPlaying: true,
-        error: null,
-        currentTime: startTime,
-        activeNote: null
-      }))
-
-      await playerRef.current.start(segmentSequence)
-
-      timeOffsetRef.current = 0
-      setState((prev) => ({
-        ...prev,
-        isPlaying: false,
-        currentTime: endTime,
-        activeNote: null
-      }))
+      await beginPlayback(startAt, sequence.totalTime, true)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Segment playback failed'
-      setState((prev) => ({
-        ...prev,
-        error: errorMessage,
-        isPlaying: false,
-      }))
-      console.error('Segment playback error:', err)
+      withPlaybackError('Playback failed')(err)
     }
-  }
+  }, [beginPlayback, withPlaybackError])
 
-  const pause = () => {
-    if (playerRef.current && state.isPlaying) {
-      playerRef.current.pause()
-      isPausedRef.current = true
-      setState((prev) => ({ ...prev, isPlaying: false }))
-    }
-  }
-
-  const stop = () => {
-    if (playerRef.current) {
-      playerRef.current.stop()
-      isPausedRef.current = false
-      seekPositionRef.current = 0
-      timeOffsetRef.current = 0
-      setState((prev) => ({ ...prev, isPlaying: false, currentTime: 0, activeNote: null }))
-    }
-  }
-
-  const seekTo = async (time: number) => {
-    if (!playerRef.current || !sequenceRef.current || !state.isLoaded) {
-      return
-    }
-
-    const wasPlaying = state.isPlaying
+  const playSegment = useCallback(async (startTime: number, endTime: number) => {
+    const sequence = sequenceRef.current
+    if (!sequence || !isLoadedRef.current) return
+    if (!(Number.isFinite(startTime) && Number.isFinite(endTime) && endTime > startTime)) return
 
     try {
-      // Stop current playback if playing
-      if (wasPlaying) {
-        playerRef.current.stop()
-        isPausedRef.current = false
-      } else if (isPausedRef.current) {
-        // Seeking from paused state should restart from target on next play().
-        playerRef.current.stop()
-        isPausedRef.current = false
-      }
-
-      // Update seek position and current time
-      seekPositionRef.current = time
-      setState((prev) => ({ ...prev, currentTime: time, activeNote: null }))
-
-      // If was playing, continue playing from new position
-      if (wasPlaying) {
-        // Set time offset for callbacks
-        timeOffsetRef.current = time
-
-        // Create a new sequence with adjusted start times
-        const offsetSequence = mm.sequences.clone(sequenceRef.current)
-
-        // Offset notes
-        offsetSequence.notes = offsetSequence.notes
-          .map(note => ({
-            ...note,
-            startTime: (note.startTime ?? 0) - time,
-            endTime: (note.endTime ?? 0) - time
-          }))
-          .filter(note => (note.endTime ?? 0) > 0)
-
-        // Offset control changes (sustain pedal, etc.)
-        if (offsetSequence.controlChanges) {
-          offsetSequence.controlChanges = offsetSequence.controlChanges
-            .map(cc => ({
-              ...cc,
-              time: (cc.time ?? 0) - time
-            }))
-            .filter(cc => (cc.time ?? 0) >= 0)
-        }
-
-        setState((prev) => ({ ...prev, isPlaying: true }))
-        await playerRef.current.start(offsetSequence)
-
-        // When playback completes
-        seekPositionRef.current = 0
-        timeOffsetRef.current = 0
-        setState((prev) => ({ ...prev, isPlaying: false, currentTime: 0, activeNote: null }))
-      }
+      await beginPlayback(startTime, endTime, false)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Seek failed'
-      setState((prev) => ({
-        ...prev,
-        error: errorMessage,
-        isPlaying: false,
-      }))
-      console.error('Seek error:', err)
+      withPlaybackError('Segment playback failed')(err)
     }
-  }
+  }, [beginPlayback, withPlaybackError])
+
+  const pause = useCallback(() => {
+    if (!playbackRef.current) return
+
+    const playback = playbackRef.current
+    const sampler = samplerRef.current
+    const position = sampler
+      ? playback.offset + Math.max(0, sampler.now() - playback.origin)
+      : playback.offset
+
+    haltPlayback()
+    resumeFromRef.current = position
+    setState((prev) => ({ ...prev, isPlaying: false, currentTime: position }))
+  }, [haltPlayback])
+
+  const stop = useCallback(() => {
+    haltPlayback()
+    resumeFromRef.current = 0
+    setState((prev) => ({ ...prev, isPlaying: false, currentTime: 0 }))
+  }, [haltPlayback])
+
+  const seekTo = useCallback(async (time: number) => {
+    const sequence = sequenceRef.current
+    if (!sequence || !isLoadedRef.current) return
+
+    const wasPlaying = playbackRef.current !== null
+    const target = Math.min(Math.max(0, time), sequence.totalTime)
+
+    haltPlayback()
+    resumeFromRef.current = target
+    setState((prev) => ({ ...prev, currentTime: target, isPlaying: false }))
+
+    if (!wasPlaying) return
+
+    try {
+      await beginPlayback(target, sequence.totalTime, true)
+    } catch (err) {
+      withPlaybackError('Seek failed')(err)
+    }
+  }, [beginPlayback, haltPlayback, withPlaybackError])
 
   return {
     ...state,
@@ -378,7 +275,6 @@ export function useMidiPlayer(): UseMidiPlayerResult {
     stop,
     loadMidi,
     seekTo,
-    sequence: sequenceRef.current,
-    setCallbacks,
+    sequence: sequenceRef.current
   }
 }

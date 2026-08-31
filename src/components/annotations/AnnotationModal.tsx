@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { formatTime } from '@/utils/format'
 
 interface AnnotationModalProps {
   isOpen: boolean;
@@ -13,12 +14,6 @@ interface AnnotationModalProps {
   allowTimeEdit?: boolean;
   enableIgnoredSectionOption?: boolean;
   initialAction?: 'annotation' | 'ignored';
-}
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
 export function AnnotationModal({

@@ -1,11 +1,12 @@
 import path from 'node:path';
+import { clamp, ensureDirForFile, hasFlag, parseInt_, parseNum, readArg, runMain } from '@core/cli/args';
 import {
   loadModel,
   predictWindows,
   windowsToSegments,
   type PredictConfig
 } from './songSegmentation.js';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 
 interface OutputPayload {
   generatedAt: string;
@@ -45,28 +46,6 @@ Options:
 `);
 }
 
-function readArg(flag: string): string | undefined {
-  const idx = process.argv.indexOf(flag);
-  if (idx === -1) return undefined;
-  return process.argv[idx + 1];
-}
-
-function hasFlag(flag: string): boolean {
-  return process.argv.includes(flag);
-}
-
-function parseNum(value: string | undefined, fallback: number): number {
-  if (value === undefined) return fallback;
-  const num = Number(value);
-  if (!Number.isFinite(num)) return fallback;
-  return num;
-}
-
-function ensureDirForFile(filePath: string) {
-  const dir = path.dirname(filePath);
-  mkdirSync(dir, { recursive: true });
-}
-
 async function main() {
   if (hasFlag('--help')) {
     usage();
@@ -86,7 +65,7 @@ async function main() {
 
   const config: PredictConfig = {
     minWindowConfidence: parseNum(readArg('--min-window-confidence'), 0.45),
-    smoothingWindows: Math.max(1, Math.floor(parseNum(readArg('--smoothing'), 5))),
+    smoothingWindows: parseInt_(readArg('--smoothing'), 5),
     minSegmentSec: Math.max(0, parseNum(readArg('--min-segment-sec'), 8)),
     minSegmentConfidence: clamp(parseNum(readArg('--min-segment-confidence'), 0.65), 0, 1),
     mergeGapSec: Math.max(0, parseNum(readArg('--merge-gap-sec'), 3))
@@ -133,11 +112,5 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error('Prediction failed:', error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+runMain('Prediction failed', main);
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}

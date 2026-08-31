@@ -6,6 +6,7 @@ import type {
   JamcorderAsset,
   JamcorderDetailedFile
 } from '../types/index';
+import { sleep } from '@core/cli/args';
 
 const execFileAsync = promisify(execFile);
 
@@ -276,8 +277,4 @@ function decompressMaybe(buffer: Buffer): Buffer {
   } catch {
     return buffer;
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

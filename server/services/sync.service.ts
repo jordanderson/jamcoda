@@ -7,6 +7,7 @@ import * as FileModel from '../models/File';
 import { parseJmxMetadata, jmxTimeToDate } from '../utils/jmxParser';
 import type { SyncProgress, JamcorderFileEntry } from '../types/index';
 import { getMidiDuration } from '../utils/midiUtils';
+import { sleep } from '@core/cli/args';
 
 const MIDI_DIR = process.env.JAMCODA_MIDI_DIR || 'data/midi';
 // Pause between individual file downloads to keep low-power firmware happy.
@@ -329,10 +330,6 @@ async function resyncFile(entry: JamcorderFileEntry, existing: ReturnType<typeof
     jmxEofOffset: jmx.eofFileOffset,
     midiDuration
   });
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function basename(filepath: string): string {
