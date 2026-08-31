@@ -49,6 +49,37 @@ function parseOptionalBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
+function parseOptionalScaling(value: unknown): TrainConfig['featureScaling'] {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'zscore' || normalized === 'minmax' || normalized === 'none') {
+      return normalized;
+    }
+  }
+  return undefined;
+}
+
+function parseOptionalScoreMode(value: unknown): TrainConfig['scoreMode'] {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'min' || normalized === 'avg') return normalized;
+  }
+  return undefined;
+}
+
+function parseOptionalDecoder(value: unknown): TrainConfig['decoder'] {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'anchor' || normalized === 'viterbi' || normalized === 'smooth') {
+      return normalized;
+    }
+  }
+  return undefined;
+}
+
 function isValidTimeRange(start: number, end: number): boolean {
   return Number.isFinite(start) && Number.isFinite(end) && start < end;
 }
@@ -332,7 +363,7 @@ router.post('/run', async (req: Request, res: Response) => {
       minWindowConfidence: clamp(parseOptionalNumber(req.body.minWindowConfidence) ?? 0.45, 0, 1),
       smoothingWindows: Math.max(1, Math.floor(parseOptionalNumber(req.body.smoothingWindows) ?? 5)),
       minSegmentSec: Math.max(0, parseOptionalNumber(req.body.minSegmentSec) ?? 8),
-      minSegmentConfidence: clamp(parseOptionalNumber(req.body.minSegmentConfidence) ?? 0.65, 0, 1),
+      minSegmentConfidence: clamp(parseOptionalNumber(req.body.minSegmentConfidence) ?? 0.3, 0, 1),
       mergeGapSec: Math.max(0, parseOptionalNumber(req.body.mergeGapSec) ?? 3)
     };
     const clearUnpromoted = parseOptionalBoolean(req.body.clearUnpromoted) ?? true;
@@ -400,7 +431,15 @@ router.post('/rebuild-model', async (req: Request, res: Response) => {
       windowSec: parseOptionalNumber(req.body.windowSec) ?? 4,
       stepSec: parseOptionalNumber(req.body.stepSec) ?? 1,
       k: Math.max(1, Math.floor(parseOptionalNumber(req.body.k) ?? 7)),
-      maxNoneToSongRatio: Math.max(0, parseOptionalNumber(req.body.maxNoneToSongRatio) ?? 1.5)
+      maxNoneToSongRatio: Math.max(0, parseOptionalNumber(req.body.maxNoneToSongRatio) ?? 1.5),
+      prototypeBudget: Math.max(1, Math.floor(parseOptionalNumber(req.body.prototypeBudget) ?? 1200)),
+      maxNonePrototypes: Math.max(1, Math.floor(parseOptionalNumber(req.body.maxNonePrototypes) ?? 120)),
+      featureScaling: parseOptionalScaling(req.body.featureScaling),
+      scoreMode: parseOptionalScoreMode(req.body.scoreMode),
+      decoder: parseOptionalDecoder(req.body.decoder),
+      anchorMargin: Math.max(0, parseOptionalNumber(req.body.anchorMargin) ?? 0.15),
+      minAnchorRun: Math.max(1, Math.floor(parseOptionalNumber(req.body.minAnchorRun) ?? 3)),
+      fillTopK: parseOptionalNumber(req.body.fillTopK) ?? -1
     };
     const includeEvaluation = parseOptionalBoolean(req.body.includeEvaluation) ?? false;
 

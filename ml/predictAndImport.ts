@@ -50,7 +50,7 @@ Options:
   --min-window-confidence <n>   Window confidence threshold (default: 0.45)
   --smoothing <int>             Smoothing windows (default: 5)
   --min-segment-sec <n>         Minimum segment duration (default: 8)
-  --min-segment-confidence <n>  Minimum average segment confidence (default: 0.65)
+  --min-segment-confidence <n>  Minimum average segment confidence (default: 0.3)
   --merge-gap-sec <n>           Merge adjacent same-song segments within gap (default: 3)
   --help                        Show this help
 `);
@@ -93,7 +93,7 @@ async function main() {
     minWindowConfidence: clamp(parseNum(readArg('--min-window-confidence'), 0.45), 0, 1),
     smoothingWindows: parseInt_(readArg('--smoothing'), 5),
     minSegmentSec: Math.max(0, parseNum(readArg('--min-segment-sec'), 8)),
-    minSegmentConfidence: clamp(parseNum(readArg('--min-segment-confidence'), 0.65), 0, 1),
+    minSegmentConfidence: clamp(parseNum(readArg('--min-segment-confidence'), 0.3), 0, 1),
     mergeGapSec: Math.max(0, parseNum(readArg('--merge-gap-sec'), 3))
   };
 

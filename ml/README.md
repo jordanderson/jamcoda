@@ -9,13 +9,17 @@ Goal:
 
 ## Model Summary
 
-Current model is a lightweight KNN segmenter (`knn-song-segmenter`):
-- extracts windowed MIDI features (pitch-class profile, onset density, pitch/velocity/duration/polyphony stats)
-- predicts a song label per window
-- smooths labels across neighboring windows
+Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v2):
+
+- extracts windowed MIDI features (pitch-class profile, onset density, pitch/velocity/duration/polyphony stats, plus tempo, rhythmic regularity, silence ratio and register span)
+- condenses training windows into per-label prototypes (a few hundred total) instead of retaining every window, so retraining and prediction are fast and the model file stays small
+- scores each window by its nearest prototype per song (minmax-scaled features)
+- decodes windows into contiguous song spans with an **anchor-and-link** two-pass decoder:
+  1. finds *anchor* runs — windows whose top song beats the runner-up by a clear margin (the recognizable phrases of a song)
+  2. links those anchors together across intervening low-confidence windows (vamping, left-hand-only passages), stopping at a strong anchor of a different song or at genuine silence
 - merges windows into segments with confidence thresholds
 
-This is intentionally simple so you can retrain often as annotations grow.
+This is intentionally simple so you can retrain often as annotations grow. The anchor-and-link structure mirrors how practice sessions actually sound: distinctive phrases are easy to identify, while the generic passages between them get connected into the surrounding song.
 
 ## Data Sources
 
@@ -57,12 +61,27 @@ npm run ml:train -- \
   --window 4 \
   --step 1 \
   --k 7 \
-  --none-ratio 1.5
+  --none-ratio 1.5 \
+  --prototype-budget 1200 \
+  --max-none-prototypes 120 \
+  --scaling minmax \
+  --score-mode min \
+  --decoder anchor \
+  --anchor-margin 0.15 \
+  --min-anchor-run 3 \
+  --fill-topk -1
 ```
 
 Notes:
 - `--window` and `--step` are seconds.
 - `--none-ratio` controls negative sampling volume.
+- `--prototype-budget` caps the total condensed prototypes across all songs;
+  `--max-none-prototypes` caps the `__none__` share of that budget.
+- `--scaling` is the per-feature normalization (`minmax`, `zscore`, or `none`).
+- `--decoder` is `anchor` (default, two-pass anchor-and-link), `viterbi`, or
+  `smooth`. `--anchor-margin` and `--min-anchor-run` tune how easily anchor
+  runs form; `--fill-topk -1` links aggressively (a positive value requires the
+  linked song to be a top-K scorer in each linked window).
 - At least 2 annotated files are required.
 - Default behavior includes leave-one-file-out evaluation; use `--skip-eval` to disable.
 
@@ -112,8 +131,15 @@ npm run ml:eval -- --out data/ml/eval-report.json
 Useful flags:
 - `--mode loo` runs leave-one-file-out evaluation (recommended for generalization)
 - `--include-none` evaluates unlabeled (`__none__`) windows too
-- `--min-window-confidence` and `--smoothing` to compare threshold variants
+- `--min-window-confidence`, `--smoothing`, `--min-segment-sec`,
+  `--min-segment-confidence`, and `--merge-gap-sec` to compare threshold variants
 - `--quiet` reduces per-file logs
+
+The report now includes a **segment-level** comparison against your annotations:
+how much of each annotated span is covered by a same-song predicted segment
+(annotation recall), and how much of each predicted segment actually overlaps a
+same-song annotation (segment precision), plus an F1 across both. This is the
+closest single number to "predictions vs annotations".
 
 ## UI-Driven ML Actions
 
@@ -125,9 +151,13 @@ Run endpoint defaults:
 - `minWindowConfidence = 0.45`
 - `smoothingWindows = 5`
 - `minSegmentSec = 8`
-- `minSegmentConfidence = 0.65`
+- `minSegmentConfidence = 0.3`
 - `mergeGapSec = 3`
 - `clearUnpromoted = true`
+
+`minSegmentConfidence` is calibrated to the anchor-link confidence scale, which
+differs from the old kNN confidence (0.65). The displayed segment confidence
+reflects how strongly the segment was anchored rather than a per-window softmax.
 
 Prediction output is post-filtered against:
 - existing `annotations` for the target file
@@ -206,7 +236,8 @@ Rebuild model after new annotations using sidebar `Rebuild Model` or `npm run ml
 
 ## Key Files (for Coding Agents)
 
-- `ml/songSegmentation.ts`: feature extraction, training, prediction, smoothing, segmentation
+- `ml/songSegmentation.ts`: feature extraction, prototype training, anchor-link decoding, segmentation
+- `ml/songSegmentation.test.ts`: co-located tests for feature extraction, prototype training, and decoding
 - `ml/train.ts`: CLI training entrypoint
 - `ml/predict.ts`: CLI prediction entrypoint (model only, no DB writes)
 - `ml/predictAndImport.ts`: CLI wrapper around the shared import pipeline

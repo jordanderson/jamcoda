@@ -11,6 +11,8 @@ import {
   loadModel,
   predictWindowsFromSamples,
   trainModelFromSamples,
+  windowsToSegments,
+  type AnnotatedMidiFile,
   type PredictConfig
 } from './songSegmentation.js';
 
@@ -21,6 +23,40 @@ interface FileEvalRow {
   correctWindows: number;
   accuracy: number;
   missingPredictionWindows: number;
+}
+
+interface FileSegmentEvalRow {
+  fileId: number;
+  filename: string;
+  annotationSec: number;
+  matchedSec: number;
+  annotationRecall: number;
+  predictedSec: number;
+  predictedMatchedSec: number;
+  segmentPrecision: number;
+  segmentCount: number;
+}
+
+interface SongSegmentEvalRow {
+  songName: string;
+  annotationSec: number;
+  matchedSec: number;
+  recall: number;
+  predictedSec: number;
+  matchedPredictedSec: number;
+  precision: number;
+  f1: number;
+}
+
+interface SegmentEvalSummary {
+  annotationSec: number;
+  matchedSec: number;
+  annotationRecall: number;
+  predictedSec: number;
+  matchedPredictedSec: number;
+  segmentPrecision: number;
+  segmentF1: number;
+  segmentCount: number;
 }
 
 interface SongEvalRow {
@@ -49,12 +85,18 @@ interface EvalReport {
   predictConfig: {
     minWindowConfidence: number;
     smoothingWindows: number;
+    minSegmentSec: number;
+    minSegmentConfidence: number;
+    mergeGapSec: number;
     modelWindowSec: number;
     modelStepSec: number;
     modelK: number;
   };
+  segment: SegmentEvalSummary;
   byFile: FileEvalRow[];
+  byFileSegment: FileSegmentEvalRow[];
   bySong: SongEvalRow[];
+  bySongSegment: SongSegmentEvalRow[];
   topConfusions: Array<{
     trueLabel: string;
     predictedLabel: string;
@@ -80,6 +122,9 @@ Options:
   --mode <insample|loo>          Eval mode (default: insample)
   --min-window-confidence <n>    Window confidence threshold (default: 0.45)
   --smoothing <int>              Smoothing windows (default: 5)
+  --min-segment-sec <n>          Segment evaluation minimum duration (default: 8)
+  --min-segment-confidence <n>   Segment evaluation confidence threshold (default: 0.3)
+  --merge-gap-sec <n>            Segment evaluation merge gap (default: 3)
   --include-none                 Also evaluate __none__ windows
   --quiet                        Reduce per-file logging
   --help                         Show this help
@@ -120,6 +165,87 @@ function getSongStatsAccumulator(
   return value;
 }
 
+function rangeOverlap(
+  aStart: number, aEnd: number, bStart: number, bEnd: number
+): number {
+  return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
+}
+
+const segmentSummary: SegmentEvalSummary = {
+  annotationSec: 0,
+  matchedSec: 0,
+  annotationRecall: 0,
+  predictedSec: 0,
+  matchedPredictedSec: 0,
+  segmentPrecision: 0,
+  segmentF1: 0,
+  segmentCount: 0
+};
+
+const byFileSegment: FileSegmentEvalRow[] = [];
+const bySongSegment = new Map<string, SongSegmentEvalRow>();
+
+function accumulateSongSegment(songName: string, annotationSec: number, matchedSec: number, predictedSec: number, matchedPredictedSec: number) {
+  let row = bySongSegment.get(songName);
+  if (!row) {
+    row = { songName, annotationSec: 0, matchedSec: 0, recall: 0, predictedSec: 0, matchedPredictedSec: 0, precision: 0, f1: 0 };
+    bySongSegment.set(songName, row);
+  }
+  row.annotationSec += annotationSec;
+  row.matchedSec += matchedSec;
+  row.predictedSec += predictedSec;
+  row.matchedPredictedSec += matchedPredictedSec;
+}
+
+function evaluateFileSegments(
+  file: AnnotatedMidiFile,
+  segments: ReturnType<typeof windowsToSegments>
+): FileSegmentEvalRow | null {
+  let annotationSec = 0;
+  let matchedSec = 0;
+  let predictedSec = 0;
+  let matchedPredictedSec = 0;
+
+  for (const annotation of file.annotations) {
+    const annLen = annotation.endTime - annotation.startTime;
+    annotationSec += annLen;
+    let overlap = 0;
+    for (const segment of segments) {
+      if (segment.songName === annotation.songName) {
+        overlap += rangeOverlap(segment.startTime, segment.endTime, annotation.startTime, annotation.endTime);
+      }
+    }
+    matchedSec += Math.min(overlap, annLen);
+    accumulateSongSegment(annotation.songName, annLen, Math.min(overlap, annLen), 0, 0);
+  }
+
+  for (const segment of segments) {
+    const segLen = segment.endTime - segment.startTime;
+    predictedSec += segLen;
+    let overlap = 0;
+    for (const annotation of file.annotations) {
+      if (annotation.songName === segment.songName) {
+        overlap += rangeOverlap(segment.startTime, segment.endTime, annotation.startTime, annotation.endTime);
+      }
+    }
+    matchedPredictedSec += Math.min(overlap, segLen);
+    accumulateSongSegment(segment.songName, 0, 0, segLen, Math.min(overlap, segLen));
+  }
+
+  if (annotationSec === 0) return null;
+  return {
+    fileId: file.fileId,
+    filename: file.filename,
+    annotationSec,
+    matchedSec,
+    annotationRecall: matchedSec / annotationSec,
+    predictedSec,
+    predictedMatchedSec: matchedPredictedSec,
+    segmentPrecision: predictedSec > 0 ? matchedPredictedSec / predictedSec : 0,
+    segmentCount: segments.length
+  };
+}
+
 async function main() {
   if (hasFlag('--help')) {
     usage();
@@ -137,9 +263,9 @@ async function main() {
   const predictConfig: PredictConfig = {
     minWindowConfidence: clamp(parseNum(readArg('--min-window-confidence'), 0.45), 0, 1),
     smoothingWindows: Math.max(1, Math.floor(parseNum(readArg('--smoothing'), 5))),
-    minSegmentSec: 0,
-    minSegmentConfidence: 0,
-    mergeGapSec: 0
+    minSegmentSec: Math.max(0, parseNum(readArg('--min-segment-sec'), 8)),
+    minSegmentConfidence: clamp(parseNum(readArg('--min-segment-confidence'), 0.3), 0, 1),
+    mergeGapSec: Math.max(0, parseNum(readArg('--merge-gap-sec'), 3))
   };
 
   const model = loadModel(modelPath);
@@ -284,6 +410,22 @@ async function main() {
       }
     }
 
+    const segments = windowsToSegments(predictedWindows, {
+      minSegmentSec: predictConfig.minSegmentSec,
+      minSegmentConfidence: predictConfig.minSegmentConfidence,
+      mergeGapSec: predictConfig.mergeGapSec
+    });
+
+    const fileSegmentRow = evaluateFileSegments(file, segments);
+    if (fileSegmentRow) {
+      byFileSegment.push(fileSegmentRow);
+      segmentSummary.annotationSec += fileSegmentRow.annotationSec;
+      segmentSummary.matchedSec += fileSegmentRow.matchedSec;
+      segmentSummary.predictedSec += fileSegmentRow.predictedSec;
+      segmentSummary.matchedPredictedSec += fileSegmentRow.predictedMatchedSec;
+      segmentSummary.segmentCount += fileSegmentRow.segmentCount;
+    }
+
     if (fileEvaluated > 0) {
       const fileRow: FileEvalRow = {
         fileId: file.fileId,
@@ -356,6 +498,26 @@ async function main() {
     .sort((a, b) => a.recall - b.recall || b.support - a.support)
     .slice(0, 10);
 
+  segmentSummary.annotationRecall = segmentSummary.annotationSec > 0
+    ? segmentSummary.matchedSec / segmentSummary.annotationSec
+    : 0;
+  segmentSummary.segmentPrecision = segmentSummary.predictedSec > 0
+    ? segmentSummary.matchedPredictedSec / segmentSummary.predictedSec
+    : 0;
+  segmentSummary.segmentF1 = segmentSummary.annotationRecall + segmentSummary.segmentPrecision > 0
+    ? (2 * segmentSummary.annotationRecall * segmentSummary.segmentPrecision)
+      / (segmentSummary.annotationRecall + segmentSummary.segmentPrecision)
+    : 0;
+
+  const bySongSegmentRows: SongSegmentEvalRow[] = [...bySongSegment.entries()]
+    .map(([, row]) => {
+      const recall = row.annotationSec > 0 ? row.matchedSec / row.annotationSec : 0;
+      const precision = row.predictedSec > 0 ? row.matchedPredictedSec / row.predictedSec : 0;
+      const f1 = recall + precision > 0 ? (2 * recall * precision) / (recall + precision) : 0;
+      return { ...row, recall, precision, f1 };
+    })
+    .sort((a, b) => b.annotationSec - a.annotationSec || a.songName.localeCompare(b.songName));
+
   const report: EvalReport = {
     generatedAt: new Date().toISOString(),
     mode,
@@ -371,12 +533,18 @@ async function main() {
     predictConfig: {
       minWindowConfidence: predictConfig.minWindowConfidence,
       smoothingWindows: predictConfig.smoothingWindows,
+      minSegmentSec: predictConfig.minSegmentSec,
+      minSegmentConfidence: predictConfig.minSegmentConfidence,
+      mergeGapSec: predictConfig.mergeGapSec,
       modelWindowSec: model.config.windowSec,
       modelStepSec: model.config.stepSec,
       modelK: model.config.k
     },
+    segment: segmentSummary,
     byFile: byFile.sort((a, b) => a.fileId - b.fileId),
+    byFileSegment: byFileSegment.sort((a, b) => a.fileId - b.fileId),
     bySong,
+    bySongSegment: bySongSegmentRows,
     topConfusions
   };
 
@@ -391,6 +559,48 @@ async function main() {
     + ` accuracy=${pct(report.windowAccuracy)}`
     + ` missingPredWindows=${formatCount(report.missingPredictionWindows)}`
   );
+  console.log(
+    '  segments vs annotations:'
+    + ` recall=${pct(report.segment.annotationRecall)}`
+    + ` precision=${pct(report.segment.segmentPrecision)}`
+    + ` f1=${pct(report.segment.segmentF1)}`
+    + ` (${formatCount(report.segment.annotationSec)}s annotated,`
+    + ` ${formatCount(report.segment.predictedSec)}s predicted,`
+    + ` ${formatCount(report.segment.segmentCount)} segments)`
+  );
+
+  const worstSegmentFiles = [...byFileSegment]
+    .sort((a, b) => a.annotationRecall - b.annotationRecall || b.annotationSec - a.annotationSec)
+    .slice(0, 10);
+  if (worstSegmentFiles.length > 0) {
+    console.log('\nLowest annotation-recall files (top 10):');
+    for (const row of worstSegmentFiles) {
+      console.log(
+        `  #${row.fileId} ${row.filename}`
+        + ` | recall=${pct(row.annotationRecall)}`
+        + ` | precision=${pct(row.segmentPrecision)}`
+        + ` | ann=${formatCount(Math.round(row.annotationSec))}s`
+        + ` | segs=${formatCount(row.segmentCount)}`
+      );
+    }
+  }
+
+  const worstSongsBySegmentRecall = bySongSegmentRows
+    .filter((row) => row.annotationSec >= 60)
+    .sort((a, b) => a.recall - b.recall || b.annotationSec - a.annotationSec)
+    .slice(0, 10);
+  if (worstSongsBySegmentRecall.length > 0) {
+    console.log('\nLowest segment-recall songs (>=60s annotated, top 10):');
+    for (const row of worstSongsBySegmentRecall) {
+      console.log(
+        `  ${row.songName}`
+        + ` | recall=${pct(row.recall)}`
+        + ` | precision=${pct(row.precision)}`
+        + ` | f1=${pct(row.f1)}`
+        + ` | ann=${formatCount(Math.round(row.annotationSec))}s`
+      );
+    }
+  }
 
   if (worstFiles.length > 0) {
     console.log('\nLowest-accuracy files (top 10):');
