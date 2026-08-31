@@ -1,5 +1,7 @@
 # ML Workflow: MIDI Song Segmentation
 
+> Model changes are tracked in [`ml/CHANGELOG.md`](CHANGELOG.md).
+
 This folder contains the local model used by JamCoda to predict song segments inside practice-session MIDI files.
 
 Goal:
