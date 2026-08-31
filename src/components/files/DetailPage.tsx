@@ -254,19 +254,41 @@ export function DetailPage({ fileId }: DetailPageProps) {
     }
   }, [isLoaded]);
 
-  // Keyboard shortcuts for checkpoints
+  // Keyboard shortcuts for playback and checkpoints
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Only if not in an input field
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      // Not while typing, and not while a modal owns the screen -- otherwise
+      // these would act on the piano roll hidden behind it.
+      const target = e.target;
+      if (
+        target instanceof HTMLInputElement
+        || target instanceof HTMLTextAreaElement
+        || target instanceof HTMLSelectElement
+        || (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+      if (annotationModalData !== null || selectedPredictionReviewId !== null) {
         return;
       }
 
-      if (e.key === 's' || e.key === 'S') {
+      // Leave browser and OS chords (cmd+P print, ctrl+S save) alone.
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+
+      if (key === 'p') {
+        if (!isLoaded) return;
+        // The space bar already scrolls the page; P is the unambiguous binding.
+        e.preventDefault();
+        handlePlayPause();
+      } else if (key === 's') {
         handleMarkStart();
-      } else if (e.key === 'e' || e.key === 'E') {
+      } else if (key === 'e') {
         handleMarkEnd();
-      } else if (e.key === 'c' || e.key === 'C') {
+      } else if (key === 'c') {
         if (startCheckpoint !== null || endCheckpoint !== null) {
           handleClearCheckpoints();
         }
@@ -275,7 +297,17 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [currentTime, startCheckpoint, endCheckpoint]);
+    // `isPlaying`/`isLoaded` matter: the handler closes over them through
+    // handlePlayPause, so a stale subscription would toggle the wrong way.
+  }, [
+    currentTime,
+    startCheckpoint,
+    endCheckpoint,
+    isPlaying,
+    isLoaded,
+    annotationModalData,
+    selectedPredictionReviewId
+  ]);
 
   const handlePlayPause = () => {
     if (isPlaying) {
@@ -1055,7 +1087,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
                   <button
                     onClick={handlePlayPause}
                     className="w-10 h-10 rounded-full bg-gray-900 hover:bg-gray-800 text-white flex items-center justify-center transition-all"
-                    title={isPlaying ? 'Pause' : 'Play'}
+                    title={isPlaying ? 'Pause (P)' : 'Play (P)'}
                   >
                     {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
                   </button>
@@ -1161,7 +1193,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
               )}
 
               <div className="ml-auto text-xs text-gray-500">
-                Keyboard: <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">S</kbd> start · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">E</kbd> end · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">C</kbd> clear
+                Keyboard: <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">P</kbd> play/pause · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">S</kbd> start · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">E</kbd> end · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">C</kbd> clear
               </div>
             </div>
           </div>

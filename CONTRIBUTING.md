@@ -18,12 +18,28 @@ Changes should preserve product invariants described in `AGENTS.md` and `README.
 
 ## Tests
 
-- Run server tests:
-  - `npm run test:server`
-- Run frontend tests:
-  - `npm run test:client`
-- Build check:
-  - `npm run build`
+Run them:
+- Everything: `npm test`
+- Server only: `npm run test:server`
+- Frontend + shared core: `npm run test:client`
+- Typecheck (`src`, `core`, `server`, `ml`, tooling): `npm run typecheck`
+- Build check: `npm run build`
+
+Where to put a new test:
+- **Co-located next to the file it tests** -- `core/timeRanges.test.ts` beside
+  `core/timeRanges.ts`. We do not use `__tests__/` directories.
+- To cover one feature of a large module, use an infix:
+  `Annotation.merge.test.ts`.
+- Shared client helpers live in `src/test/`, not beside a module.
+
+Which runner to write against depends on the directory:
+- `core/` and `src/` use **Vitest** -- `import { describe, it, expect } from 'vitest'`.
+- `server/` uses **Node's built-in test runner** -- `node:test` and
+  `node:assert/strict`. Vitest globals do not exist there.
+
+Server tests must set `JAMCODA_DB_PATH` to a temp database *before* importing
+any model (import them lazily). Running tests against the real `data/jamcoda.db`
+is refused outright.
 
 ## Database Changes
 

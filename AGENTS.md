@@ -104,6 +104,29 @@ Core frontend routes:
   one now running it. Fix with `nvm use && npm rebuild better-sqlite3` -- see
   Change Hygiene.
 
+## Test Conventions
+
+- Tests are **co-located siblings**, not in `__tests__/` directories:
+  `core/timeRanges.test.ts` sits next to `core/timeRanges.ts`. This is the
+  Vitest default and what the existing suites follow.
+- Scope a test file to one feature of a large module with an infix:
+  `Annotation.merge.test.ts` covers merge behaviour in `Annotation.ts`.
+- **Two runners, and they are not interchangeable.** Pick by directory:
+  - `core/` and `src/` -> **Vitest** (`import { describe, it, expect } from 'vitest'`),
+    jsdom environment, discovered by the `include` globs in `vite.config.ts`.
+  - `server/` -> **Node's built-in runner** (`node:test` + `node:assert/strict`),
+    because server code runs under tsx directly. Vitest globals are not
+    available there.
+- Shared client test helpers stay in `src/test/` (`setup.ts`, `mocks/`,
+  `utils/renderWithProviders.tsx`) rather than being co-located -- they belong
+  to no single module.
+- A server test **must** point `JAMCODA_DB_PATH` at a temp database before
+  importing any model, and import models lazily (after setting it).
+  `initializeDatabase()` refuses to run with `NODE_ENV=test` against the app DB,
+  so this is enforced rather than merely conventional.
+- Prefer testing pure functions in `core/` over reaching through a route: that
+  is why the domain rules were moved there.
+
 ## Validation Checklist
 
 After changes, run what is relevant:
