@@ -15,11 +15,20 @@ Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v
 
 - extracts windowed MIDI features (pitch-class profile, onset density, pitch/velocity/duration/polyphony stats, plus tempo, rhythmic regularity, silence ratio and register span)
 - condenses training windows into per-label prototypes (a few hundred total) instead of retaining every window, so retraining and prediction are fast and the model file stays small
-- scores each window by its nearest prototype per song (minmax-scaled features)
+- scores each window by its nearest prototype per song (minmax-scaled
+  features). Prototype budgets scale with sqrt(support), so a song with more
+  annotation keeps more prototypes.
+  **Known defect:** a nearest-prototype distance decreases as a song gains
+  prototypes, so well-annotated songs win comparisons they must lose. Three
+  corrections failed. Read the v2.3 entry in [`CHANGELOG.md`](CHANGELOG.md)
+  before you try a fourth. `trainingSummary.underAnnotatedLabels` lists the
+  songs below the average budget. Annotate those songs more.
 - decodes windows into contiguous song spans with an **anchor-and-link** two-pass decoder:
   1. finds *anchor* runs — windows whose top song beats the runner-up by a clear margin (the recognizable phrases of a song)
   2. links those anchors together across intervening low-confidence windows (vamping, left-hand-only passages), stopping at a strong anchor of a different song or at genuine silence
-- merges windows into segments with confidence thresholds
+- converts window runs into segments. Boundaries come from window **centres**,
+  because a window label applies at its centre. Training uses the same rule.
+- filters and merges the segments with confidence and duration limits
 
 This is intentionally simple so you can retrain often as annotations grow. The anchor-and-link structure mirrors how practice sessions actually sound: distinctive phrases are easy to identify, while the generic passages between them get connected into the surrounding song.
 
@@ -80,6 +89,9 @@ Notes:
 - `--prototype-budget` caps the total condensed prototypes across all songs;
   `--max-none-prototypes` caps the `__none__` share of that budget.
 - `--scaling` is the per-feature normalization (`minmax`, `zscore`, or `none`).
+- `--score-neighbors` is the number of nearest prototypes to average per label
+  (default 1, the single nearest). The fit clamps this value to the smallest
+  per-label prototype count, so each label uses the same number of neighbours.
 - `--decoder` is `anchor` (default, two-pass anchor-and-link), `viterbi`, or
   `smooth`. `--anchor-margin` and `--min-anchor-run` tune how easily anchor
   runs form; `--fill-topk -1` links aggressively (a positive value requires the
@@ -178,8 +190,8 @@ How the app uses them:
 - Backfill older files: `npm run db:backfill-bookmarks`.
 
 Run endpoint defaults:
-- `minWindowConfidence = 0.45`
-- `smoothingWindows = 5`
+- `minWindowConfidence = 0.45` *(ignored by the `anchor` decoder -- see below)*
+- `smoothingWindows = 5` *(ignored by the `anchor` and `viterbi` decoders)*
 - `minSegmentSec = 8`
 - `minSegmentConfidence = 0.3`
 - `mergeGapSec = 3`
@@ -188,6 +200,18 @@ Run endpoint defaults:
 `minSegmentConfidence` is calibrated to the anchor-link confidence scale, which
 differs from the old kNN confidence (0.65). The displayed segment confidence
 reflects how strongly the segment was anchored rather than a per-window softmax.
+
+**Options that a decoder ignores.** The `anchor` decoder uses evidence margins,
+so it ignores `minWindowConfidence` and `smoothingWindows`. To tune it, use
+`--anchor-margin` and `--min-anchor-run`. The `viterbi` decoder ignores
+`smoothingWindows`. `ml:predict` and `ml:eval` print the options that the loaded
+model ignores. `decoderIgnoredOptions()` holds this mapping.
+
+**Known defect in the confidence scale.** An anchor window keeps its raw margin,
+usually 0.15 to 0.3. A linked window gets the `linkConfidence` value, 0.5.
+`minSegmentConfidence` can therefore discard a segment of strong anchors and keep
+a segment of mostly linked windows. One shared scale decreased accuracy (v2.3 in
+[`CHANGELOG.md`](CHANGELOG.md)). A test records the current behaviour.
 
 Prediction output is post-filtered against:
 - existing `annotations` for the target file

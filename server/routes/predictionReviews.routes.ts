@@ -442,10 +442,13 @@ router.post('/rebuild-model', async (req: Request, res: Response) => {
       maxNonePrototypes: Math.max(1, Math.floor(parseOptionalNumber(req.body.maxNonePrototypes) ?? 120)),
       featureScaling: parseOptionalScaling(req.body.featureScaling),
       scoreMode: parseOptionalScoreMode(req.body.scoreMode),
+      scoreNeighbors: Math.max(1, Math.floor(parseOptionalNumber(req.body.scoreNeighbors) ?? 1)),
       decoder: parseOptionalDecoder(req.body.decoder),
       anchorMargin: Math.max(0, parseOptionalNumber(req.body.anchorMargin) ?? 0.15),
       minAnchorRun: Math.max(1, Math.floor(parseOptionalNumber(req.body.minAnchorRun) ?? 3)),
-      fillTopK: parseOptionalNumber(req.body.fillTopK) ?? -1
+      fillMinMargin: Math.max(0, parseOptionalNumber(req.body.fillMinMargin) ?? 0),
+      fillTopK: parseOptionalNumber(req.body.fillTopK) ?? -1,
+      linkConfidence: clamp(parseOptionalNumber(req.body.linkConfidence) ?? 0.5, 0, 1)
     };
     const includeEvaluation = parseOptionalBoolean(req.body.includeEvaluation) ?? false;
 

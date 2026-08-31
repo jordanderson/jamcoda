@@ -18,6 +18,122 @@ How to read the numbers:
 
 ---
 
+## 2026-08-31 — v2.3: segment boundaries, model-load guard, honest eval
+
+### Context
+
+A code review found four silent defects and one accuracy hypothesis. The
+hypothesis failed. All numbers below are leave-one-file-out over 48 annotated
+files. The failed experiments are recorded because they are expensive to repeat.
+
+### What changed
+
+**Segment boundaries now use window centres.** Training labels a window at its
+centre: `buildSamplesForFile` calls `getLabelAtTime` at
+`startTime + windowSec / 2`. But `windowsToSegments` built spans from the full
+window extent. With truth `A=[20,40)` and `B=[40,55)` and correct window labels,
+it produced `A=[18,41]` and `B=[38,56]`. Each segment was 3s too long, and each
+adjacent pair overlapped by `windowSec - stepSec`. These segments go into
+`prediction_reviews`, and then into `annotations`, so the error entered the next
+training set. Centres give the correct span. A 7000s file now gives 48 segments
+and 0 overlapping pairs.
+
+**`loadModel` rejects a model with a different feature set.** The feature vector
+changed from 18 to 25 entries in v2.0. An older `model.json` still loaded, then
+produced NaN for every distance. Every NaN comparison is false, so the decoder
+returned `__none__` for every window. The user saw 0 segments and no error.
+`loadModel` now throws and names the correction.
+
+**Leave-one-out evaluation measures the decoder that the app uses.**
+`evaluateLeaveOneOut` used a per-window argmax, with no anchor seeding, no
+linking and no `__none__` handling. `ml:train` and `rebuild-model` therefore
+reported an accuracy for a path that no caller runs, and disagreed with
+`ml:eval`. It now calls `predictWindowsFromSamples`.
+
+**The CLIs report the options that a decoder ignores.** The `anchor` decoder
+never reads `minWindowConfidence` or `smoothingWindows`. The `viterbi` decoder
+never reads `smoothingWindows`. The README, `ml:predict`, `ml:eval` and the run
+endpoint documented both as tuning options, and the eval report recorded them as
+if they changed the result. `minWindowConfidence` at 0.0 and at 0.99 gave
+identical output. `decoderIgnoredOptions()` now holds this mapping.
+
+**Smaller changes.** The model stores the resolved `TrainConfig`, so a change to
+a default does not change an existing model. `allocatePrototypeBudgets` takes
+the `__none__` index instead of assuming index 0. `predictLabelIndex` is
+removed: its confidence was always 0 in `min` score mode, because every score
+there is negative. `trainingSummary.underAnnotatedLabels` lists songs below the
+average prototype budget.
+
+### Results
+
+| metric | v2.2 | v2.3 | delta |
+| --- | --- | --- | --- |
+| window accuracy | 50.91% | 50.91% | 0.00 pt |
+| segment recall | 52.48% | 51.26% | -1.22 pt |
+| segment precision | 45.05% | 45.43% | +0.37 pt |
+| segment F1 | 48.49% | 48.17% | -0.32 pt |
+| segments emitted | 361 | 364 | +3 |
+| predicted seconds | 37,652 | 36,468 | -1,184 |
+
+**This release does not improve accuracy.** Window accuracy is identical,
+because the scoring code is unchanged. Segment F1 decreases by 0.32 pt. The
+pipeline is deterministic, so this is a small real decrease, not noise. 16 songs
+with 60s or more of annotation still get 0% recall, the same as v2.2.
+
+The 1184s decrease in predicted time is the boundary correction. It removes
+about 3s from each of 364 segments. Some of that time covered real annotations,
+which is why recall decreases more than precision increases.
+
+The value of this release is correct output and loud failures, not accuracy.
+
+### Failed experiments
+
+Prototype budgets scale with sqrt(support). A nearest-prototype distance
+decreases as a label gains prototypes, so well-annotated songs win comparisons
+they must lose. In a controlled test with two labels from an identical
+distribution and 120 against 25 prototypes, the larger label won 81% of the
+time instead of 50%. On real data, recall followed prototype count: 53.9% for
+songs with 25 or more prototypes, 33.6% for songs below that.
+
+The bias is real. Three corrections failed:
+
+1. **One equal budget for every label**, 54 labels at 22 prototypes. Segment F1
+   fell from 48.49% to 37.40%. Window accuracy fell 2.28 pt. Mean segment length
+   grew from 104s to 261s. An equal budget discards coverage that
+   well-annotated songs need. An equal budget for `__none__` also stops silence
+   from competing, so songs extend across it.
+2. **Equal budgets for songs, `__none__` exempt.** Segment F1 37.39%. The
+   `__none__` budget was not the cause; the loss of per-song coverage was. A
+   higher `minSegmentConfidence` did not help: 0.45, 0.55 and 0.65 gave F1
+   32.5%, 24.3% and 9.8%. Precision stayed near 30-37% at every value, so the
+   segments were wrong, not under-filtered.
+3. **Per-label scale calibration.** Divide each label distance by the median
+   spacing of its own prototypes. This cancels the count effect in theory, and
+   it corrected the controlled test from 81% to 51%. On real data it gave F1
+   23.37% and window accuracy 17.18%. Spacing does not separate "few
+   prototypes" from "varied class". `__none__` is a varied class, so
+   calibration gave it a large advantage and it absorbed the timeline.
+
+Conclusion: sqrt(support) budgeting works as a prior, because a well-annotated
+song is both more frequent and more varied. The prototype advantage of
+`__none__` works as the song/none decision threshold. A correction must fix
+song-against-song comparison without changing the song/none balance and without
+reducing per-song coverage. One untried option is a per-label offset calibrated
+on held-out windows rather than on prototype geometry.
+
+Two related defects were also corrected, measured, and reverted. Tests now
+record both:
+
+- **Anchor and linked windows use different confidence scales.** An anchor keeps
+  its raw margin, 0.15 to 0.3. A linked window gets 0.5. `windowsToSegments`
+  averages these values against `minSegmentConfidence`, so it discards a segment
+  of 20 strong anchors and keeps a segment of 3 anchors and 17 linked windows.
+- **The duration limit applies before the merge**, so two adjacent 5s runs of
+  one song are both discarded instead of merged into one 10s segment.
+
+Both corrections were part of experiment 1 and could not be separated from its
+losses. Each needs its own measurement.
+
 ## 2026-08-31 — v2.2: silence gaps as boundary hints + piano-roll markers
 
 ### Context

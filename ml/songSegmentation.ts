@@ -102,8 +102,15 @@ export interface TrainConfig {
   temperature?: number;
   /** Feature normalization: 'zscore' (v1 behaviour), 'minmax' (default), 'none'. */
   featureScaling?: 'zscore' | 'minmax' | 'none';
-  /** v2 per-label score aggregation: 'min' (nearest prototype, default) or 'avg'. */
+  /** v2 per-label score aggregation: 'min' (nearest prototypes, default) or 'avg'. */
   scoreMode?: 'min' | 'avg';
+  /**
+   * 'min' mode: the number of nearest prototypes to average per label
+   * (default 1, the single nearest). A higher value prevents one prototype from
+   * deciding a label. The fit clamps this value to the smallest per-label
+   * prototype count. A value above 1 did not improve accuracy.
+   */
+  scoreNeighbors?: number;
   /** Anchor-link decoder: minimum margin for an anchor seed window (default 0.15). */
   anchorMargin?: number;
   /** Anchor-link decoder: minimum consecutive anchor windows forming a seed run (default 3). */
@@ -113,7 +120,16 @@ export interface TrainConfig {
   /** Anchor-link decoder: a linked window must rank the run's label within its
    *  top-K labels (default -1, i.e. no affinity check -- aggressive linking). */
   fillTopK?: number;
-  /** Anchor-link decoder: confidence assigned to linked (filled) windows (default 0.5). */
+  /**
+   * Anchor-link decoder: the minimum confidence for a linked window
+   * (default 0.5).
+   *
+   * Known defect: an anchor window keeps its raw margin, which is usually 0.15
+   * to 0.3. A linked window gets this higher value. `windowsToSegments` then
+   * averages the confidences, so it can discard a segment of strong anchors and
+   * keep a segment of mostly linked windows. One shared scale is the obvious
+   * correction, but it decreased accuracy. See ml/CHANGELOG.md.
+   */
   linkConfidence?: number;
 }
 
@@ -135,6 +151,8 @@ export interface SongSegmentModel {
   prototypeCounts?: number[];
   /** v2: kernel scale for exp(-d/sigma). */
   kernelScale?: number;
+  /** v2: neighbours averaged per label in 'min' scoring, resolved at fit time. */
+  scoreNeighbors?: number;
   trainingSummary: {
     filesUsed: number;
     annotationsUsed: number;
@@ -142,6 +160,14 @@ export interface SongSegmentModel {
     positiveSamples: number;
     noneSamples: number;
     labelCounts: Record<string, number>;
+    /** The average per-label prototype budget. */
+    prototypesPerLabel?: number;
+    /**
+     * Labels with fewer training windows than the average budget. These labels
+     * get fewer prototypes, which makes them harder to match. Annotate these
+     * songs more.
+     */
+    underAnnotatedLabels?: string[];
   };
 }
 
@@ -161,11 +187,32 @@ export interface SongSegment {
 }
 
 export interface PredictConfig {
+  /**
+   * The minimum confidence for a window.
+   *
+   * The `anchor` decoder (the default) ignores this value. It uses evidence
+   * margins instead. Applies to `viterbi` and `smooth` only. To tune the
+   * `anchor` decoder, use `anchorMargin`.
+   */
   minWindowConfidence: number;
+  /**
+   * The width of the majority-vote smoothing window.
+   *
+   * The `anchor` and `viterbi` decoders ignore this value, because they make
+   * continuous runs. Applies to `smooth` only.
+   */
   smoothingWindows: number;
   minSegmentSec: number;
   minSegmentConfidence: number;
   mergeGapSec: number;
+}
+
+/** Whether `decoder` reads a given `PredictConfig` field at all. */
+export function decoderIgnoredOptions(decoder: TrainConfig['decoder']): string[] {
+  const resolved = decoder ?? 'anchor';
+  if (resolved === 'anchor') return ['minWindowConfidence', 'smoothingWindows'];
+  if (resolved === 'viterbi') return ['smoothingWindows'];
+  return [];
 }
 
 export interface LeaveOneOutFold {
@@ -195,6 +242,39 @@ interface AnnotationSqlRow {
 function toNum(value: unknown): number {
   if (typeof value === 'number') return value;
   return Number(value);
+}
+
+/**
+ * Resolve each optional setting to the value that the fit and the decoder use.
+ * The defaults occur once, here. A saved model records these values, so a
+ * change to a default does not change the behaviour of an existing model.
+ */
+export function resolveTrainConfig(config: TrainConfig): Required<
+  Pick<
+    TrainConfig,
+    'prototypeBudget' | 'maxNonePrototypes' | 'featureScaling' | 'scoreMode'
+    | 'scoreNeighbors' | 'decoder' | 'anchorMargin' | 'minAnchorRun'
+    | 'fillMinMargin' | 'fillTopK' | 'linkConfidence' | 'temperature'
+    | 'viterbiChangePenalty' | 'kernelScale'
+  >
+> & TrainConfig {
+  return {
+    ...config,
+    prototypeBudget: config.prototypeBudget ?? 1200,
+    maxNonePrototypes: config.maxNonePrototypes ?? 120,
+    featureScaling: config.featureScaling ?? 'minmax',
+    scoreMode: config.scoreMode ?? 'min',
+    scoreNeighbors: config.scoreNeighbors ?? 1,
+    decoder: config.decoder ?? 'anchor',
+    anchorMargin: config.anchorMargin ?? 0.15,
+    minAnchorRun: config.minAnchorRun ?? 3,
+    fillMinMargin: config.fillMinMargin ?? 0,
+    fillTopK: config.fillTopK ?? -1,
+    linkConfidence: config.linkConfidence ?? 0.5,
+    temperature: config.temperature ?? 1,
+    viterbiChangePenalty: config.viterbiChangePenalty ?? 1,
+    kernelScale: config.kernelScale ?? 0
+  };
 }
 
 /**
@@ -628,15 +708,23 @@ function squaredDistance(a: number[], b: number[]): number {
 }
 
 /**
- * Allocate a prototype count per label. Budgets scale with sqrt(support) so
- * that frequent songs keep more prototypes without drowning out songs that
- * appear only a few times, then the whole budget is normalized to
- * `prototypeBudget`. The `__none__` class gets a hard cap because its window
- * set is enormous and heterogeneous, and we do not want it to dominate.
+ * Allocate a prototype count per label. Budgets scale with sqrt(support), then
+ * normalize to `prototypeBudget`. The `__none__` class has a hard cap, because
+ * its window set is large and varied.
+ *
+ * Counts are unequal on purpose. A song with 4000 annotated windows covers more
+ * material than a song with 50. Equal budgets discard that coverage: segment F1
+ * fell from 48.5% to 37.4%.
+ *
+ * Unequal counts also cause a bias. A nearest-prototype distance decreases as a
+ * label gains prototypes, so a well-annotated song wins comparisons it must
+ * lose. The bias is real and unfixed. Read the v2.3 entry in ml/CHANGELOG.md
+ * before you try to correct it. Three corrections failed.
  */
 function allocatePrototypeBudgets(
   support: Map<number, number>,
-  config: TrainConfig
+  config: TrainConfig,
+  noneLabelIndex: number
 ): Map<number, number> {
   const maxTotal = Math.max(1, config.prototypeBudget ?? 1200);
   const maxNone = Math.max(1, config.maxNonePrototypes ?? 120);
@@ -652,7 +740,7 @@ function allocatePrototypeBudgets(
   const budgets = new Map<number, number>();
   for (const [labelIndex, s] of sqrts) {
     let budget = Math.max(1, Math.round(s * (maxTotal / sumSqrt)));
-    if (labelIndex === 0) budget = Math.min(budget, maxNone);
+    if (labelIndex === noneLabelIndex) budget = Math.min(budget, maxNone);
     budgets.set(labelIndex, budget);
   }
   return budgets;
@@ -691,18 +779,27 @@ function estimateKernelScale(
 
 function buildPrototypesFromGroups(
   normalizedGroups: Map<number, number[][]>,
-  config: TrainConfig
+  config: TrainConfig,
+  noneLabelIndex: number
 ): {
   prototypes: Array<{ features: number[]; labelIndex: number }>;
   prototypeCounts: number[];
   kernelScale: number;
+  scoreNeighbors: number;
+  perLabelBudget: number;
+  underBudgetLabels: number[];
   labelCount: number;
 } {
   const labelCount = normalizedGroups.size === 0 ? 0 : Math.max(...normalizedGroups.keys()) + 1;
   const support = new Map<number, number>();
   for (const [labelIndex, vectors] of normalizedGroups) support.set(labelIndex, vectors.length);
 
-  const budgets = allocatePrototypeBudgets(support, config);
+  const budgets = allocatePrototypeBudgets(support, config, noneLabelIndex);
+  const songLabelCount = Math.max(1, support.size - (support.has(noneLabelIndex) ? 1 : 0));
+  const perLabelBudget = Math.max(
+    1,
+    Math.floor(Math.max(1, config.prototypeBudget ?? 1200) / songLabelCount)
+  );
   const prototypes: Array<{ features: number[]; labelIndex: number }> = [];
   const prototypeCounts = new Array<number>(labelCount).fill(0);
 
@@ -715,8 +812,32 @@ function buildPrototypesFromGroups(
     prototypeCounts[labelIndex] = sampled.length;
   }
 
+  // Score every label on the same number of neighbours. More neighbours give a
+  // label an advantage, so the smallest per-label count sets the limit.
+  const smallestCount = prototypeCounts.reduce(
+    (min, count) => (count > 0 && count < min ? count : min),
+    Number.POSITIVE_INFINITY
+  );
+  const requested = Math.max(1, Math.floor(config.scoreNeighbors ?? 1));
+  const scoreNeighbors = Number.isFinite(smallestCount)
+    ? Math.max(1, Math.min(requested, smallestCount))
+    : 1;
+
   const kernelScale = estimateKernelScale(normalizedGroups, prototypes);
-  return { prototypes, prototypeCounts, kernelScale, labelCount };
+  const underBudgetLabels: number[] = [];
+  for (const [labelIndex, count] of support) {
+    if (labelIndex !== noneLabelIndex && count < perLabelBudget) underBudgetLabels.push(labelIndex);
+  }
+
+  return {
+    prototypes,
+    prototypeCounts,
+    kernelScale,
+    scoreNeighbors,
+    perLabelBudget,
+    underBudgetLabels,
+    labelCount
+  };
 }
 
 function fitModelFromSamples(
@@ -756,10 +877,11 @@ function fitModelFromSamples(
     group.push(normalizeVector(sample.features, means, stds));
   }
 
-  const { prototypes, prototypeCounts, kernelScale } = buildPrototypesFromGroups(
-    normalizedGroups,
-    config
-  );
+  const noneLabelIndex = labelToIndex.get(NO_SONG_LABEL) ?? -1;
+  const {
+    prototypes, prototypeCounts, kernelScale, scoreNeighbors,
+    perLabelBudget, underBudgetLabels
+  } = buildPrototypesFromGroups(normalizedGroups, config, noneLabelIndex);
 
   const labelCounts: Record<string, number> = {};
   for (const sample of kept) {
@@ -771,7 +893,10 @@ function fitModelFromSamples(
     modelType: 'knn-song-segmenter',
     version: 2,
     createdAt: new Date().toISOString(),
-    config,
+    // Save the resolved config, not the partial config from the caller. A model
+    // that omits `decoder`, `scoreMode` or `featureScaling` changes behaviour
+    // when a default changes.
+    config: resolveTrainConfig(config),
     featureNames: [...FEATURE_NAMES],
     labels,
     featureMeans: means,
@@ -779,6 +904,7 @@ function fitModelFromSamples(
     prototypes,
     prototypeCounts,
     kernelScale,
+    scoreNeighbors,
     trainingSummary: {
       filesUsed: distinctFiles.size,
       annotationsUsed: trainingSummaryOverride?.annotationsUsed ?? 0,
@@ -786,6 +912,10 @@ function fitModelFromSamples(
       positiveSamples: positive.length,
       noneSamples: keptNegative.length,
       labelCounts,
+      prototypesPerLabel: perLabelBudget,
+      underAnnotatedLabels: underBudgetLabels
+        .filter((labelIndex) => labelIndex !== noneLabelIndex)
+        .map((labelIndex) => labels[labelIndex]),
       ...trainingSummaryOverride
     }
   };
@@ -828,10 +958,9 @@ function computeKnnScores(normalizedVector: number[], model: SongSegmentModel): 
 /** v2: per-label score from that label's prototypes. */
 function computePrototypeScores(normalizedVector: number[], model: SongSegmentModel): number[] {
   const scores = new Array<number>(model.labels.length).fill(0);
-  const count = new Array<number>(model.labels.length).fill(0);
-  const minDist = new Array<number>(model.labels.length).fill(Infinity);
 
   if (model.config.scoreMode === 'avg') {
+    const count = new Array<number>(model.labels.length).fill(0);
     const kernelScale = model.kernelScale ?? 1;
     for (const prototype of model.prototypes!) {
       const d = squaredDistance(normalizedVector, prototype.features);
@@ -844,16 +973,36 @@ function computePrototypeScores(normalizedVector: number[], model: SongSegmentMo
     return scores;
   }
 
-  // 'min' mode: score by closeness of the nearest prototype per label. Using
-  // negative distance keeps the direction "higher is better" for the softmax,
-  // and dividing by prototype count is unnecessary because the min is not
-  // sensitive to how many prototypes a label has.
+  // 'min' mode: score each label by the distance to its nearest prototypes.
+  // The score is negative, so a higher score is a better match.
+  //
+  // Labels with more prototypes score better than they must. See
+  // `allocatePrototypeBudgets` for the measurements.
+  const neighbors = Math.max(1, model.scoreNeighbors ?? 1);
+  const nearest: number[][] = Array.from({ length: model.labels.length }, () => []);
+
   for (const prototype of model.prototypes!) {
     const d = squaredDistance(normalizedVector, prototype.features);
-    if (d < minDist[prototype.labelIndex]) minDist[prototype.labelIndex] = d;
+    const heap = nearest[prototype.labelIndex];
+    // Keep the `neighbors` smallest distances per label, largest last.
+    if (heap.length < neighbors) {
+      heap.push(d);
+      heap.sort((a, b) => a - b);
+    } else if (d < heap[heap.length - 1]) {
+      heap[heap.length - 1] = d;
+      heap.sort((a, b) => a - b);
+    }
   }
+
   for (let labelIndex = 0; labelIndex < model.labels.length; labelIndex++) {
-    scores[labelIndex] = Number.isFinite(minDist[labelIndex]) ? -Math.sqrt(minDist[labelIndex]) : -Infinity;
+    const heap = nearest[labelIndex];
+    if (heap.length === 0) {
+      scores[labelIndex] = -Infinity;
+      continue;
+    }
+    let sum = 0;
+    for (const d of heap) sum += Math.sqrt(d);
+    scores[labelIndex] = -(sum / heap.length);
   }
   return scores;
 }
@@ -865,21 +1014,10 @@ function computeLabelScores(normalizedVector: number[], model: SongSegmentModel)
   return computeKnnScores(normalizedVector, model);
 }
 
-function predictLabelIndex(
-  normalizedVector: number[],
-  model: SongSegmentModel
-): { labelIndex: number; confidence: number } {
-  const scores = computeLabelScores(normalizedVector, model);
-  let bestLabel = 0;
-  for (let labelIndex = 1; labelIndex < scores.length; labelIndex++) {
-    if (scores[labelIndex] > scores[bestLabel]) bestLabel = labelIndex;
-  }
-
-  let totalScore = 0;
-  for (const score of scores) totalScore += Math.max(0, score);
-  const confidence = totalScore > 0 ? Math.max(0, scores[bestLabel]) / totalScore : 0;
-  return { labelIndex: bestLabel, confidence };
-}
+// This file contained `predictLabelIndex`, a per-window argmax. Its confidence
+// was `max(0, best) / sum(max(0, scores))`. In 'min' score mode every score is
+// negative, so the sum was always 0 and the confidence was always 0. Its only
+// caller, leave-one-out evaluation, now uses `predictWindowsFromSamples`.
 
 function scoresToLogProbs(scores: number[], temperature: number): number[] {
   let maxScore = -Infinity;
@@ -1016,7 +1154,7 @@ function anchorLinkDecode(
   const minAnchorRun = Math.max(1, config.minAnchorRun ?? 3);
   const fillMinMargin = config.fillMinMargin ?? 0;
   const fillTopK = config.fillTopK ?? -1;
-  const linkConfidence = config.linkConfidence ?? 0.5;
+  const linkConfidence = clamp(config.linkConfidence ?? 0.5, 0, 1);
 
   const isAnchor = new Array<boolean>(n).fill(false);
   for (let i = 0; i < n; i++) {
@@ -1036,9 +1174,8 @@ function anchorLinkDecode(
     return true;
   };
 
-  // Pass 1: seed runs of consecutive same-label anchors. The confidence a run
-  // passes on to its linked windows is its average anchor margin, so linked
-  // (vamping) passages carry the strength of the anchors that surround them.
+  // Pass 1: seed runs of consecutive same-label anchors. Linked windows get the
+  // run margin, or `linkConfidence` if the margin is lower.
   for (let i = 0; i < n; ) {
     if (!isAnchor[i]) {
       i++;
@@ -1140,10 +1277,18 @@ export function evaluateLeaveOneOut(
     let songTotal = 0;
     let songCorrect = 0;
 
-    for (const sample of testSamples) {
-      const normalized = normalizeVector(sample.features, foldModel.featureMeans, foldModel.featureStds);
-      const pred = predictLabelIndex(normalized, foldModel);
-      const predictedLabel = foldModel.labels[pred.labelIndex];
+    // Measure the decoder that the app uses. This code used a per-window argmax
+    // before. That path has no anchor seeding, no linking and no `__none__`
+    // handling, so `ml:train` and `rebuild-model` reported an accuracy for a
+    // path that no caller runs, and disagreed with `ml:eval`.
+    const predictions = predictWindowsFromSamples(foldModel, testSamples, {
+      minWindowConfidence: 0,
+      smoothingWindows: 1
+    });
+
+    for (let i = 0; i < testSamples.length; i++) {
+      const sample = testSamples[i];
+      const predictedLabel = predictions[i]?.label ?? NO_SONG_LABEL;
 
       if (predictedLabel === sample.label) {
         totalCorrect++;
@@ -1201,6 +1346,28 @@ export function loadModel(modelPath: string): SongSegmentModel {
   if (!hasPrototypes && !hasVectors) {
     throw new Error('Model has no training vectors or prototypes.');
   }
+
+  // A model with a different feature set fails without an error.
+  // `normalizeVector`
+  // reads past the end of `featureMeans`, so each distance becomes NaN. Each
+  // comparison with NaN is false, and the decoder returns `__none__` for every
+  // window. The user sees 0 segments and no error. The feature vector changed
+  // from 18 to 25 entries in v2.0, so check it.
+  const expected = FEATURE_NAMES as readonly string[];
+  const actual = Array.isArray(parsed.featureNames) ? parsed.featureNames : [];
+  const mismatched = actual.length !== expected.length
+    || actual.some((name, idx) => name !== expected[idx]);
+  if (mismatched) {
+    throw new Error(
+      `Model was trained with a different feature set (${actual.length} features, `
+      + `this build extracts ${expected.length}). Retrain it: `
+      + 'npm run ml:train -- --out <model path>, or use "Rebuild Model" in the sidebar.'
+    );
+  }
+  if (parsed.featureMeans?.length !== expected.length || parsed.featureStds?.length !== expected.length) {
+    throw new Error('Model normalization constants do not match its feature set. Retrain the model.');
+  }
+
   return parsed;
 }
 
@@ -1449,71 +1616,76 @@ export function suggestSongsForRange(
     .slice(0, topK);
 }
 
+/** The window step, calculated from the windows, not from the model config. */
+function inferStepSec(windows: WindowPrediction[]): number {
+  for (let i = 1; i < windows.length; i++) {
+    const delta = windows[i].startTime - windows[i - 1].startTime;
+    if (delta > 1e-9) return delta;
+  }
+  return Math.max(1e-9, windows[0].endTime - windows[0].startTime);
+}
+
 export function windowsToSegments(
   windows: WindowPrediction[],
   options: Pick<PredictConfig, 'minSegmentSec' | 'minSegmentConfidence' | 'mergeGapSec'>
 ): SongSegment[] {
   const provisional: SongSegment[] = [];
+  if (windows.length === 0) return provisional;
 
-  let currentLabel = '';
-  let currentStart = 0;
-  let currentEnd = 0;
-  let confidenceSum = 0;
-  let confidenceCount = 0;
+  // A window label describes the song at the window centre. Training uses the
+  // same rule: `buildSamplesForFile` labels each window at
+  // `startTime + windowSec / 2`.
+  //
+  // The full window extent is therefore the wrong span. It made each segment
+  // half a window too long at each end, and made adjacent segments overlap by
+  // `windowSec - stepSec`, which is 3s at the 4s/1s default. These segments go
+  // into `prediction_reviews`, and then into annotations. Centres give the
+  // correct span.
+  const lastIndex = windows.length - 1;
+  const stepSec = inferStepSec(windows);
+  const centreOf = (i: number) => (windows[i].startTime + windows[i].endTime) / 2;
+  // The first run starts at the start of the audio. The last run continues to
+  // the end. Other runs continue to the centre of the next window.
+  const boundStart = (i: number) => (i === 0 ? windows[0].startTime : centreOf(i));
+  const boundEnd = (i: number) => (
+    i === lastIndex
+      ? windows[i].endTime
+      : Math.min(centreOf(i) + stepSec, windows[i].endTime)
+  );
 
-  const flush = () => {
-    if (!currentLabel || currentLabel === NO_SONG_LABEL) return;
-    const durationSec = currentEnd - currentStart;
+  let runStartIndex = 0;
+  const flush = (endIndex: number) => {
+    const label = windows[runStartIndex].label;
+    if (!label || label === NO_SONG_LABEL) return;
+
+    let confidenceSum = 0;
+    for (let i = runStartIndex; i <= endIndex; i++) confidenceSum += windows[i].confidence;
+
+    const startTime = boundStart(runStartIndex);
+    const endTime = boundEnd(endIndex);
+    if (endTime <= startTime) return;
+
     provisional.push({
-      songName: currentLabel,
-      startTime: currentStart,
-      endTime: currentEnd,
-      durationSec,
-      confidence: confidenceCount > 0 ? confidenceSum / confidenceCount : 0
+      songName: label,
+      startTime,
+      endTime,
+      durationSec: endTime - startTime,
+      confidence: confidenceSum / (endIndex - runStartIndex + 1)
     });
   };
 
-  for (const window of windows) {
-    if (currentLabel === '') {
-      currentLabel = window.label;
-      currentStart = window.startTime;
-      currentEnd = window.endTime;
-      confidenceSum = window.confidence;
-      confidenceCount = 1;
-      continue;
-    }
-
-    if (window.label === currentLabel) {
-      currentEnd = window.endTime;
-      confidenceSum += window.confidence;
-      confidenceCount++;
-      continue;
-    }
-
-    flush();
-    currentLabel = window.label;
-    currentStart = window.startTime;
-    currentEnd = window.endTime;
-    confidenceSum = window.confidence;
-    confidenceCount = 1;
+  for (let i = 1; i <= lastIndex; i++) {
+    if (windows[i].label === windows[runStartIndex].label) continue;
+    flush(i - 1);
+    runStartIndex = i;
   }
-  flush();
+  flush(lastIndex);
 
   const filtered = provisional.filter(
     (segment) =>
       segment.durationSec >= options.minSegmentSec
       && segment.confidence >= options.minSegmentConfidence
   );
-  if (filtered.length <= 1) {
-    return filtered.map((segment) => ({
-      ...segment,
-      startTime: roundTo(segment.startTime),
-      endTime: roundTo(segment.endTime),
-      durationSec: roundTo(segment.durationSec),
-      confidence: roundTo(segment.confidence)
-    }));
-  }
-
   const merged: SongSegment[] = [];
   for (const segment of filtered) {
     const last = merged[merged.length - 1];
@@ -1536,11 +1708,12 @@ export function windowsToSegments(
     }
   }
 
-  return merged.map((segment) => ({
-    ...segment,
-    startTime: roundTo(segment.startTime),
-    endTime: roundTo(segment.endTime),
-    durationSec: roundTo(segment.durationSec),
-    confidence: roundTo(segment.confidence)
-  }));
+  return merged
+    .map((segment) => ({
+      ...segment,
+      startTime: roundTo(segment.startTime),
+      endTime: roundTo(segment.endTime),
+      durationSec: roundTo(segment.durationSec),
+      confidence: roundTo(segment.confidence)
+    }));
 }

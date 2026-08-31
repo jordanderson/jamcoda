@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { clamp, ensureDirForFile, hasFlag, parseInt_, parseNum, readArg, runMain } from '@core/cli/args';
 import {
+  decoderIgnoredOptions,
   loadModel,
   predictWindows,
   windowsToSegments,
@@ -72,6 +73,13 @@ async function main() {
   };
 
   const model = loadModel(modelPath);
+  const ignored = decoderIgnoredOptions(model.config.decoder);
+  if (ignored.length > 0) {
+    console.log(
+      `Note: the '${model.config.decoder ?? 'anchor'}' decoder ignores ${ignored.join(' and ')}.`
+      + ' Use --anchor-margin and --min-anchor-run instead.'
+    );
+  }
   const windows = predictWindows(model, midiPath, config);
   const segments = windowsToSegments(windows, {
     minSegmentSec: config.minSegmentSec,

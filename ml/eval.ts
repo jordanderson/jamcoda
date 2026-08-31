@@ -5,6 +5,7 @@ import {
 } from '@core/cli/args';
 import {
   NO_SONG_LABEL,
+  decoderIgnoredOptions,
   buildSamplesForFile,
   extractNotesFromMidi,
   loadAnnotatedMidiFiles,
@@ -269,6 +270,13 @@ async function main() {
   };
 
   const model = loadModel(modelPath);
+  const ignored = decoderIgnoredOptions(model.config.decoder);
+  if (ignored.length > 0) {
+    console.log(
+      `Note: the '${model.config.decoder ?? 'anchor'}' decoder ignores ${ignored.join(' and ')}.`
+      + ' Use --anchor-margin and --min-anchor-run instead.'
+    );
+  }
   const files = loadAnnotatedMidiFiles(dbPath, rootDir);
   if (files.length === 0) {
     throw new Error('No annotated files found in DB.');

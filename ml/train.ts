@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { hasFlag, parseInt_, parseNum, pct, readArg, resolveDbPath, runMain } from '@core/cli/args';
+import { clamp, hasFlag, parseInt_, parseNum, pct, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import {
   evaluateLeaveOneOut,
   loadAnnotatedMidiFiles,
@@ -52,10 +52,13 @@ Options:
   --max-none-prototypes <int>  Prototype cap for the __none__ class (default: 120)
   --scaling <zscore|minmax|none>  Feature normalization (default: minmax)
   --score-mode <min|avg>       Per-label score aggregation (default: min)
+  --score-neighbors <int>      Nearest prototypes to average per label (default: 1)
   --decoder <anchor|viterbi|smooth>  Sequential decoding (default: anchor)
   --anchor-margin <float>      Anchor-link seed margin (default: 0.15)
   --min-anchor-run <int>       Minimum anchor windows per seed run (default: 3)
+  --fill-min-margin <float>    Minimum margin for a window to be linked (default: 0)
   --fill-topk <int>            Linking affinity top-K (-1 disables; default: -1)
+  --link-confidence <n>        Minimum confidence for a linked window (default: 0.5)
   --skip-eval            Skip leave-one-file-out evaluation
   --help                 Show this help
 `);
@@ -81,10 +84,13 @@ async function main() {
     maxNonePrototypes: Math.max(1, parseInt_(readArg('--max-none-prototypes'), 120)),
     featureScaling: parseScaling(readArg('--scaling')),
     scoreMode: parseScoreMode(readArg('--score-mode')),
+    scoreNeighbors: parseInt_(readArg('--score-neighbors'), 1),
     decoder: parseDecoder(readArg('--decoder')),
     anchorMargin: Math.max(0, parseNum(readArg('--anchor-margin'), 0.15)),
     minAnchorRun: Math.max(1, parseInt_(readArg('--min-anchor-run'), 3)),
-    fillTopK: parseInt_(readArg('--fill-topk'), -1, -1)
+    fillMinMargin: Math.max(0, parseNum(readArg('--fill-min-margin'), 0)),
+    fillTopK: parseInt_(readArg('--fill-topk'), -1, -1),
+    linkConfidence: clamp(parseNum(readArg('--link-confidence'), 0.5), 0, 1)
   };
 
   if (config.windowSec <= 0 || config.stepSec <= 0) {
