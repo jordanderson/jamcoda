@@ -19,6 +19,7 @@
     "test:server": "NODE_ENV=test tsx --tsconfig tsconfig.server.json --test server/**/*.test.ts",
     "test:client": "vitest run",
     "db:migrate": "tsx --tsconfig tsconfig.server.json server/scripts/migrate.ts",
+    "db:prune-empty": "tsx --tsconfig tsconfig.server.json server/scripts/pruneEmptyRecordings.ts",
     "ml:train": "tsx --tsconfig tsconfig.server.json ml/train.ts",
     "ml:predict": "tsx --tsconfig tsconfig.server.json ml/predict.ts",
     "ml:predict-import": "tsx --tsconfig tsconfig.server.json ml/predictAndImport.ts",

@@ -12,6 +12,17 @@ import { sleep } from '@core/cli/args';
 const MIDI_DIR = process.env.JAMCODA_MIDI_DIR || 'data/midi';
 // Pause between individual file downloads to keep low-power firmware happy.
 const DOWNLOAD_PACE_MS = Number(process.env.JAMCODA_SYNC_DOWNLOAD_PACE_MS || 300);
+/**
+ * Device assets at or below this size hold no music and are not imported.
+ *
+ * The firmware sometimes opens an asset and closes it without recording a note
+ * — occasionally hundreds in a burst (118 in 42s on 2026-02-19). Those land as
+ * valid but empty MIDI files: header + JMX trailer + end-of-track. On the
+ * observed device every one is 256 bytes (truncated leftovers are 22), while
+ * the smallest real recording seen is 2397 bytes, so the threshold sits in a
+ * wide gap. Tunable in case another firmware writes fatter stubs.
+ */
+const EMPTY_ASSET_MAX_BYTES = Number(process.env.JAMCODA_SYNC_EMPTY_ASSET_MAX_BYTES || 1024);
 
 const syncJobs = new Map<string, SyncProgress>();
 
@@ -24,7 +35,8 @@ export async function startSync(full = false): Promise<string> {
     filesDownloaded: 0,
     currentFile: null,
     errors: [],
-    warnings: []
+    warnings: [],
+    emptySkipped: 0
   };
 
   syncJobs.set(syncId, progress);
@@ -60,12 +72,25 @@ async function performSync(progress: SyncProgress, full = false) {
     const existingByPath = new Map(FileModel.findAll().map(file => [file.jamcorder_path, file]));
     const toDownload: Array<{ entry: JamcorderFileEntry; existing?: ReturnType<typeof FileModel.findAll>[number] }> = [];
     let skipped = 0;
+    let emptySkipped = 0;
     let maxSyncedAssetIdx = -1;
     let hadErrors = false;
 
     for (const entry of remoteFiles) {
       const existing = existingByPath.get(entry.path);
       if (!existing) {
+        // Never import an empty asset. Skipping before the download keeps them
+        // out of the database and off disk entirely, rather than filtering them
+        // back out of every view later. There is nothing to lose by skipping:
+        // if the device ever appends to one it grows past the threshold and the
+        // next sync picks it up as a normal new file.
+        if (entry.size <= EMPTY_ASSET_MAX_BYTES) {
+          emptySkipped++;
+          if (entry.assetIdx != null && entry.assetIdx > maxSyncedAssetIdx) {
+            maxSyncedAssetIdx = entry.assetIdx;
+          }
+          continue;
+        }
         toDownload.push({ entry });
       } else if (entry.size > existing.file_size) {
         // File grew (e.g. the day's asset was reopened after a device restart,
@@ -93,7 +118,11 @@ async function performSync(progress: SyncProgress, full = false) {
     }
 
     progress.filesFound = toDownload.length;
-    console.log(`${toDownload.length} files to sync (${skipped} unchanged or kept, skipped)`);
+    progress.emptySkipped = emptySkipped;
+    console.log(
+      `${toDownload.length} files to sync (${skipped} unchanged or kept, skipped`
+      + `${emptySkipped > 0 ? `; ${emptySkipped} empty asset${emptySkipped !== 1 ? 's' : ''} ignored` : ''})`
+    );
 
     // 3. Download each file
     for (const { entry, existing } of toDownload) {
@@ -101,17 +130,23 @@ async function performSync(progress: SyncProgress, full = false) {
         progress.currentFile = entry.name;
         console.log(`Syncing: ${entry.name}`);
 
+        let imported = true;
         if (existing) {
           await resyncFile(entry, existing);
         } else {
-          await syncNewFile(entry);
+          imported = await syncNewFile(entry);
         }
 
-        progress.filesDownloaded++;
+        if (imported) {
+          progress.filesDownloaded++;
+          console.log(`Synced ${progress.filesDownloaded}/${toDownload.length}: ${entry.name}`);
+        } else {
+          emptySkipped++;
+          progress.emptySkipped = emptySkipped;
+        }
         if (entry.assetIdx != null && entry.assetIdx > maxSyncedAssetIdx) {
           maxSyncedAssetIdx = entry.assetIdx;
         }
-        console.log(`Synced ${progress.filesDownloaded}/${toDownload.length}: ${entry.name}`);
         await sleep(DOWNLOAD_PACE_MS);
       } catch (error) {
         hadErrors = true;
@@ -244,13 +279,27 @@ function assetIdxFromFilename(filename: string): number | undefined {
   return match ? Number.parseInt(match[1], 10) : undefined;
 }
 
-/** Download a brand-new file, parse its JMX metadata, and persist it. */
-async function syncNewFile(entry: JamcorderFileEntry): Promise<void> {
+/**
+ * Download a brand-new file, parse its JMX metadata, and persist it.
+ * Returns false when the asset turned out to be empty and was not imported.
+ */
+async function syncNewFile(entry: JamcorderFileEntry): Promise<boolean> {
   const data = await jamcorderService.downloadFile(entry.path);
   if (data.length === 0) {
     throw new Error('Downloaded empty file (device may be mid-recording); will retry next sync');
   }
   const jmx = parseJmxMetadata(data);
+
+  // Backstop for an empty asset that slipped past the size check (a fatter stub
+  // than the ones we have measured). This trusts the device's own EOF trailer
+  // rather than a local parse: a MIDI parse failure also yields "0 duration",
+  // and discarding a file on that basis would lose real data. No metadata, or
+  // any note at all, means keep it.
+  if (jmx.totalNotes === 0 && jmx.totalMillis === 0) {
+    console.log(`  Empty recording (0 notes); not imported`);
+    return false;
+  }
+
   const date = jmxTimeToDate(jmx.time ?? '') ?? extractDate(entry.path);
   const localPath = resolveLocalPath(date, entry.name);
 
@@ -272,6 +321,7 @@ async function syncNewFile(entry: JamcorderFileEntry): Promise<void> {
     assetUuid: jmx.assetUuid,
     jmxEofOffset: jmx.eofFileOffset
   });
+  return true;
 }
 
 /**

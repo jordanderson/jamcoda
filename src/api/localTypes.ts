@@ -196,6 +196,11 @@ export interface FilesByDateGroup {
 /** Browse page payload grouped by recording date. */
 export interface FilesByDateResponse {
   dates: FilesByDateGroup[];
+  /**
+   * Synced files omitted from `dates` because they hold no notes (assets the
+   * device opened and closed without recording).
+   */
+  emptyRecordingCount: number;
 }
 
 /** Annotation row shape embedded in file detail responses. */

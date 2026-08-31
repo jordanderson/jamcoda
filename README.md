@@ -14,6 +14,9 @@ This README is for both daily use and fast codebase onboarding.
 
 ### 1) Sync and browse
 - Use `Sync Now` in the sidebar.
+- Recordings that contain no notes are not imported (the device sometimes opens
+  and closes assets without recording). The sync summary says how many were
+  ignored, and the browse header notes any already in the library.
 - Files appear in `#/browse` (Date View) with:
   - annotation progress (or `Complete`)
   - unreviewed prediction count (click count to open review queue)
@@ -110,6 +113,8 @@ The app uses `http://localhost:3001` for local state and ML actions.
 
 - SQLite DB: `data/jamcoda.db`
 - Synced MIDI files: `data/midi/YYYY-MM-DD/<filename>.mid`
+- Empty recordings are never written here. To clear out ones synced before that
+  rule existed, run `npm run db:prune-empty` (dry run) then add `--apply`.
 
 Main tables:
 - `files`: synced file metadata + completion flags
@@ -193,6 +198,7 @@ fill these in interactively, or copy `.env.example` to `.env` and edit it by han
 | `JAMCORDER_LIBRARY_PAGE_SIZE` | `5` | Backend (sync) | Assets per library API page during sync. Keep small — large pages can crash low-power firmware. |
 | `JAMCORDER_LIBRARY_PAGE_DELAY_MS` | `1000` | Backend (sync) | Pause between library pages to keep low-power firmware responsive. |
 | `JAMCODA_SYNC_DOWNLOAD_PACE_MS` | `300` | Backend (sync) | Pause between individual file downloads during sync. |
+| `JAMCODA_SYNC_EMPTY_ASSET_MAX_BYTES` | `1024` | Backend (sync) | Device assets at or below this size hold no notes and are not imported. |
 
 Note: the local backend always runs on `http://localhost:3001`.
 
@@ -205,6 +211,7 @@ Note: the local backend always runs on `http://localhost:3001`.
 - `npm run test:client`: run frontend tests (Vitest + Testing Library)
 - `npm run test:server`: run backend tests (node:test)
 - `npm run db:migrate`: run all pending DB migrations
+- `npm run db:prune-empty`: delete synced recordings with no notes (add `--apply`)
 - `npm run ml:train`: train model from annotations
 - `npm run ml:predict`: predict segments from one MIDI file
 - `npm run ml:predict-import`: predict and import into `prediction_reviews`

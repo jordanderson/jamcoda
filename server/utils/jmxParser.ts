@@ -7,8 +7,9 @@ import type { JmxMetadata } from '../types/index';
  * - `assetUuid` from `jmxStoneHdr` (stable asset identity recommended by the
  *   official JMX spec as the sync key, vs. path/filename which can change).
  * - `time` from `jmxAsset` (authoritative local recording date).
- * - `totalMillis` / `fileOffset` from `jmxEof` (silence-compressed duration and
- *   the byte offset of the renewable trailer, used for incremental re-sync).
+ * - `totalMillis` / `totalNotes` / `fileOffset` from `jmxEof` (silence-compressed
+ *   duration, note count, and the byte offset of the renewable trailer, used for
+ *   incremental re-sync and for recognising empty recordings).
  *
  * Returns an empty object for non-JMX or malformed files rather than throwing,
  * so callers can degrade gracefully.
@@ -83,6 +84,7 @@ function parseJmxEvent(metaType: number, payload: Buffer, meta: JmxMetadata): vo
       }
     } else if (token === 'jmxEof') {
       if (typeof obj.totalMillis === 'number') meta.totalMillis = obj.totalMillis;
+      if (typeof obj.totalNotes === 'number') meta.totalNotes = obj.totalNotes;
       if (typeof obj.fileOffset === 'number') meta.eofFileOffset = obj.fileOffset;
     }
   }

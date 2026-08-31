@@ -32,24 +32,64 @@ export function existsByPath(jamcorderPath: string): boolean {
   return stmt.get(jamcorderPath) !== undefined;
 }
 
+/**
+ * SQL predicate for rows the app should show.
+ *
+ * The device sometimes opens an asset and closes it without recording a note
+ * (see `API_NOTES.md`); those sync down as valid but empty MIDI files. They are
+ * real device state, so they stay in `files` for sync bookkeeping, but they are
+ * noise for annotation and are excluded from every user-facing listing.
+ *
+ * A NULL duration means "not parsed yet", not "empty" — those rows stay visible
+ * so the lazy duration backfill in the by-date route still gets a chance to run.
+ */
+const NOT_EMPTY_RECORDING = '(midi_duration IS NULL OR midi_duration > 0)';
+
+/**
+ * Every synced row, empty recordings included. Sync relies on this: the stubs
+ * must stay visible to change detection, or each pass would re-download all of
+ * them and re-insert duplicate rows.
+ */
 export function findAll(): FileRecord[] {
   const db = getDb();
   return db.prepare('SELECT * FROM files').all() as FileRecord[];
 }
 
+/** Browse listing. Excludes empty recordings; see {@link NOT_EMPTY_RECORDING}. */
 export function findByDate(startDate?: string, endDate?: string): FileRecord[] {
   const db = getDb();
-  let query = 'SELECT * FROM files';
+  const conditions = [NOT_EMPTY_RECORDING];
   const params: string[] = [];
 
   if (startDate && endDate) {
-    query += ' WHERE date_recorded BETWEEN ? AND ?';
+    conditions.push('date_recorded BETWEEN ? AND ?');
     params.push(startDate, endDate);
   }
 
-  query += ' ORDER BY date_recorded DESC, filename ASC';
+  const query = `SELECT * FROM files WHERE ${conditions.join(' AND ')}`
+    + ' ORDER BY date_recorded DESC, filename ASC';
 
   return db.prepare(query).all(...params) as FileRecord[];
+}
+
+/**
+ * How many rows `findByDate` is hiding, so the UI can say the library is
+ * filtered rather than silently under-reporting what was synced.
+ */
+export function countEmptyRecordings(startDate?: string, endDate?: string): number {
+  const db = getDb();
+  const conditions = [`NOT ${NOT_EMPTY_RECORDING}`];
+  const params: string[] = [];
+
+  if (startDate && endDate) {
+    conditions.push('date_recorded BETWEEN ? AND ?');
+    params.push(startDate, endDate);
+  }
+
+  const row = db.prepare(
+    `SELECT COUNT(*) as count FROM files WHERE ${conditions.join(' AND ')}`
+  ).get(...params) as { count: number };
+  return row.count;
 }
 
 export function findById(id: number): FileRecord | undefined {

@@ -84,6 +84,8 @@ export interface SyncProgress {
   errors: Array<{ file: string; error: string }>;
   /** Non-fatal issues (e.g. skipped because the device copy is smaller). */
   warnings: Array<{ file: string; warning: string }>;
+  /** Device assets ignored because they contain no notes. */
+  emptySkipped: number;
 }
 
 /** Jamcorder API file entry returned by remote directory listing calls. */
@@ -131,6 +133,7 @@ export interface JmxMetadata {
   time?: string;
   assetIdx?: number;
   totalMillis?: number;
+  totalNotes?: number;
   eofFileOffset?: number;
 }
 

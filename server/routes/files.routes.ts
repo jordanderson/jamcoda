@@ -18,7 +18,10 @@ router.get('/by-date', async (req, res) => {
     const startDate = req.query.startDate as string | undefined;
     const endDate = req.query.endDate as string | undefined;
 
+    // Empty recordings (device-opened assets with no notes) are filtered out
+    // of the listing; report how many so the UI can say the view is filtered.
     const files = FileModel.findByDate(startDate, endDate);
+    const emptyRecordingCount = FileModel.countEmptyRecordings(startDate, endDate);
 
     // Group files by date
     const grouped = files.reduce((acc, file) => {
@@ -75,7 +78,7 @@ router.get('/by-date', async (req, res) => {
       files: grouped[date]
     }));
 
-    res.json({ dates });
+    res.json({ dates, emptyRecordingCount });
   } catch (error) {
     console.error('Error getting files by date:', error);
     res.status(500).json({ error: 'Failed to get files' });

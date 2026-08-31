@@ -49,11 +49,16 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
   }
 
   if (!data || data.dates.length === 0) {
+    // Everything synced can still be empty recordings, which we filter out.
+    // Say so, otherwise this reads as a failed sync.
+    const onlyEmptyRecordings = (data?.emptyRecordingCount ?? 0) > 0;
     return (
       <div className="p-8 text-center">
         <div className="text-gray-600">No MIDI files found</div>
         <div className="text-sm text-gray-500 mt-2">
-          Run a sync to download files from your Jamcorder device
+          {onlyEmptyRecordings
+            ? `${data!.emptyRecordingCount} synced file${data!.emptyRecordingCount !== 1 ? 's' : ''} contain no notes and are hidden`
+            : 'Run a sync to download files from your Jamcorder device'}
         </div>
       </div>
     );
@@ -65,6 +70,7 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
   ).sort((a, b) => b.date.localeCompare(a.date)); // Sort by date descending
 
   const totalFiles = allFiles.length;
+  const emptyRecordingCount = data.emptyRecordingCount ?? 0;
 
   return (
     <div className="space-y-4">
@@ -74,6 +80,14 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
         </h1>
         <p className="text-gray-600 mt-2">
           {totalFiles} file{totalFiles !== 1 ? 's' : ''}
+          {emptyRecordingCount > 0 && (
+            <span
+              className="text-gray-500"
+              title="Assets the Jamcorder opened and closed without recording any notes. They stay synced but are not annotatable."
+            >
+              {' '}&middot; {emptyRecordingCount} empty recording{emptyRecordingCount !== 1 ? 's' : ''} hidden
+            </span>
+          )}
         </p>
       </div>
 

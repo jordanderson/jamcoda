@@ -20,6 +20,7 @@ export function SyncModal({ syncId, onComplete }: SyncModalProps) {
 
   const errors = progress.errors ?? [];
   const warnings = progress.warnings ?? [];
+  const emptySkipped: number = progress.emptySkipped ?? 0;
   const isDiscovering = progress.filesFound === 0 && progress.status === 'in_progress';
   const percentage = progress.filesFound > 0
     ? (progress.filesDownloaded / progress.filesFound) * 100
@@ -71,6 +72,13 @@ export function SyncModal({ syncId, onComplete }: SyncModalProps) {
               ? 'All files are up to date!'
               : `Sync completed successfully! ${progress.filesDownloaded} file${progress.filesDownloaded !== 1 ? 's' : ''} downloaded.`
             }
+          </p>
+        )}
+
+        {progress.status === 'completed' && emptySkipped > 0 && (
+          <p className="text-sm text-gray-500 mt-2">
+            Ignored {emptySkipped} empty recording{emptySkipped !== 1 ? 's' : ''} on the
+            device (opened but never played into).
           </p>
         )}
 
