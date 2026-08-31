@@ -91,6 +91,25 @@ Core frontend routes:
 - A device file that is smaller than the synced copy is skipped with a warning (device-side truncation hazard); do not overwrite local data with it.
 - A *new* device asset with no notes is not imported at all — skipped on reported size before download, and again on the JMX trailer's `totalNotes`/`totalMillis` after. The device produces these in bursts (hundreds in a minute); importing them buries real recordings. Never infer emptiness from a local parse failure. See `API_NOTES.md`.
 - The Jamcorder firmware is resource-constrained and may drop requests or crash; the sync client uses small library pages, generous inter-page/inter-download delays, and per-page/per-file retries.
+- Piano roll "follow playback" has one rule, in
+  `src/components/midi/pianoRollFollow.ts`: ease the viewport so the playhead
+  sits at `FOLLOW_ANCHOR` of the visible width, clamped to the scroll range.
+  Stop, restart, seek and re-enable all fall out of that target. Do not add
+  per-playback-state branches; that is how the rules previously disagreed at
+  every transition.
+- A user scroll needs a scroll-producing *input* (wheel, touch drag, scroll key,
+  scrollbar grab) **and** a `scroll` event confirming it moved. Do not infer it
+  from scroll events alone or from timestamps against our own scrolling, which
+  previously both switched follow off mid-playback and ignored real manual
+  scrolls. A press inside the roll is a seek, and clears the latch.
+- `useMidiPlayer` starts playback asynchronously. Every halt bumps
+  `playbackGenerationRef` and `beginPlayback` bails if it moved while awaiting
+  samples; without that, a stop or pause during the load window is dropped and
+  audio starts anyway.
+- The detail page re-renders every animation frame during playback, so the roll's
+  layers and the annotation/ignored lists sit behind `memo` with
+  `useCallback`-stable handlers. An unmemoised array or inline handler on that
+  path silently restores a full-page render at 60fps.
 
 ## Typical Workflow Changes
 

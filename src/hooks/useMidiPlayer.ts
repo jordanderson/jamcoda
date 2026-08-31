@@ -14,6 +14,12 @@ interface PlayerState {
   error: string | null
   currentTime: number
   duration: number
+  /**
+   * Mirrors `sequenceRef` for rendering. Held in state rather than read off the
+   * ref so the render output is a pure function of the state, and a file switch
+   * cannot paint one file's notes against another's playback position.
+   */
+  sequence: NoteSequence | null
 }
 
 /** Public API returned by `useMidiPlayer`. */
@@ -24,7 +30,6 @@ interface UseMidiPlayerResult extends PlayerState {
   stop: () => void
   loadMidi: (blob: Blob) => Promise<void>
   seekTo: (time: number) => Promise<void>
-  sequence: NoteSequence | null
 }
 
 /** What the animation frame loop needs to derive the playhead. */
@@ -56,6 +61,15 @@ export function useMidiPlayer(): UseMidiPlayerResult {
   /** Where a resume should pick up, when paused or after a seek. */
   const resumeFromRef = useRef<number>(0)
   /**
+   * Bumped by every halt and captured by `beginPlayback` before it awaits.
+   * Starting playback is asynchronous (resume the AudioContext, load samples);
+   * comparing generations lets a stop or pause issued during that window cancel
+   * a start that has not landed yet, instead of it running on to play anyway.
+   */
+  const playbackGenerationRef = useRef(0)
+  /** True while a `beginPlayback` is awaiting samples. */
+  const isStartPendingRef = useRef(false)
+  /**
    * Mirrors `state.isLoaded` for the guards below.
    *
    * A caller typically does `await loadMidi(blob)` then immediately
@@ -70,7 +84,8 @@ export function useMidiPlayer(): UseMidiPlayerResult {
     isLoaded: false,
     error: null,
     currentTime: 0,
-    duration: 0
+    duration: 0,
+    sequence: null
   })
 
   const getSampler = useCallback((): PianoSampler => {
@@ -91,6 +106,8 @@ export function useMidiPlayer(): UseMidiPlayerResult {
   const haltPlayback = useCallback(() => {
     cancelFrame()
     playbackRef.current = null
+    playbackGenerationRef.current += 1
+    isStartPendingRef.current = false
     samplerRef.current?.stop()
   }, [cancelFrame])
 
@@ -146,15 +163,24 @@ export function useMidiPlayer(): UseMidiPlayerResult {
 
     const sampler = getSampler()
     haltPlayback()
+    const generation = playbackGenerationRef.current
+    isStartPendingRef.current = true
 
     const slice = rewindOnEnd
       ? sequenceFrom(sequence, fromTime)
       : sliceSequence(sequence, fromTime, stopAt)
 
-    await sampler.resumeContext()
-    await sampler.preload(slice)
+    try {
+      await sampler.resumeContext()
+      await sampler.preload(slice)
+    } finally {
+      if (playbackGenerationRef.current === generation) {
+        isStartPendingRef.current = false
+      }
+    }
 
-    // A stop/seek may have landed while samples were loading.
+    // A stop, pause, seek or file switch may have landed while samples loaded.
+    if (playbackGenerationRef.current !== generation) return
     if (sequenceRef.current !== sequence) return
 
     const origin = sampler.start(slice)
@@ -190,12 +216,22 @@ export function useMidiPlayer(): UseMidiPlayerResult {
         error: null,
         duration: sequence.totalTime,
         currentTime: 0,
-        isPlaying: false
+        isPlaying: false,
+        sequence
       }))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load MIDI file'
       isLoadedRef.current = false
-      setState((prev) => ({ ...prev, error: message, isLoaded: false }))
+      sequenceRef.current = null
+      setState((prev) => ({
+        ...prev,
+        error: message,
+        isLoaded: false,
+        isPlaying: false,
+        duration: 0,
+        currentTime: 0,
+        sequence: null
+      }))
       console.error('Error loading MIDI:', err)
     }
   }, [haltPlayback])
@@ -228,9 +264,16 @@ export function useMidiPlayer(): UseMidiPlayerResult {
   }, [beginPlayback, withPlaybackError])
 
   const pause = useCallback(() => {
-    if (!playbackRef.current) return
-
     const playback = playbackRef.current
+    if (!playback) {
+      // Nothing is sounding yet, but a start may be loading samples: cancel it
+      // so the click is not swallowed and audio does not begin afterwards.
+      if (!isStartPendingRef.current) return
+      haltPlayback()
+      setState((prev) => ({ ...prev, isPlaying: false }))
+      return
+    }
+
     const sampler = samplerRef.current
     const position = sampler
       ? playback.offset + Math.max(0, sampler.now() - playback.origin)
@@ -251,7 +294,9 @@ export function useMidiPlayer(): UseMidiPlayerResult {
     const sequence = sequenceRef.current
     if (!sequence || !isLoadedRef.current) return
 
-    const wasPlaying = playbackRef.current !== null
+    // A start still loading samples counts as playing: seeking during it moves
+    // the playhead and keeps going rather than cancelling playback.
+    const wasPlaying = playbackRef.current !== null || isStartPendingRef.current
     const target = Math.min(Math.max(0, time), sequence.totalTime)
 
     haltPlayback()
@@ -274,7 +319,6 @@ export function useMidiPlayer(): UseMidiPlayerResult {
     pause,
     stop,
     loadMidi,
-    seekTo,
-    sequence: sequenceRef.current
+    seekTo
   }
 }
