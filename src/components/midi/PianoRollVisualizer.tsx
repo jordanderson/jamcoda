@@ -32,6 +32,12 @@ interface PianoRollVisualizerProps {
     endTime: number
     reason?: string
   }>
+  /** Device passage bookmarks (solid green circles, like the Jamcorder). */
+  bookmarks?: Array<{ bookmarkIdx: number; timeSec: number }>
+  /** Device silence gaps; rendered as green rings when >= minSkipDisplaySec. */
+  skips?: Array<{ millis: number; timeSec: number }>
+  /** Only render silence gaps at or above this many seconds (default 8). */
+  minSkipDisplaySec?: number
   startCheckpoint?: number | null
   endCheckpoint?: number | null
   onTimeClick?: (time: number) => void
@@ -75,6 +81,9 @@ export function PianoRollVisualizer({
   annotations = [],
   predictions = [],
   ignoredSections = [],
+  bookmarks = [],
+  skips = [],
+  minSkipDisplaySec = 8,
   startCheckpoint = null,
   endCheckpoint = null,
   onTimeClick,
@@ -486,6 +495,58 @@ export function PianoRollVisualizer({
               })}
             </div>
           )}
+
+          {/* Device boundary markers (bookmarks + silence gaps) */}
+          {(() => {
+            const visibleSkips = skips.filter((skip) => skip.millis >= minSkipDisplaySec * 1000)
+            if (bookmarks.length === 0 && visibleSkips.length === 0) return null
+            const lineColor = 'rgba(22, 163, 74, 0.16)'
+            return (
+              <div className="absolute top-0 left-0 pointer-events-none z-[7]">
+                {bookmarks.map((bookmark) => {
+                  const x = bookmark.timeSec * pixelsPerTimeStep
+                  return (
+                    <div key={`bookmark-${bookmark.bookmarkIdx}`} className="absolute" style={{ left: x, top: 0, bottom: 0, width: 0 }}>
+                      <div className="absolute" style={{ left: 0, top: 0, bottom: 0, width: 2, transform: 'translateX(-50%)', backgroundColor: lineColor }} />
+                      <div
+                        className="absolute rounded-full bg-green-600 border-2 border-white"
+                        style={{
+                          left: 0,
+                          top: 8,
+                          width: 18,
+                          height: 18,
+                          transform: 'translateX(-50%)',
+                          boxShadow: '0 1px 4px rgba(0, 0, 0, 0.35)'
+                        }}
+                        title={`Device bookmark ${bookmark.bookmarkIdx} (${bookmark.timeSec.toFixed(1)}s)`}
+                      />
+                    </div>
+                  )
+                })}
+                {visibleSkips.map((skip, index) => {
+                  const x = skip.timeSec * pixelsPerTimeStep
+                  return (
+                    <div key={`skip-${index}`} className="absolute" style={{ left: x, top: 0, bottom: 0, width: 0 }}>
+                      <div className="absolute" style={{ left: 0, top: 0, bottom: 0, width: 2, transform: 'translateX(-50%)', backgroundColor: lineColor }} />
+                      <div
+                        className="absolute rounded-full"
+                        style={{
+                          left: 0,
+                          top: 10,
+                          width: 14,
+                          height: 14,
+                          transform: 'translateX(-50%)',
+                          border: '3px solid rgba(34, 197, 94, 0.75)',
+                          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)'
+                        }}
+                        title={`Silence gap ${(skip.millis / 1000).toFixed(0)}s (${skip.timeSec.toFixed(1)}s)`}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
 
           {/* Selection overlay during drag */}
           {dragState.isDragging && (

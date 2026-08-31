@@ -20,6 +20,7 @@
     "test:client": "vitest run",
     "db:migrate": "tsx --tsconfig tsconfig.server.json server/scripts/migrate.ts",
     "db:prune-empty": "tsx --tsconfig tsconfig.server.json server/scripts/pruneEmptyRecordings.ts",
+    "db:backfill-bookmarks": "tsx --tsconfig tsconfig.server.json server/scripts/backfillBookmarks.ts",
     "ml:train": "tsx --tsconfig tsconfig.server.json ml/train.ts",
     "ml:predict": "tsx --tsconfig tsconfig.server.json ml/predict.ts",
     "ml:predict-import": "tsx --tsconfig tsconfig.server.json ml/predictAndImport.ts",

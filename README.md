@@ -212,6 +212,7 @@ Note: the local backend always runs on `http://localhost:3001`.
 - `npm run test:server`: run backend tests (node:test)
 - `npm run db:migrate`: run all pending DB migrations
 - `npm run db:prune-empty`: delete synced recordings with no notes (add `--apply`)
+- `npm run db:backfill-bookmarks`: parse JMX passage bookmarks for already-synced files
 - `npm run ml:train`: train model from annotations
 - `npm run ml:predict`: predict segments from one MIDI file
 - `npm run ml:predict-import`: predict and import into `prediction_reviews`

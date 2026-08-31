@@ -14,6 +14,14 @@ export function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
+/** Seconds as `h:mm:ss` (hours always shown), for long-position markers. */
+export function formatTimeHms(seconds: number): string {
+  const hours = Math.floor(seconds / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
 /** A `YYYY-MM-DD` recording date as `Mon D, YYYY` in the viewer's locale. */
 export function formatDate(dateStr: string): string {
   // Parsed as local midnight, not UTC, so the displayed day matches the

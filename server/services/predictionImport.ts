@@ -7,8 +7,10 @@ import * as PredictionReviewModel from '@models/PredictionReview';
 import {
   countModifiedSegments,
   removeExcludedRangesFromSegments,
+  splitSegmentsAtTimes,
   type TimeRange
 } from '@core/timeRanges';
+import type { JmxBookmark, JmxSkip } from '@server/types';
 import {
   loadModel,
   predictWindows,
@@ -43,6 +45,12 @@ export interface RunPredictionOptions {
   dryRun?: boolean;
   /** Root used to resolve the file's relative `local_path`. */
   rootDir?: string;
+  /**
+   * Only silence gaps (`jmxSkip.millis`) at or above this many seconds become
+   * boundary split hints (default 30). Bookmarks always split; silence gaps
+   * are noisier, so short gaps are ignored.
+   */
+  minSkipSplitSec?: number;
 }
 
 export interface RunPredictionResult {
@@ -57,6 +65,14 @@ export interface RunPredictionResult {
   rawSegmentCount: number;
   /** Segments dropped or trimmed by exclusion. */
   excludedSegmentCount: number;
+  /** Segments split or dropped because a device bookmark cut through them. */
+  bookmarkSplitCount: number;
+  /** Segments split or dropped because a large silence gap cut through them. */
+  skipSplitCount: number;
+  /** Passage markers parsed from the file's JMX trailer. */
+  bookmarks: JmxBookmark[];
+  /** Silence gaps parsed from the file's JMX trailer. */
+  skips: JmxSkip[];
   annotatedRangeCount: number;
   ignoredRangeCount: number;
   clearedCount: number;
@@ -142,11 +158,37 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
   const annotatedRanges: TimeRange[] = AnnotationModel.listRangesByFileId(fileId);
   const ignoredRanges: TimeRange[] = IgnoredSectionModel.listRangesByFileId(fileId);
 
-  const segments = removeExcludedRangesFromSegments(
+  const bookmarks = parseBookmarks(file.bookmarks_json);
+  const skips = parseSkips(file.skips_json);
+
+  const excluded = removeExcludedRangesFromSegments(
     rawSegments,
     [...annotatedRanges, ...ignoredRanges],
     config.minSegmentSec
   );
+  const excludedSegmentCount = countModifiedSegments(rawSegments, excluded);
+
+  const bookmarkTimes = bookmarks.map((bookmark) => bookmark.timeSec);
+  const bookmarkSplitSegments = splitSegmentsAtTimes(
+    excluded,
+    bookmarkTimes,
+    config.minSegmentSec
+  );
+  const bookmarkSplitCount = countModifiedSegments(excluded, bookmarkSplitSegments);
+
+  // Silence gaps are only hints for large pauses; short gaps (breathing,
+  // page turns) occur inside songs and would over-fragment if split.
+  const minSkipSplitSec = Math.max(0, options.minSkipSplitSec ?? 30);
+  const skipTimes = skips
+    .filter((skip) => skip.millis >= minSkipSplitSec * 1000)
+    .map((skip) => skip.timeSec);
+  const skipSplitSegments = splitSegmentsAtTimes(
+    bookmarkSplitSegments,
+    skipTimes,
+    config.minSegmentSec
+  );
+  const skipSplitCount = countModifiedSegments(bookmarkSplitSegments, skipSplitSegments);
+  const segments = skipSplitSegments;
 
   const modelVersion = options.modelVersion || `${model.modelType}@${model.createdAt}`;
 
@@ -186,11 +228,49 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
     },
     segments,
     rawSegmentCount: rawSegments.length,
-    excludedSegmentCount: countModifiedSegments(rawSegments, segments),
+    excludedSegmentCount,
+    bookmarkSplitCount,
+    skipSplitCount,
+    bookmarks,
+    skips,
     annotatedRangeCount: annotatedRanges.length,
     ignoredRangeCount: ignoredRanges.length,
     clearedCount,
     insertedCount,
     dryRun
   };
+}
+
+function parseBookmarks(bookmarksJson: string | null | undefined): JmxBookmark[] {
+  if (!bookmarksJson) return [];
+  try {
+    const parsed = JSON.parse(bookmarksJson);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry): entry is JmxBookmark =>
+        entry
+        && typeof entry === 'object'
+        && typeof (entry as JmxBookmark).bookmarkIdx === 'number'
+        && typeof (entry as JmxBookmark).timeSec === 'number'
+    );
+  } catch {
+    return [];
+  }
+}
+
+function parseSkips(skipsJson: string | null | undefined): JmxSkip[] {
+  if (!skipsJson) return [];
+  try {
+    const parsed = JSON.parse(skipsJson);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry): entry is JmxSkip =>
+        entry
+        && typeof entry === 'object'
+        && typeof (entry as JmxSkip).millis === 'number'
+        && typeof (entry as JmxSkip).timeSec === 'number'
+    );
+  } catch {
+    return [];
+  }
 }

@@ -367,12 +367,14 @@ router.post('/run', async (req: Request, res: Response) => {
       mergeGapSec: Math.max(0, parseOptionalNumber(req.body.mergeGapSec) ?? 3)
     };
     const clearUnpromoted = parseOptionalBoolean(req.body.clearUnpromoted) ?? true;
+    const minSkipSplitSec = Math.max(0, parseOptionalNumber(req.body.minSkipSplitSec) ?? 30);
 
     const result = runPredictionImport({
       fileId,
       modelPath,
       config,
       clearUnpromoted,
+      minSkipSplitSec,
       rootDir: projectRoot
     });
 
@@ -387,7 +389,11 @@ router.post('/run', async (req: Request, res: Response) => {
       segmentCount: result.segments.length,
       annotatedRangeCount: result.annotatedRangeCount,
       ignoredRangeCount: result.ignoredRangeCount,
-      excludedSegmentCount: result.excludedSegmentCount
+      excludedSegmentCount: result.excludedSegmentCount,
+      bookmarkSplitCount: result.bookmarkSplitCount,
+      bookmarkCount: result.bookmarks.length,
+      skipSplitCount: result.skipSplitCount,
+      skipCount: result.skips.length
     });
   } catch (error) {
     if (error instanceof PredictionImportError) {

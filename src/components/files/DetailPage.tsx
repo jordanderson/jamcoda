@@ -20,7 +20,7 @@ import {
 import { PianoRollVisualizer } from '@/components/midi/PianoRollVisualizer';
 import { AnnotationModal } from '@/components/annotations/AnnotationModal';
 import type { PredictionReview } from '@/api/localTypes';
-import { formatTime } from '@/utils/format'
+import { formatTime, formatTimeHms } from '@/utils/format'
 import { resolveReviewFields } from '@core/predictionReview';
 
 interface DetailPageProps {
@@ -203,6 +203,24 @@ export function DetailPage({ fileId }: DetailPageProps) {
       .filter((section) => section.end_time > section.start_time)
       .sort((a, b) => a.start_time - b.start_time || a.id - b.id);
   }, [file?.ignoredSections]);
+  const deviceMarkers = useMemo(() => {
+    const bookmarks = (file?.bookmarks ?? []).map((bookmark) => ({
+      key: `bm-${bookmark.bookmarkIdx}`,
+      timeSec: bookmark.timeSec,
+      kind: 'bookmark' as const,
+      label: `BM ${bookmark.bookmarkIdx} · ${formatTimeHms(bookmark.timeSec)}`
+    }));
+    const skips = (file?.skips ?? [])
+      .filter((skip) => skip.millis >= 8000)
+      .map((skip, index) => ({
+        key: `skip-${skip.timeSec.toFixed(3)}-${index}`,
+        timeSec: skip.timeSec,
+        kind: 'skip' as const,
+        label: formatTimeHms(skip.timeSec),
+        gapSec: Math.round(skip.millis / 1000)
+      }));
+    return [...bookmarks, ...skips].sort((a, b) => a.timeSec - b.timeSec);
+  }, [file?.bookmarks, file?.skips]);
   const selectedPredictionReview = useMemo(() => {
     if (selectedPredictionReviewId === null) return null;
     return (reviewListResponse?.reviews ?? []).find(
@@ -1205,6 +1223,8 @@ export function DetailPage({ fileId }: DetailPageProps) {
               annotations={file.annotations}
               predictions={predictionTimelineSegments}
               ignoredSections={ignoredTimelineSegments}
+              bookmarks={file.bookmarks ?? []}
+              skips={file.skips ?? []}
               startCheckpoint={startCheckpoint}
               endCheckpoint={endCheckpoint}
               onTimeClick={handleSeek}
@@ -1218,6 +1238,44 @@ export function DetailPage({ fileId }: DetailPageProps) {
               onAnnotationDelete={handleDeleteAnnotation}
               onAnnotationResize={handleAnnotationResize}
             />
+            {deviceMarkers.length > 0 && (
+              <div className="mt-3">
+                <div className="flex items-center gap-1.5 mb-1.5 text-xs text-gray-500">
+                  <span>Device markers</span>
+                  <span className="text-gray-400">— click to jump</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {deviceMarkers.map((marker) => (
+                    <button
+                      key={marker.key}
+                      type="button"
+                      onClick={() => handleSeek(marker.timeSec)}
+                      className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300"
+                      title={
+                        marker.kind === 'bookmark'
+                          ? `Device bookmark at ${formatTimeHms(marker.timeSec)} (${marker.timeSec.toFixed(1)}s)`
+                          : `Silence gap ${marker.gapSec}s at ${formatTimeHms(marker.timeSec)} (${marker.timeSec.toFixed(1)}s)`
+                      }
+                      style={{
+                        borderColor: marker.kind === 'bookmark' ? 'rgba(22, 163, 74, 0.4)' : 'rgba(34, 197, 94, 0.35)',
+                        backgroundColor: marker.kind === 'bookmark' ? 'rgba(22, 163, 74, 0.08)' : 'rgba(34, 197, 94, 0.05)',
+                        color: marker.kind === 'bookmark' ? '#166534' : '#15803d'
+                      }}
+                    >
+                      <span
+                        className={marker.kind === 'bookmark' ? 'bg-green-600 rounded-full' : 'rounded-full'}
+                        style={
+                          marker.kind === 'bookmark'
+                            ? { width: 8, height: 8 }
+                            : { width: 8, height: 8, border: '2px solid rgba(34, 197, 94, 0.75)' }
+                        }
+                      />
+                      {marker.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'fs';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 import * as jamcorderService from './jamcorder.service';
 import { jamcorderUuidFromPath } from './jamcorder.service';
 import * as FileModel from '../models/File';
@@ -125,19 +125,18 @@ async function performSync(progress: SyncProgress, full = false) {
     );
 
     // 3. Download each file
+    const importedIds: number[] = [];
     for (const { entry, existing } of toDownload) {
       try {
         progress.currentFile = entry.name;
         console.log(`Syncing: ${entry.name}`);
 
-        let imported = true;
-        if (existing) {
-          await resyncFile(entry, existing);
-        } else {
-          imported = await syncNewFile(entry);
-        }
+        const fileId = existing
+          ? await resyncFile(entry, existing)
+          : await syncNewFile(entry);
 
-        if (imported) {
+        if (fileId != null) {
+          importedIds.push(fileId);
           progress.filesDownloaded++;
           console.log(`Synced ${progress.filesDownloaded}/${toDownload.length}: ${entry.name}`);
         } else {
@@ -155,6 +154,13 @@ async function performSync(progress: SyncProgress, full = false) {
         progress.errors.push({ file: entry.name, error: errorMsg });
       }
     }
+
+    // 3.5. Newly imported files that carry Jamcorder passage bookmarks get
+    //      predictions auto-run right after the sync, so the device's own
+    //      passage boundaries become reviewable segments without a manual
+    //      "Run Predictions" step. Only files with bookmarks are touched and
+    //      any failure is logged, never fatal to the sync.
+    await runPredictionsForBookmarkedFiles(importedIds);
 
     // 4. Record a high-water mark only after a completely clean pass. If any
     //    download failed, the errored asset(s) are above any water mark we could
@@ -281,9 +287,10 @@ function assetIdxFromFilename(filename: string): number | undefined {
 
 /**
  * Download a brand-new file, parse its JMX metadata, and persist it.
- * Returns false when the asset turned out to be empty and was not imported.
+ * Returns the new file id, or null when the asset turned out to be empty and
+ * was not imported.
  */
-async function syncNewFile(entry: JamcorderFileEntry): Promise<boolean> {
+async function syncNewFile(entry: JamcorderFileEntry): Promise<number | null> {
   const data = await jamcorderService.downloadFile(entry.path);
   if (data.length === 0) {
     throw new Error('Downloaded empty file (device may be mid-recording); will retry next sync');
@@ -297,7 +304,7 @@ async function syncNewFile(entry: JamcorderFileEntry): Promise<boolean> {
   // any note at all, means keep it.
   if (jmx.totalNotes === 0 && jmx.totalMillis === 0) {
     console.log(`  Empty recording (0 notes); not imported`);
-    return false;
+    return null;
   }
 
   const date = jmxTimeToDate(jmx.time ?? '') ?? extractDate(entry.path);
@@ -310,7 +317,7 @@ async function syncNewFile(entry: JamcorderFileEntry): Promise<boolean> {
   writeFileSync(localPath, data);
   const midiDuration = getMidiDuration(localPath);
 
-  FileModel.create({
+  return FileModel.create({
     jamcorderPath: entry.path,
     localPath,
     filename: entry.name,
@@ -319,9 +326,14 @@ async function syncNewFile(entry: JamcorderFileEntry): Promise<boolean> {
     dateRecorded: date,
     midiDuration,
     assetUuid: jmx.assetUuid,
-    jmxEofOffset: jmx.eofFileOffset
+    jmxEofOffset: jmx.eofFileOffset,
+    bookmarksJson: serializeJmxList(jmx.bookmarks),
+    skipsJson: serializeJmxList(jmx.skips)
   });
-  return true;
+}
+
+function serializeJmxList<T>(items: T[] | undefined): string | null {
+  return items && items.length > 0 ? JSON.stringify(items) : null;
 }
 
 /**
@@ -333,7 +345,7 @@ async function syncNewFile(entry: JamcorderFileEntry): Promise<boolean> {
  * doubt (missing metadata, truncated local file, unparseable result) falls back
  * to a full re-download.
  */
-async function resyncFile(entry: JamcorderFileEntry, existing: ReturnType<typeof FileModel.findAll>[number]): Promise<void> {
+async function resyncFile(entry: JamcorderFileEntry, existing: ReturnType<typeof FileModel.findAll>[number]): Promise<number> {
   const localPath = existing.local_path;
   const eofOffset = existing.jmx_eof_offset;
   const newSize = entry.size;
@@ -355,10 +367,12 @@ async function resyncFile(entry: JamcorderFileEntry, existing: ReturnType<typeof
           fileSize: newSize,
           jamcorderModified: entry.modified || existing.jamcorder_modified,
           jmxEofOffset: jmx.eofFileOffset ?? eofOffset,
-          midiDuration
+          midiDuration,
+          bookmarksJson: serializeJmxList(jmx.bookmarks),
+          skipsJson: serializeJmxList(jmx.skips)
         });
         console.log(`  Incremental tail sync (${tail.length} bytes appended)`);
-        return;
+        return existing.id;
       }
       console.error('  Incremental tail sync produced an unparseable file; re-downloading whole');
     } catch (error) {
@@ -378,8 +392,67 @@ async function resyncFile(entry: JamcorderFileEntry, existing: ReturnType<typeof
     jamcorderModified: entry.modified || existing.jamcorder_modified,
     assetUuid: jmx.assetUuid ?? existing.asset_uuid,
     jmxEofOffset: jmx.eofFileOffset,
-    midiDuration
+    midiDuration,
+    bookmarksJson: serializeJmxList(jmx.bookmarks),
+    skipsJson: serializeJmxList(jmx.skips)
   });
+  return existing.id;
+}
+
+/**
+ * Run the prediction pipeline over files that carried Jamcorder passage
+ * bookmarks in this sync. Bookmarks have no names, so we never auto-create
+ * annotations here; the model names each passage and the results land in the
+ * review queue as `prediction_reviews`, split at the device's own boundaries.
+ *
+ * Conservative by design: only files with stored bookmarks are touched, only
+ * if a model file exists, and every failure is logged rather than thrown so a
+ * bad file can never break the sync.
+ */
+async function runPredictionsForBookmarkedFiles(importedIds: number[]): Promise<void> {
+  if (importedIds.length === 0) return;
+
+  const modelPath = resolve(process.env.JAMCODA_ML_MODEL_PATH || 'data/ml/model.json');
+  if (!existsSync(modelPath)) {
+    console.log('No model file found; skipping auto-predictions for bookmarked files');
+    return;
+  }
+
+  const { runPredictionImport } = await import('./predictionImport');
+  const config = {
+    minWindowConfidence: 0.45,
+    smoothingWindows: 5,
+    minSegmentSec: 8,
+    minSegmentConfidence: 0.3,
+    mergeGapSec: 3
+  };
+
+  let predicted = 0;
+  for (const fileId of importedIds) {
+    try {
+      const file = FileModel.findById(fileId);
+      if (!file || !file.bookmarks_json || file.is_complete === 1) continue;
+
+      const result = runPredictionImport({
+        fileId,
+        modelPath,
+        config,
+        clearUnpromoted: true,
+        rootDir: process.cwd()
+      });
+      predicted++;
+      console.log(
+        `  Auto-predicted ${result.segments.length} segment(s) for ${file.filename} `
+        + `(bookmarks=${result.bookmarks.length}, splits=${result.bookmarkSplitCount})`
+      );
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Auto-predict failed for file ${fileId}: ${errorMsg}`);
+    }
+  }
+  if (predicted > 0) {
+    console.log(`Auto-predicted segments for ${predicted} bookmarked file(s).`);
+  }
 }
 
 function basename(filepath: string): string {

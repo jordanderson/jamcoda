@@ -6,8 +6,8 @@ export function create(data: CreateFileData): number {
   const stmt = db.prepare(`
     INSERT INTO files (jamcorder_path, local_path, filename, file_size,
                        jamcorder_modified, synced_at, date_recorded, midi_duration,
-                       asset_uuid, jmx_eof_offset)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       asset_uuid, jmx_eof_offset, bookmarks_json, skips_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const result = stmt.run(
@@ -20,7 +20,9 @@ export function create(data: CreateFileData): number {
     data.dateRecorded,
     data.midiDuration ?? null,
     data.assetUuid ?? null,
-    data.jmxEofOffset ?? null
+    data.jmxEofOffset ?? null,
+    data.bookmarksJson ?? null,
+    data.skipsJson ?? null
   );
 
   return result.lastInsertRowid as number;
@@ -181,6 +183,14 @@ export function updateSyncedFile(id: number, data: UpdateSyncedFileData): boolea
   if (data.jmxEofOffset !== undefined) {
     sets.push('jmx_eof_offset = ?');
     params.push(data.jmxEofOffset ?? null);
+  }
+  if (data.bookmarksJson !== undefined) {
+    sets.push('bookmarks_json = ?');
+    params.push(data.bookmarksJson ?? null);
+  }
+  if (data.skipsJson !== undefined) {
+    sets.push('skips_json = ?');
+    params.push(data.skipsJson ?? null);
   }
   if (data.midiDuration !== undefined) {
     sets.push('midi_duration = ?');

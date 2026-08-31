@@ -3,6 +3,8 @@ import type { Migration, MigrationResult } from './types';
 import { initialSchemaMigration } from './001-initial-schema';
 import { syncAssetMetadataMigration } from './002-sync-asset-metadata';
 import { syncHighWaterMarkMigration } from './003-sync-high-water-mark';
+import { bookmarksMigration } from './004-file-bookmarks';
+import { skipsMigration } from './005-file-skips';
 
 /**
  * All migrations, in application order. New migrations should be added as
@@ -11,7 +13,9 @@ import { syncHighWaterMarkMigration } from './003-sync-high-water-mark';
 const migrations: Migration[] = [
   initialSchemaMigration,
   syncAssetMetadataMigration,
-  syncHighWaterMarkMigration
+  syncHighWaterMarkMigration,
+  bookmarksMigration,
+  skipsMigration
 ];
 
 function nowUnix(): number {

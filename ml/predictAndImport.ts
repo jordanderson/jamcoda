@@ -52,6 +52,7 @@ Options:
   --min-segment-sec <n>         Minimum segment duration (default: 8)
   --min-segment-confidence <n>  Minimum average segment confidence (default: 0.3)
   --merge-gap-sec <n>           Merge adjacent same-song segments within gap (default: 3)
+  --min-skip-split-sec <n>      Split segments at silence gaps >= this many seconds (default: 30; 0 disables)
   --help                        Show this help
 `);
 }
@@ -105,6 +106,7 @@ async function main() {
     config,
     clearUnpromoted: parseBoolean(readArg('--clear-unpromoted'), true),
     modelVersion: readArg('--model-version'),
+    minSkipSplitSec: Math.max(0, parseNum(readArg('--min-skip-split-sec'), 30)),
     dryRun: hasFlag('--dry-run'),
     rootDir
   });
@@ -127,6 +129,15 @@ async function main() {
       `Excluded ranges: ${result.annotatedRangeCount} annotated`
       + ` + ${result.ignoredRangeCount} ignored;`
       + ` altered ${result.excludedSegmentCount} of ${result.rawSegmentCount} raw segment(s).`
+    );
+  }
+
+  if (result.bookmarks.length > 0 || result.skips.length > 0) {
+    console.log(
+      `Device boundaries: ${result.bookmarks.length} bookmark(s), `
+      + `${result.skips.length} silence gap(s);`
+      + ` split/trimmed ${result.bookmarkSplitCount} segment(s) at bookmarks`
+      + ` and ${result.skipSplitCount} at silence gaps.`
     );
   }
 

@@ -27,6 +27,10 @@ export interface FileRecord {
   midi_duration: number | null;
   asset_uuid: string | null;
   jmx_eof_offset: number | null;
+  /** JSON array of `JmxBookmark` passage markers, or null if none/not parsed. */
+  bookmarks_json: string | null;
+  /** JSON array of `JmxSkip` silence gaps, or null if none/not parsed. */
+  skips_json: string | null;
 }
 
 /** DB row stored in `annotations`. */

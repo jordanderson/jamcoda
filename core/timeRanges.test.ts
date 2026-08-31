@@ -3,6 +3,7 @@ import {
   countModifiedSegments,
   normalizeRanges,
   removeExcludedRangesFromSegments,
+  splitSegmentsAtTimes,
   type RangedSegment
 } from './timeRanges';
 
@@ -116,5 +117,48 @@ describe('countModifiedSegments', () => {
     const before = [segment(0, 30), segment(40, 70)];
     const after = [segment(0, 30)];
     expect(countModifiedSegments(before, after)).toBe(1);
+  });
+});
+
+describe('splitSegmentsAtTimes', () => {
+  it('returns segments untouched with no split times', () => {
+    const segments = [segment(0, 60)];
+    expect(splitSegmentsAtTimes(segments, [], 5)).toBe(segments);
+  });
+
+  it('splits a segment at each bookmark time', () => {
+    expect(splitSegmentsAtTimes(
+      [segment(0, 60)],
+      [20, 40],
+      5
+    )).toEqual([segment(0, 20), segment(20, 40), segment(40, 60)]);
+  });
+
+  it('drops pieces shorter than the minimum', () => {
+    expect(splitSegmentsAtTimes(
+      [segment(0, 60)],
+      [10, 20, 21],
+      5
+    )).toEqual([segment(0, 10), segment(10, 20), segment(21, 60)]);
+  });
+
+  it('ignores bookmarks outside the segment bounds', () => {
+    expect(splitSegmentsAtTimes(
+      [segment(10, 20)],
+      [0, 5, 30, 40],
+      1
+    )).toEqual([segment(10, 20)]);
+  });
+
+  it('does not merge across a bookmark', () => {
+    const before = [
+      segment(0, 25, 'Song A'),
+      segment(30, 60, 'Song A')
+    ];
+    const split = splitSegmentsAtTimes(before, [28], 5);
+    expect(split).toEqual([
+      segment(0, 25, 'Song A'),
+      segment(30, 60, 'Song A')
+    ]);
   });
 });

@@ -235,6 +235,27 @@ export interface CreateIgnoredSectionResponse {
   clearedPredictionCount: number;
 }
 
+/** Device passage bookmark parsed from the JMX trailer. */
+export interface FileBookmark {
+  bookmarkIdx: number;
+  bookmarkUuid: string;
+  bookmarkSource?: string;
+  unixtime?: number;
+  localOffset?: number;
+  /** Playback-timeline position in seconds. */
+  timeSec: number;
+}
+
+/** Device silence gap (jmxSkip) parsed from the JMX trailer. */
+export interface FileSkip {
+  /** Omitted wall-clock milliseconds. */
+  millis: number;
+  unixtime?: number;
+  localOffset?: number;
+  /** Playback-timeline position in seconds. */
+  timeSec: number;
+}
+
 /** File detail response for detail page playback + annotation workflows. */
 export interface FileDetailResponse {
   id: number;
@@ -248,6 +269,8 @@ export interface FileDetailResponse {
   completedAt: number | null;
   annotations: FileDetailAnnotation[];
   ignoredSections: IgnoredSection[];
+  bookmarks: FileBookmark[];
+  skips: FileSkip[];
 }
 
 /** Request payload for toggling file completion state. */

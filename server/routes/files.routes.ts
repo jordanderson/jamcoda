@@ -106,6 +106,26 @@ router.get('/:id', async (req, res) => {
       reason: section.reason ?? undefined
     }));
 
+    let bookmarks: Array<Record<string, unknown>> = [];
+    if (file.bookmarks_json) {
+      try {
+        const parsed = JSON.parse(file.bookmarks_json);
+        if (Array.isArray(parsed)) bookmarks = parsed;
+      } catch {
+        bookmarks = [];
+      }
+    }
+
+    let skips: Array<Record<string, unknown>> = [];
+    if (file.skips_json) {
+      try {
+        const parsed = JSON.parse(file.skips_json);
+        if (Array.isArray(parsed)) skips = parsed;
+      } catch {
+        skips = [];
+      }
+    }
+
     res.json({
       id: file.id,
       filename: file.filename,
@@ -118,7 +138,9 @@ router.get('/:id', async (req, res) => {
       isComplete: file.is_complete === 1,
       completedAt: file.completed_at,
       annotations,
-      ignoredSections
+      ignoredSections,
+      bookmarks,
+      skips
     });
   } catch (error) {
     console.error('Error getting file detail:', error);

@@ -1,4 +1,4 @@
-import type { JmxMetadata } from '../types/index';
+import type { JmxBookmark, JmxMetadata, JmxSkip } from '../types/index';
 
 /**
  * Lightweight parser for Jamcorder JMX meta events embedded in a Standard MIDI
@@ -10,9 +10,20 @@ import type { JmxMetadata } from '../types/index';
  * - `totalMillis` / `totalNotes` / `fileOffset` from `jmxEof` (silence-compressed
  *   duration, note count, and the byte offset of the renewable trailer, used for
  *   incremental re-sync and for recognising empty recordings).
+ * - `bookmarks` from `jmxBookmark` (user-triggered passage markers), each with
+ *   its position on the silence-compressed playback timeline in seconds.
+ * - `skips` from `jmxSkip` (wall-clock silence omitted from the timeline), each
+ *   with its omitted duration and playback position. Silence gaps are far more
+ *   common than bookmarks and can hint at song/session boundaries.
  *
  * Returns an empty object for non-JMX or malformed files rather than throwing,
  * so callers can degrade gracefully.
+ *
+ * Playback position: JMX writes one millisecond per SMF delta tick (458 ticks
+ * per quarter note at 458000 microseconds per quarter note), and the playback
+ * timeline is the sum of delta-times with `jmxSkip` silence compressed out.
+ * That is the same coordinate system the app's annotations use, so a bookmark's
+ * position here maps directly onto note/annotation times.
  */
 export function parseJmxMetadata(buffer: Buffer): JmxMetadata {
   const meta: JmxMetadata = {};
@@ -24,11 +35,14 @@ export function parseJmxMetadata(buffer: Buffer): JmxMetadata {
   const trackLen = buffer.readUInt32BE(18);
   const trackEnd = Math.min(22 + trackLen, buffer.length);
   let p = 22;
+  // Cumulative SMF delta-time in ticks (== milliseconds in the JMX time model).
+  let playbackTick = 0;
 
   while (p < trackEnd) {
     const delta = readVlq(buffer, p);
     p = delta.next;
     if (p >= trackEnd) break;
+    playbackTick += delta.value;
 
     const status = buffer[p++];
 
@@ -38,7 +52,7 @@ export function parseJmxMetadata(buffer: Buffer): JmxMetadata {
       p = length.next;
       const payload = buffer.subarray(p, p + length.value);
       p += length.value;
-      parseJmxEvent(metaType, payload, meta);
+      parseJmxEvent(metaType, payload, meta, playbackTick);
     } else if (status === 0xf0 || status === 0xf7) {
       const length = readVlq(buffer, p);
       p = length.next + length.value;
@@ -57,7 +71,12 @@ export function jmxTimeToDate(time: string): string | null {
   return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
 }
 
-function parseJmxEvent(metaType: number, payload: Buffer, meta: JmxMetadata): void {
+function parseJmxEvent(
+  metaType: number,
+  payload: Buffer,
+  meta: JmxMetadata,
+  playbackTick: number
+): void {
   if (metaType === 0x01 && payload.subarray(0, 8).toString('ascii') === 'jmxAsset') {
     const obj = parseJmxJson(payload.subarray(8));
     if (obj) {
@@ -86,8 +105,55 @@ function parseJmxEvent(metaType: number, payload: Buffer, meta: JmxMetadata): vo
       if (typeof obj.totalMillis === 'number') meta.totalMillis = obj.totalMillis;
       if (typeof obj.totalNotes === 'number') meta.totalNotes = obj.totalNotes;
       if (typeof obj.fileOffset === 'number') meta.eofFileOffset = obj.fileOffset;
+    } else if (token === 'jmxBookmark') {
+      const bookmark = parseBookmark(obj, playbackTick);
+      if (bookmark) {
+        meta.bookmarks = meta.bookmarks || [];
+        meta.bookmarks.push(bookmark);
+      }
+    } else if (token === 'jmxSkip') {
+      const skip = parseSkip(obj, playbackTick);
+      if (skip) {
+        meta.skips = meta.skips || [];
+        meta.skips.push(skip);
+      }
     }
   }
+}
+
+function parseBookmark(
+  obj: Record<string, unknown>,
+  playbackTick: number
+): JmxBookmark | null {
+  const bookmarkIdx = typeof obj.bookmarkIdx === 'number' ? obj.bookmarkIdx : null;
+  const bookmarkUuid = typeof obj.bookmarkUuid === 'string' ? obj.bookmarkUuid : null;
+  if (bookmarkIdx === null || bookmarkUuid === null) return null;
+
+  return {
+    bookmarkIdx,
+    bookmarkUuid,
+    bookmarkSource: typeof obj.bookmarkSource === 'string' ? obj.bookmarkSource : undefined,
+    unixtime: typeof obj.unixtime === 'number' ? obj.unixtime : undefined,
+    localOffset: typeof obj.localOffset === 'number' ? obj.localOffset : undefined,
+    timeSec: playbackTick / 1000
+  };
+}
+
+function parseSkip(
+  obj: Record<string, unknown>,
+  playbackTick: number
+): JmxSkip | null {
+  const millis = typeof obj.millis === 'number' && Number.isFinite(obj.millis)
+    ? obj.millis
+    : null;
+  if (millis === null) return null;
+
+  return {
+    millis,
+    unixtime: typeof obj.unixtime === 'number' ? obj.unixtime : undefined,
+    localOffset: typeof obj.localOffset === 'number' ? obj.localOffset : undefined,
+    timeSec: playbackTick / 1000
+  };
 }
 
 /** Parse JMX JSON text (may be pretty-printed, terminates at the first NUL). */

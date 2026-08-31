@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import Layout from './components/layout/Layout'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { SyncModal } from './components/sync/SyncModal'
 import { WelcomeModal } from './components/sync/WelcomeModal'
 import { DateBrowser } from './components/files/DateBrowser'
@@ -90,7 +91,11 @@ function AppContent() {
 }
 
 function App() {
-  return <AppContent />
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  )
 }
 
 export default App

@@ -149,6 +149,33 @@ You do not need terminal commands for routine iteration:
 - `Run Predictions` button on file detail page calls `POST /api/prediction-reviews/run`
 - `Rebuild Model` button in sidebar calls `POST /api/prediction-reviews/rebuild-model`
 
+## Device Passage Bookmarks and Silence Gaps
+
+Jamcorder writes two kinds of boundary hints into every recording:
+
+- **`jmxBookmark`** — a user-triggered passage marker (pedal/button). Explicit,
+  but rare (2 of 234 files on our device) and carries no song name.
+- **`jmxSkip`** — wall-clock silence compressed out of the MIDI timeline (the
+  device pauses MIDI recording after ~3s of no notes). Present in 230 of 234
+  files. Durations range from ~3s up to hours.
+
+Neither has a song name (the JMX format has no section-naming feature).
+
+How the app uses them:
+- Parsed at sync and stored on `files.bookmarks_json` and `files.skips_json`
+  (positions are playback seconds, matching annotation coordinates).
+- The prediction pipeline splits predicted segments at each bookmark and at
+  silence gaps >= `minSkipSplitSec` (default 30s), so a device passage or a
+  long pause becomes its own reviewable segment instead of being merged across.
+- After a sync, newly imported files **with bookmarks** get predictions
+  auto-run (only if a model exists). Files marked complete are skipped.
+- The detail-page piano roll renders bookmarks as solid green circles and
+  skips >= 8s as green rings, so they're visible while annotating.
+- Both are hints, not truth: they are noisy (a 3-5s pause can happen inside one
+  song) and a rapid song change can have no marker. See `API_NOTES.md` for the
+  full findings.
+- Backfill older files: `npm run db:backfill-bookmarks`.
+
 Run endpoint defaults:
 - `minWindowConfidence = 0.45`
 - `smoothingWindows = 5`

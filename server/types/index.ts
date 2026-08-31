@@ -29,6 +29,10 @@ export interface CreateFileData {
   assetUuid?: string | null;
   /** Byte offset of the JMX renewable trailer (for incremental re-sync). */
   jmxEofOffset?: number | null;
+  /** Serialized passage bookmarks parsed from the JMX trailer. */
+  bookmarksJson?: string | null;
+  /** Serialized silence-compression gaps (`JmxSkip[]`) from the JMX trailer. */
+  skipsJson?: string | null;
 }
 
 /** Payload for updating a re-synced file row. */
@@ -38,6 +42,8 @@ export interface UpdateSyncedFileData {
   assetUuid?: string | null;
   jmxEofOffset?: number | null;
   midiDuration?: number | null;
+  bookmarksJson?: string | null;
+  skipsJson?: string | null;
 }
 
 /** Payload for creating a new annotation segment. */
@@ -135,6 +141,35 @@ export interface JmxMetadata {
   totalMillis?: number;
   totalNotes?: number;
   eofFileOffset?: number;
+  /** User-triggered passage markers, with positions on the playback timeline. */
+  bookmarks?: JmxBookmark[];
+  /** Silence-compression gaps (wall-clock time omitted from the timeline). */
+  skips?: JmxSkip[];
+}
+
+/** One `jmxBookmark` event: the end of a user-selected passage. */
+export interface JmxBookmark {
+  bookmarkIdx: number;
+  bookmarkUuid: string;
+  bookmarkSource?: string;
+  /** Wall-clock Unix seconds when the marker was created. */
+  unixtime?: number;
+  /** Local UTC offset in minutes at creation. */
+  localOffset?: number;
+  /** Playback-timeline position in seconds (matches annotation coordinates). */
+  timeSec: number;
+}
+
+/** One `jmxSkip` event: wall-clock silence compressed out of the timeline. */
+export interface JmxSkip {
+  /** Omitted wall-clock milliseconds (negative values are firmware quirks). */
+  millis: number;
+  /** Wall-clock Unix seconds when the skip was written (not always present). */
+  unixtime?: number;
+  /** Local UTC offset in minutes at that anchor. */
+  localOffset?: number;
+  /** Playback-timeline position in seconds (matches annotation coordinates). */
+  timeSec: number;
 }
 
 /** Allowed review lifecycle states for prediction rows. */

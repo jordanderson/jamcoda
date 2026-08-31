@@ -10,6 +10,9 @@ export function useCreateAnnotation() {
       queryClient.invalidateQueries({ queryKey: ['fileDetail', variables.fileId] });
       queryClient.invalidateQueries({ queryKey: ['filesByDate'] });
       queryClient.invalidateQueries({ queryKey: ['songPlayHistory'] });
+      // A brand-new song name must show up in the autocomplete for the next
+      // segment without leaving the detail view.
+      queryClient.invalidateQueries({ queryKey: ['uniqueSongNames'] });
     }
   });
 }
@@ -24,6 +27,7 @@ export function useUpdateAnnotation() {
       queryClient.invalidateQueries({ queryKey: ['fileDetail'] });
       queryClient.invalidateQueries({ queryKey: ['filesByDate'] });
       queryClient.invalidateQueries({ queryKey: ['songPlayHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['uniqueSongNames'] });
     }
   });
 }
@@ -37,6 +41,7 @@ export function useDeleteAnnotation() {
       queryClient.invalidateQueries({ queryKey: ['fileDetail'] });
       queryClient.invalidateQueries({ queryKey: ['filesByDate'] });
       queryClient.invalidateQueries({ queryKey: ['songPlayHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['uniqueSongNames'] });
     }
   });
 }

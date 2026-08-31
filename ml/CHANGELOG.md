@@ -18,6 +18,107 @@ How to read the numbers:
 
 ---
 
+## 2026-08-31 — v2.2: silence gaps as boundary hints + piano-roll markers
+
+### Context
+
+Bookmarks turned out to be rare (2 files), so the device's other implicit
+boundary signal — `jmxSkip` silence-compression gaps — is the one worth
+building on. When the player stops for the configured threshold (3s on our
+device) MIDI recording pauses and a `jmxSkip` records the omitted wall-clock
+duration. These are far more common.
+
+### Findings
+
+- **Wall-clock gaps ARE encoded**, as `jmxSkip.millis`; playback position is
+  the cumulative SMF delta-tick (same coordinates as annotations).
+- **230 of 234 files** contain skips (2449 total) vs 2 with bookmarks.
+- **Noisy as boundaries**: only ~13-18% of skips sit near an annotation
+  boundary; ~25-30% fall inside an annotated span (within-song pauses). Bigger
+  gaps are more reliable but never clean, so they are split hints, not truth.
+
+### What changed
+
+- `server/utils/jmxParser.ts` parses `jmxSkip` into `JmxMetadata.skips`
+  (`millis`, `timeSec`, optional wall-clock anchors).
+- New `files.skips_json` column (migration 005), populated at sync; the
+  `db:backfill-bookmarks` script now backfills skips too (230 files).
+- The prediction pipeline splits segments at each bookmark (always) and at
+  silence gaps >= `minSkipSplitSec` (default 30s, configurable via
+  `POST /api/prediction-reviews/run` and `--min-skip-split-sec`).
+- **Piano-roll visualization** (`PianoRollVisualizer`): device bookmarks render
+  as solid green circles and skips >= 8s as green rings at the top edge of the
+  roll, matching the Jamcorder device's look, so the user sees device-marked
+  boundaries while annotating. `GET /api/files/:id` exposes both arrays.
+
+### Results
+
+No accuracy delta (hints only). Two workflow wins: (1) the ~30s+ silence gaps
+now keep predictions from merging across genuine pauses/sessions, and (2) the
+piano roll surfaces device boundaries during annotation. The dominant failure
+mode remains: most song changes have *no* large gap (rapid transitions), so the
+ML model still does the heavy lifting.
+
+---
+
+## 2026-08-31 — v2.1: Jamcorder passage bookmarks as boundary hints
+
+### Context
+
+The v2 model improved generalization but still hallucinated wrong songs in
+unannotated tails, and song boundaries remained pure inference. The Jamcorder
+device writes `jmxBookmark` meta events when the player triggers a passage
+marker — a natural, device-provided segmentation hint. The open question was
+whether the device also stores *section names*; it does not (see below).
+
+### Findings
+
+- **Bookmarks exist and parse cleanly.** `jmxBookmark{bookmarkIdx,
+  bookmarkUuid, bookmarkSource, unixtime, localOffset}` marks the end of a
+  user-selected passage. Position on the playback timeline is the cumulative
+  SMF delta-tick (1 ms/tick in JMX), which is the same coordinate system the
+  annotations use. Sparse in practice: 2 of 234 files, 10 bookmarks total.
+- **No section names anywhere.** The JMX spec has no name event, and a raw byte
+  scan of all 234 files found no "binks 1" / "moonlight serenade"-style strings.
+  Bookmarks carry no names, so the device cannot supply song names.
+- **Bookmarks are not reliable song boundaries.** In `Jmx-A00003` all four
+  bookmarks sit in an unannotated tail. They are passage hints, not truth.
+
+### What changed
+
+- `server/utils/jmxParser.ts` now parses `jmxBookmark` and records each
+  bookmark's playback `timeSec`.
+- New `files.bookmarks_json` column (migration 004), populated at sync for new
+  and re-synced files; `npm run db:backfill-bookmarks` backfills the existing
+  library (found the 2 bookmarked files).
+- `core/timeRanges.ts` gains `splitSegmentsAtTimes`; the prediction pipeline
+  (`server/services/predictionImport.ts`) splits predicted segments at each
+  bookmark, so device passages become reviewable segments instead of being
+  merged across.
+- After a sync, newly imported files that carry bookmarks get predictions
+  auto-run (`server/services/sync.service.ts`), so the device's passages land
+  in the review queue without a manual "Run Predictions" step. Conservative:
+  only bookmarked files, only if a model exists, failures never break sync.
+- `GET /api/files/:id` and `POST /api/prediction-reviews/run` report bookmarks
+  and bookmark-split counts.
+
+### Results
+
+No accuracy delta (bookmarks do not change the model). The win is workflow:
+device-marked passages now structure the review queue automatically. Given how
+sparse bookmarks are, this is groundwork — the signal will matter more as the
+player uses the trigger regularly.
+
+### Known limitations
+
+- Bookmarks are rare (2 files) and not validated as song boundaries; they are
+  a split hint, so a bookmark in the middle of one song produces two segments
+  for the user to merge.
+- Section/song names are not available from the device. Auto-annotation still
+  needs the ML model to name each passage.
+
+---
+
 ## 2026-08-31 — v2: prototype model + anchor-and-link decoding
 
 ### Context
