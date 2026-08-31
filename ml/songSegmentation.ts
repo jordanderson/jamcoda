@@ -1352,6 +1352,103 @@ export function smoothWindowPredictions(
   return smoothed;
 }
 
+export interface SongRangeSuggestion {
+  songName: string;
+  /** Share of the range's confident window evidence assigned to this song. */
+  confidence: number;
+}
+
+function rangeWindowStarts(
+  startTime: number,
+  endTime: number,
+  windowSec: number,
+  stepSec: number
+): number[] {
+  const maxStart = endTime - windowSec;
+  if (maxStart <= startTime) {
+    // The range is shorter than one window: center a single window on it.
+    return [roundTo(Math.max(0, (startTime + endTime) / 2 - windowSec / 2), 6)];
+  }
+
+  const starts: number[] = [];
+  for (let t = startTime; t <= maxStart + 1e-9; t += stepSec) {
+    starts.push(roundTo(t, 6));
+  }
+  const last = starts[starts.length - 1];
+  if (Math.abs(last - maxStart) > 1e-6) {
+    starts.push(roundTo(maxStart, 6));
+  }
+  return starts;
+}
+
+/**
+ * Rank songs for a time range in one MIDI file, for annotate-time suggestions.
+ *
+ * Runs the raw classifier over windows covering `[startTime, endTime]`, then
+ * aggregates each window's margin (top-label evidence strength) by song. The
+ * result is the share of confident evidence each song received, so a segment
+ * that clearly matches one song comes back with a single high-confidence
+ * suggestion, while ambiguous/new material spreads the evidence thin and
+ * usually falls below `minConfidence`.
+ */
+export function suggestSongsForRange(
+  model: SongSegmentModel,
+  midiPath: string,
+  startTime: number,
+  endTime: number,
+  options: { minConfidence?: number; topK?: number } = {}
+): SongRangeSuggestion[] {
+  if (!(endTime > startTime)) return [];
+
+  const notes = extractNotesFromMidi(midiPath);
+  const windowSec = model.config.windowSec;
+  const stepSec = model.config.stepSec;
+  const starts = rangeWindowStarts(startTime, endTime, windowSec, stepSec);
+  if (starts.length === 0) return [];
+
+  const minConfidence = options.minConfidence ?? 0.3;
+  const topK = options.topK ?? 4;
+  const evidenceByLabel = new Array<number>(model.labels.length).fill(0);
+  let totalEvidence = 0;
+  let noteCursor = 0;
+
+  for (const start of starts) {
+    const featureInfo = extractWindowFeatures(notes, start, windowSec, noteCursor);
+    noteCursor = featureInfo.nextCursorHint;
+    const normalized = normalizeVector(featureInfo.features, model.featureMeans, model.featureStds);
+    const scores = computeLabelScores(normalized, model);
+
+    let top1 = -Infinity;
+    let top2 = -Infinity;
+    let top1Label = 0;
+    for (let labelIndex = 0; labelIndex < scores.length; labelIndex++) {
+      const value = scores[labelIndex];
+      if (value > top1) {
+        top2 = top1;
+        top1 = value;
+        top1Label = labelIndex;
+      } else if (value > top2) {
+        top2 = value;
+      }
+    }
+    const scale = Math.abs(top1) + Math.abs(top2);
+    const margin = scale > 1e-9 ? (top1 - top2) / scale : 0;
+    evidenceByLabel[top1Label] += margin;
+    totalEvidence += margin;
+  }
+
+  if (totalEvidence <= 1e-9) return [];
+
+  return model.labels
+    .map((songName, labelIndex) => ({
+      songName,
+      confidence: evidenceByLabel[labelIndex] / totalEvidence
+    }))
+    .filter((suggestion) => suggestion.songName !== NO_SONG_LABEL && suggestion.confidence >= minConfidence)
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, topK);
+}
+
 export function windowsToSegments(
   windows: WindowPrediction[],
   options: Pick<PredictConfig, 'minSegmentSec' | 'minSegmentConfidence' | 'mergeGapSec'>

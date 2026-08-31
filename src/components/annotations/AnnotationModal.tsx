@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import { formatTime } from '@/utils/format'
+import { useSongSuggestions } from '@/hooks/useAnnotations'
 
 interface AnnotationModalProps {
   isOpen: boolean;
@@ -14,6 +16,8 @@ interface AnnotationModalProps {
   allowTimeEdit?: boolean;
   enableIgnoredSectionOption?: boolean;
   initialAction?: 'annotation' | 'ignored';
+  /** File id used to fetch model-ranked song suggestions in create mode. */
+  fileId?: number | null;
 }
 
 export function AnnotationModal({
@@ -28,7 +32,8 @@ export function AnnotationModal({
   mode = 'create',
   allowTimeEdit = false,
   enableIgnoredSectionOption = false,
-  initialAction = 'annotation'
+  initialAction = 'annotation',
+  fileId = null
 }: AnnotationModalProps) {
   const [inputValue, setInputValue] = useState(initialSongName);
   const [ignoredReason, setIgnoredReason] = useState('');
@@ -37,6 +42,14 @@ export function AnnotationModal({
   const [actionType, setActionType] = useState<'annotation' | 'ignored'>(initialAction);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Suggest songs from the model for this region while the create modal is open.
+  const suggestionsQuery = useSongSuggestions(
+    fileId,
+    isOpen && mode === 'create' && !allowTimeEdit ? startTime : null,
+    isOpen && mode === 'create' && !allowTimeEdit ? endTime : null
+  );
+  const songSuggestions = suggestionsQuery.data?.suggestions ?? [];
 
   // Filter suggestions based on input
   const suggestions = inputValue.trim()
@@ -199,6 +212,40 @@ export function AnnotationModal({
 
           {actionType === 'annotation' ? (
             <div className="mb-4">
+              {suggestionsQuery.isFetching && (
+                <div className="mb-4 flex items-center gap-2 text-xs text-gray-500">
+                  <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-300 border-t-[#9198E5] animate-spin" />
+                  Analyzing segment...
+                </div>
+              )}
+
+              {songSuggestions.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Suggested songs
+                  </p>
+                  <div className="space-y-1">
+                    {songSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.songName}
+                        type="button"
+                        onClick={() => handleSelectSuggestion(suggestion.songName)}
+                        className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 hover:bg-[#9198E5]/10 hover:border-[#9198E5]/50 transition-colors text-left"
+                        title={`Select ${suggestion.songName}`}
+                      >
+                        <span className="text-sm font-medium text-gray-900 truncate">
+                          {suggestion.songName}
+                        </span>
+                        <span className="text-xs text-gray-500 shrink-0">
+                          {Math.round(suggestion.confidence * 100)}%
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Song Name
               </label>

@@ -953,6 +953,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
       {/* Annotation Modal */}
       <AnnotationModal
         isOpen={annotationModalData !== null}
+        fileId={fileId}
         startTime={annotationModalData?.startTime ?? 0}
         endTime={annotationModalData?.endTime ?? 0}
         existingSongNames={uniqueSongNames}

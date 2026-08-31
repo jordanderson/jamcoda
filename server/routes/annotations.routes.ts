@@ -1,6 +1,10 @@
 import express from 'express';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import * as AnnotationModel from '@models/Annotation';
 import * as PredictionReviewModel from '@models/PredictionReview';
+import * as FileModel from '@models/File';
+import { loadModel, suggestSongsForRange } from '../../ml/songSegmentation';
 import type { RenameSongNameResult } from '@server/types';
 
 const router = express.Router();
@@ -10,6 +14,56 @@ function parseSongName(value: unknown): string | undefined {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
+
+function parseOptionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+router.post('/song-suggestions', async (req, res) => {
+  try {
+    const fileId = parseOptionalNumber(req.body.fileId);
+    const startTime = parseOptionalNumber(req.body.startTime);
+    const endTime = parseOptionalNumber(req.body.endTime);
+
+    if (!fileId || startTime === undefined || endTime === undefined || startTime >= endTime) {
+      return res.status(400).json({ error: 'fileId, startTime and endTime (start < end) are required' });
+    }
+
+    const file = FileModel.findById(fileId);
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const modelPath = path.resolve(
+      (typeof req.body.modelPath === 'string' && req.body.modelPath.trim())
+        ? req.body.modelPath.trim()
+        : 'data/ml/model.json'
+    );
+    if (!existsSync(modelPath)) {
+      return res.json({ suggestions: [] });
+    }
+
+    const midiPath = path.isAbsolute(file.local_path)
+      ? file.local_path
+      : path.resolve(process.cwd(), file.local_path);
+    if (!existsSync(midiPath)) {
+      return res.json({ suggestions: [] });
+    }
+
+    const model = loadModel(modelPath);
+    const suggestions = suggestSongsForRange(model, midiPath, startTime, endTime, {
+      minConfidence: parseOptionalNumber(req.body.minConfidence) ?? 0.3,
+      topK: 4
+    });
+
+    res.json({ suggestions });
+  } catch (error) {
+    console.error('Error suggesting songs for range:', error);
+    res.status(500).json({ error: 'Failed to suggest songs' });
+  }
+});
 
 router.get('/song-names/unique', async (_req, res) => {
   try {

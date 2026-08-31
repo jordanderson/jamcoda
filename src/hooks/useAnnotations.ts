@@ -54,6 +54,28 @@ export function useUniqueSongNames() {
   });
 }
 
+/**
+ * Model-ranked song suggestions for a time range, used by the create
+ * annotation modal. Disabled when there is no region to suggest for.
+ */
+export function useSongSuggestions(
+  fileId: number | null,
+  startTime: number | null,
+  endTime: number | null
+) {
+  return useQuery({
+    queryKey: ['songSuggestions', fileId, startTime, endTime],
+    queryFn: () => annotationsApi.suggestSongs({ fileId: fileId!, startTime: startTime!, endTime: endTime! }),
+    enabled: (
+      fileId !== null
+      && startTime !== null
+      && endTime !== null
+      && endTime > startTime
+    ),
+    staleTime: 60 * 1000
+  });
+}
+
 export function useSongPlayHistory() {
   return useQuery({
     queryKey: ['songPlayHistory'],

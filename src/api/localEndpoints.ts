@@ -17,6 +17,7 @@ import type {
   PromotePredictionReviewResponse,
   PromoteReviewedPredictionReviewsResponse,
   SongPlayHistoryResponse,
+  SongSuggestionsResponse,
   SetFileCompletionRequest,
   SetFileCompletionResponse,
   RunPredictionForFileRequest,
@@ -121,6 +122,20 @@ export const annotationsApi = {
   getUniqueSongNames: async (): Promise<string[]> => {
     const response = await fetch('/api/annotations/song-names/unique');
     if (!response.ok) return throwApiError(response, 'Failed to get song names');
+    return response.json();
+  },
+
+  suggestSongs: async (data: {
+    fileId: number;
+    startTime: number;
+    endTime: number;
+  }): Promise<SongSuggestionsResponse> => {
+    const response = await fetch('/api/annotations/song-suggestions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) return throwApiError(response, 'Failed to suggest songs');
     return response.json();
   },
 

@@ -229,6 +229,18 @@ export interface CreateIgnoredSectionRequest {
   reason?: string | null;
 }
 
+/** One model-ranked song suggestion for a time range. */
+export interface SongSuggestion {
+  songName: string;
+  /** Share of confident window evidence (0..1). */
+  confidence: number;
+}
+
+/** Response from POST /api/annotations/song-suggestions. */
+export interface SongSuggestionsResponse {
+  suggestions: SongSuggestion[];
+}
+
 /** Response after creating an ignored section and clearing overlaps. */
 export interface CreateIgnoredSectionResponse {
   section: IgnoredSection;
