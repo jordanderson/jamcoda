@@ -22,17 +22,17 @@ How to read the numbers:
 
 ### Context
 
-Bookmarks turned out to be rare (2 files), so the device's other implicit
-boundary signal — `jmxSkip` silence-compression gaps — is the one worth
-building on. When the player stops for the configured threshold (3s on our
-device) MIDI recording pauses and a `jmxSkip` records the omitted wall-clock
-duration. These are far more common.
+Bookmarks turned out to be rare, so the device's other implicit boundary
+signal — `jmxSkip` silence-compression gaps — is the one worth building on.
+When the player stops for the configured threshold (3s in the common
+configuration) MIDI recording pauses and a `jmxSkip` records the omitted
+wall-clock duration. These are far more common.
 
 ### Findings
 
 - **Wall-clock gaps ARE encoded**, as `jmxSkip.millis`; playback position is
   the cumulative SMF delta-tick (same coordinates as annotations).
-- **230 of 234 files** contain skips (2449 total) vs 2 with bookmarks.
+- **The vast majority of recordings** contain skips, vs a couple with bookmarks.
 - **Noisy as boundaries**: only ~13-18% of skips sit near an annotation
   boundary; ~25-30% fall inside an annotated span (within-song pauses). Bigger
   gaps are more reliable but never clean, so they are split hints, not truth.
@@ -42,7 +42,7 @@ duration. These are far more common.
 - `server/utils/jmxParser.ts` parses `jmxSkip` into `JmxMetadata.skips`
   (`millis`, `timeSec`, optional wall-clock anchors).
 - New `files.skips_json` column (migration 005), populated at sync; the
-  `db:backfill-bookmarks` script now backfills skips too (230 files).
+  `db:backfill-bookmarks` script now backfills skips too.
 - The prediction pipeline splits segments at each bookmark (always) and at
   silence gaps >= `minSkipSplitSec` (default 30s, configurable via
   `POST /api/prediction-reviews/run` and `--min-skip-split-sec`).
@@ -77,12 +77,14 @@ whether the device also stores *section names*; it does not (see below).
   bookmarkUuid, bookmarkSource, unixtime, localOffset}` marks the end of a
   user-selected passage. Position on the playback timeline is the cumulative
   SMF delta-tick (1 ms/tick in JMX), which is the same coordinate system the
-  annotations use. Sparse in practice: 2 of 234 files, 10 bookmarks total.
+  annotations use. Sparse in practice: only a couple of files in the
+  calibration library carry any.
 - **No section names anywhere.** The JMX spec has no name event, and a raw byte
-  scan of all 234 files found no "binks 1" / "moonlight serenade"-style strings.
+  scan of recording files found no human-readable song/section-name strings.
   Bookmarks carry no names, so the device cannot supply song names.
-- **Bookmarks are not reliable song boundaries.** In `Jmx-A00003` all four
-  bookmarks sit in an unannotated tail. They are passage hints, not truth.
+- **Bookmarks are not reliable song boundaries.** They have been observed
+  sitting in an unannotated tail rather than at annotated song changes. They
+  are passage hints, not truth.
 
 ### What changed
 
@@ -90,7 +92,7 @@ whether the device also stores *section names*; it does not (see below).
   bookmark's playback `timeSec`.
 - New `files.bookmarks_json` column (migration 004), populated at sync for new
   and re-synced files; `npm run db:backfill-bookmarks` backfills the existing
-  library (found the 2 bookmarked files).
+  library.
 - `core/timeRanges.ts` gains `splitSegmentsAtTimes`; the prediction pipeline
   (`server/services/predictionImport.ts`) splits predicted segments at each
   bookmark, so device passages become reviewable segments instead of being
@@ -170,10 +172,10 @@ problems in practice:
 Insample: window accuracy 84.9% (annotated windows), segment recall /
 precision / F1 = 87.1% / 57.9% / 69.5%.
 
-Concrete: file 82 (Etude No 2 + Waltz in A) now predicts exactly those two
-songs with contiguous spans; file 5 (Take Five + Into the Unknown) matches;
-`ml:predict-import` fills annotation gaps with the correct song instead of the
-wrong ones v1 proposed.
+Concrete: recordings whose ground truth is a single dominant song now come
+back as one contiguous, correctly-labelled span (previously they fragmented or
+were mislabelled), and `ml:predict-import` fills annotation gaps with the
+correct song instead of the wrong ones v1 proposed.
 
 ### Known limitations / next candidates
 

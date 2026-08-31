@@ -1212,7 +1212,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
               )}
 
               <div className="ml-auto text-xs text-gray-500">
-                Keyboard: <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">P</kbd> play/pause · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">S</kbd> start · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">E</kbd> end · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">C</kbd> clear
+                <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">P</kbd> play/pause · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">S</kbd> start · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">E</kbd> end · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">C</kbd> clear
               </div>
             </div>
           </div>

@@ -154,10 +154,11 @@ You do not need terminal commands for routine iteration:
 Jamcorder writes two kinds of boundary hints into every recording:
 
 - **`jmxBookmark`** — a user-triggered passage marker (pedal/button). Explicit,
-  but rare (2 of 234 files on our device) and carries no song name.
+  but rare in practice (typically only a couple of files in a library carry any)
+  and carries no song name.
 - **`jmxSkip`** — wall-clock silence compressed out of the MIDI timeline (the
-  device pauses MIDI recording after ~3s of no notes). Present in 230 of 234
-  files. Durations range from ~3s up to hours.
+  device pauses MIDI recording after ~3s of no notes). Present in the vast
+  majority of recordings. Durations range from ~3s up to hours.
 
 Neither has a song name (the JMX format has no section-naming feature).
 

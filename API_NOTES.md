@@ -43,8 +43,8 @@
   counter, not a Unix timestamp; do not use it for wall-clock comparisons.
 - Paths returned by the file endpoints are device-absolute, but the download
   endpoints want them prefixed with `/sdcard/` — e.g. list returns
-  `/JAMC/2025/<uuid>/Jmx-A00001-Oct-14-2025.mid`, download wants
-  `/sdcard/JAMC/2025/<uuid>/Jmx-A00001-Oct-14-2025.mid`. This prefix is not
+  `/JAMC/2025/<uuid>/Jmx-A<assetIdx>-<Mon>-<DD>-<YYYY>.mid`, download wants
+  `/sdcard/JAMC/2025/<uuid>/Jmx-A<assetIdx>-<Mon>-<DD>-<YYYY>.mid`. This prefix is not
   part of the on-device layout; it is a quirk of the download endpoints.
   **On current firmware (verified live) the `/sdcard/` prefix is NOT required** —
   pass the API-returned path as-is. The official docs agree: "Use paths returned
@@ -97,6 +97,17 @@
   and overwriting good local data with them would lose data.
 - Active recordings occasionally download as an empty body (file is mid-write);
   our sync treats that as an error for the file and retries it next sync.
+- **A brand-new asset can read as 0 bytes while it is still the current (open)
+  asset.** A freshly-opened recording has been observed reporting `filesize: 0`
+  through both the `list/detailed` walk and the library API (whose MIDI reader
+  fails with "filesize is zero") while `isCurrentAsset: true` — the recording
+  data had not been flushed to the SD card yet. Sync skips such files as empty
+  but emits a "0 bytes on the device (may be a live recording not yet flushed)"
+  warning and **does not advance the high-water mark**, so the file is re-checked
+  every pass and is picked up the moment it grows. A 0-byte file is distinct
+  from a permanent empty stub (which is ~256 bytes); there is no download path
+  for a 0-byte asset, so a recording stuck there is unrecoverable until the
+  device flushes it.
 
 ## Download quirk (firmware bug)
 
@@ -142,50 +153,51 @@
   client's choice (previous bookmark, or the recording start). The payload is
   `{ bookmarkIdx, bookmarkUuid, bookmarkSource, unixtime, localOffset }` — there
   is **no name field**. `bookmarkIdx` is a device-local counter that continues
-  across assets (file `Jmx-A00001` holds 0-5, `Jmx-A00003` holds 6-9).
-- `bookmarkSource` on our device is always `byPianoTrigger` (a physical
+  across assets (the counter keeps increasing from one recording to the next).
+- `bookmarkSource` in the recordings we have seen is `byPianoTrigger` (a physical
   trigger/pedal, presumably).
 - **Position in the file:** a bookmark sits at some cumulative SMF delta-tick in
   the track. JMX defines 1 ms per tick, so `position_sec = cumulative_ticks /
   1000`, which is the same silence-compressed coordinate system the app's
   annotations use. Our parser records that as `JmxBookmark.timeSec` and stores
   the array on `files.bookmarks_json` at sync time.
-- **Do not trust bookmarks as song boundaries.** They are sparse in practice (2
-  of 234 files in our library) and do not always align with annotated songs: in
-  `Jmx-A00003` all four bookmarks sit in an unannotated tail, far from the
-  annotated Pathetique/Turkish March spans. A bookmark can also split the *same*
-  song if the player stepped away, and a rapid song change can have no bookmark.
-  We use them as *passage boundary hints* (predicted segments are split at each
-  bookmark) rather than as a naming or boundary truth signal.
+- **Do not trust bookmarks as song boundaries.** They are sparse in practice
+  (typically only a couple of files in a library carry any) and do not always
+  align with annotated songs: bookmarks have been observed sitting in an
+  unannotated tail, far from the annotated song spans. A bookmark can also
+  split the *same* song if the player stepped away, and a rapid song change can
+  have no bookmark. We use them as *passage boundary hints* (predicted segments
+  are split at each bookmark) rather than as a naming or boundary truth signal.
 
 ### Silence gaps (`jmxSkip`)
 
 - `jmxSkip{millis, unixtime?, localOffset?}` records wall-clock silence that was
   **compressed out** of the MIDI timeline: when the player stops for the
-  configured silence threshold (3 s on our device), MIDI recording pauses and a
-  `jmxSkip` is written. `millis` is the omitted wall-clock duration; the
-  playback timeline does not include it (playback + skip total = elapsed time).
-- **Far more common than bookmarks:** 230 of 234 files contain `jmxSkip`
-  events (2449 total), vs 2 files with bookmarks. A skip's playback position
+  configured silence threshold (3 s in the common configuration), MIDI recording
+  pauses and a `jmxSkip` is written. `millis` is the omitted wall-clock
+  duration; the playback timeline does not include it (playback + skip total =
+  elapsed time).
+- **Far more common than bookmarks:** the vast majority of recordings contain
+  `jmxSkip` events, while bookmarks are rare. A skip's playback position
   (`timeSec`) is the cumulative SMF delta-tick at the event, same coordinate
   system as annotations.
 - **Useful as hints, not truth.** Skip durations range from the ~3 s threshold
-  up to hours (overnight gaps). In our annotated library only ~13-18% of skips
-  sit near an annotation boundary and ~25-30% fall *inside* an annotated span
-  (breathing / page-turn pauses within one song). The prediction pipeline
-  therefore splits segments only at skips **>= 30 s** (`minSkipSplitSec`,
-  configurable), reserving short gaps for the many times a player pauses
-  briefly within a song. The detail-page piano roll renders bookmarks as solid
-  green circles and skips >= 8 s as green rings to make them visible while
-  annotating.
+  up to hours (overnight gaps). In the annotated data used to calibrate the
+  thresholds, only ~13-18% of skips sit near an annotation boundary and
+  ~25-30% fall *inside* an annotated span (breathing / page-turn pauses within
+  one song). The prediction pipeline therefore splits segments only at skips
+  **>= 30 s** (`minSkipSplitSec`, configurable), reserving short gaps for the
+  many times a player pauses briefly within a song. The detail-page piano roll
+  renders bookmarks as solid green circles and skips >= 8 s as green rings to
+  make them visible while annotating.
 
 ### Section / song naming
 
 - **Jamcorder has no section-naming feature in the JMX format.** There is no
   meta event or JSON field that carries a section/song name, and a raw byte
-  scan of all 234 local MIDI files found no strings like "binks 1" or "moonlight
-  serenade" anywhere. If the device/app offers naming somewhere, it is not
-  persisted into the MIDI files we sync, so it cannot drive auto-annotation.
+  scan of recording files found no human-readable song/section-name strings
+  anywhere. If the device/app offers naming somewhere, it is not persisted into
+  the MIDI files we sync, so it cannot drive auto-annotation.
 - Empty recordings are real: files of a few hundred bytes (header + one stone +
   EOT) are valid, opened-but-unused assets. **They are not imported.** The
   firmware sometimes opens and closes assets in a burst without recording a note

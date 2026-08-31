@@ -86,8 +86,18 @@ async function performSync(progress: SyncProgress, full = false) {
         // next sync picks it up as a normal new file.
         if (entry.size <= EMPTY_ASSET_MAX_BYTES) {
           emptySkipped++;
-          if (entry.assetIdx != null && entry.assetIdx > maxSyncedAssetIdx) {
-            maxSyncedAssetIdx = entry.assetIdx;
+          // Deliberately do NOT advance the high-water mark here. A skipped
+          // asset was never verified, and a file reading 0 bytes can be a
+          // *live* recording the device has not flushed to disk yet rather
+          // than a permanent stub. Advancing the mark would let the
+          // library-API discovery fallback permanently skip it once the
+          // recording is finally written (newerThanAssetIdx would start past
+          // it). The filesystem walk (the primary source) re-checks it by
+          // size on every pass, so it is picked up the moment it grows.
+          if (entry.size <= 0) {
+            const warning = `${entry.name} is 0 bytes on the device (may be a live recording not yet flushed to disk); will re-check next sync`;
+            console.warn(warning);
+            progress.warnings.push({ file: entry.name, warning });
           }
           continue;
         }
