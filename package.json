@@ -30,7 +30,6 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
-    "@tonejs/midi": "^2.0.28",
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",

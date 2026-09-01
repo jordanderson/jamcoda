@@ -89,6 +89,26 @@ Core frontend routes:
   compares annotation `updated_at` against the saved model's `createdAt` and the
   current unique song names against the model's labels. It never trains, and it
   must clear after a rebuild.
+- MIDI decoding has one implementation, `core/midi/noteSequence.ts`, and it
+  pairs note events itself rather than delegating to a library. Two rules it
+  must keep:
+  - **All Notes Off (CC 123) and All Sound Off (CC 120) end every sounding note
+    on their channel.** The Jamcorder emits these instead of a Note Off for
+    each key when it goes idle -- 158 of them across the library. Pairing that
+    ignores them leaves notes open, and the orphan then takes the release
+    belonging to the next press of that pitch, shifting every later note of
+    that pitch for the rest of the file. That is where the twenty-minute
+    "sustained" notes came from. Do not reintroduce a decoder that pairs only
+    Note On to Note Off.
+  - **Do not split a track on programChange.** Jamcorder writes format 0, one
+    track, one channel; program changes are patch switches mid-performance,
+    not separate instruments. `@tonejs/midi` split on them (one file became 14
+    tracks) and paired notes within each split, so a note whose release landed
+    after a patch change never found it.
+  Notes still sounding at the end of a track are dropped, not extended: nothing
+  released them, so there is no honest end time. A note ended by All Notes Off
+  is capped (`MAX_ALL_NOTES_OFF_SECONDS`), because that end is an upper bound
+  rather than a measured release.
 - Playback is normalized to grand piano (`src/audio/pianoSampler.ts` loads no
   other instrument), and soundfont cache worker stores piano assets only.
 - Sync uses a cheap filesystem walk over the detailed file listing (real sizes → skip-unchanged), falls back to the library API when the walk fails, skips unchanged assets by size, and records a high-water mark so a library-API fallback is fast. `POST /api/sync/start?full=1` forces a full pass. The library API is crash-prone on low-power firmware, so it is never the primary discovery source.

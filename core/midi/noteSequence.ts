@@ -1,27 +1,12 @@
-import * as toneMidiPkg from '@tonejs/midi';
-import { normalizeJamcorderTempoMap } from './tempoNormalization';
-
-/**
- * `@tonejs/midi` ships as CommonJS with no `exports` map, so Node's ESM loader
- * cannot statically see its named exports. `import { Midi }` typechecks (the
- * .d.ts declares it) and works under Vite, but throws
- * "does not provide an export named 'Midi'" in the Node-run CLIs.
- *
- * Reach through whichever interop shape the loader produced. Do not simplify
- * this to a named import.
- */
-const Midi = (
-  (toneMidiPkg as { Midi?: typeof toneMidiPkg.Midi }).Midi
-  ?? (toneMidiPkg as unknown as { default?: { Midi?: typeof toneMidiPkg.Midi } }).default?.Midi
-) as typeof toneMidiPkg.Midi;
+import { parseMidi } from 'midi-file';
+import { buildTempoMap, ticksToSeconds } from './tempoMap';
 
 /**
  * The one MIDI decode path for the whole app.
  *
  * The browser used to decode via `@magenta/music`'s `midiToSequenceProto`
  * while the server and ML pipeline used `@tonejs/midi` directly, so the two
- * could disagree about the notes in a file. Both now come through here, on
- * top of the same Jamcorder tempo-map fix.
+ * could disagree about the notes in a file. Both now come through here.
  *
  * Isomorphic: takes bytes, touches no filesystem, and is typechecked against
  * both the DOM and Node libs.
@@ -42,9 +27,29 @@ export interface NoteSequence {
   totalTime: number;
 }
 
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.min(1, Math.max(0, value));
+/** All Sound Off and All Notes Off. Both silence everything on their channel. */
+const CC_ALL_SOUND_OFF = 120;
+const CC_ALL_NOTES_OFF = 123;
+
+/**
+ * Longest note we will credit to an All Notes Off, in seconds.
+ *
+ * A Note Off is a measured release. An All Notes Off is the device saying it
+ * does not know when the keys came up -- it fires when the Jamcorder goes
+ * idle -- so the gap back to the Note On is an upper bound, not a duration.
+ * Across the library 337 of the 342 notes that end this way are under ten
+ * seconds (median 39ms: the last keys struck before the device went quiet).
+ * The tail is not playing. One stray Note On -- pitch 127, the only one in
+ * two million notes, above the top of an 88-key piano -- sat open for 24
+ * minutes before an All Notes Off collected it.
+ *
+ * Capping only these leaves every measured release untouched.
+ */
+const MAX_ALL_NOTES_OFF_SECONDS = 30;
+
+interface OpenNote {
+  tick: number;
+  velocity: number;
 }
 
 /**
@@ -52,34 +57,100 @@ function clamp01(value: number): number {
  *
  * Tracks are flattened. Jamcorder captures a single performance, and every
  * consumer (playback, piano roll, feature extraction) wants one stream.
+ *
+ * Notes are paired here rather than by a library because the Jamcorder ends
+ * sounding notes with All Notes Off (CC 123) before it goes idle, instead of
+ * sending a Note Off for each. `@tonejs/midi`, which we decoded with before,
+ * pairs only Note On to Note Off and ignores channel mode messages -- so an
+ * All Notes Off left its notes open, and its strict "oldest Note On takes the
+ * next Note Off for that pitch" rule then handed each of them the release
+ * belonging to the *following* press. A single All Notes Off therefore
+ * shifted every later note of that pitch for the rest of the file, inventing
+ * sustains of twenty minutes and more. Across the library that was 517 notes
+ * over a minute long: 22.7 note-hours that were never played.
  */
 export function parseNoteSequence(rawBytes: Uint8Array): NoteSequence {
-  const normalized = normalizeJamcorderTempoMap(rawBytes);
-  const midi = new Midi(normalized);
+  let midi;
+  try {
+    midi = parseMidi(rawBytes);
+  } catch {
+    return { notes: [], totalTime: 0 };
+  }
 
+  const tempoMap = buildTempoMap(midi);
   const notes: Note[] = [];
   let totalTime = 0;
 
-  for (const track of midi.tracks) {
-    for (const note of track.notes) {
-      const startTime = Number(note.time);
-      const endTime = startTime + Number(note.duration);
+  const addNote = (
+    pitch: number,
+    velocity: number,
+    startTick: number,
+    endTick: number,
+    endedByAllNotesOff = false
+  ): void => {
+    const startTime = ticksToSeconds(tempoMap, startTick);
+    let endTime = ticksToSeconds(tempoMap, endTick);
 
-      if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+    if (endedByAllNotesOff) {
+      endTime = Math.min(endTime, startTime + MAX_ALL_NOTES_OFF_SECONDS);
+    }
+
+    if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime) {
+      return;
+    }
+
+    notes.push({
+      pitch,
+      velocity: Math.max(0, Math.min(127, Math.round(velocity))),
+      startTime,
+      endTime
+    });
+
+    if (endTime > totalTime) totalTime = endTime;
+  };
+
+  for (const track of midi.tracks ?? []) {
+    // Keyed by channel * 128 + pitch. A held note is only released by an event
+    // on its own channel, and one pitch can sound on two channels at once.
+    const open = new Map<number, OpenNote[]>();
+    let tick = 0;
+
+    for (const event of track) {
+      tick += event.deltaTime ?? 0;
+
+      if (event.type === 'noteOn' && event.velocity > 0) {
+        const key = event.channel * 128 + event.noteNumber;
+        const pending = open.get(key);
+        if (pending) pending.push({ tick, velocity: event.velocity });
+        else open.set(key, [{ tick, velocity: event.velocity }]);
         continue;
       }
 
-      notes.push({
-        pitch: note.midi,
-        velocity: Math.round(clamp01(Number(note.velocity)) * 127),
-        startTime,
-        endTime
-      });
+      // A Note On of velocity 0 is a Note Off; the wire format allows both.
+      if (event.type === 'noteOff' || (event.type === 'noteOn' && event.velocity === 0)) {
+        // Oldest first, so a pitch struck twice before either release reads as
+        // the first press ending at the first release.
+        const note = open.get(event.channel * 128 + event.noteNumber)?.shift();
+        if (note) addNote(event.noteNumber, note.velocity, note.tick, tick);
+        continue;
+      }
 
-      if (endTime > totalTime) {
-        totalTime = endTime;
+      if (
+        event.type === 'controller'
+        && (event.controllerType === CC_ALL_NOTES_OFF || event.controllerType === CC_ALL_SOUND_OFF)
+      ) {
+        for (const [key, pending] of open) {
+          if (Math.floor(key / 128) !== event.channel) continue;
+          for (const note of pending) addNote(key % 128, note.velocity, note.tick, tick, true);
+          pending.length = 0;
+        }
       }
     }
+
+    // Anything still sounding at the end of the track was never released by
+    // anything: no Note Off, no All Notes Off. There is no honest end time for
+    // it, and the previous decoder dropped these too, so leave them out rather
+    // than invent a duration running to the end of the recording.
   }
 
   notes.sort((a, b) => (a.startTime - b.startTime) || (a.pitch - b.pitch));
