@@ -6,11 +6,11 @@ import {
 } from '@/components/midi/pianoRollFollow'
 
 /**
- * How long after a scroll-producing input a `scroll` event is still credited to
- * the user.
+ * How long after a scroll-producing input a `scroll` event is still credited
+ * to the user.
  *
- * Generous on purpose: a wheel reports first and its scroll lands a frame or
- * more later, and a long recording renders tens of thousands of rects, so a
+ * Generous on purpose. A wheel reports first and its scroll lands a frame or
+ * more later, and a long recording renders tens of thousands of rects. A
  * tight window would strand real gestures. Erring long is safe because the
  * paths that could be misattributed clear the latch outright.
  */
@@ -53,10 +53,10 @@ interface UsePianoRollFollowOptions {
  * paused seek still animates. It parks once the viewport settles.
  *
  * A user scroll needs two signals: a scroll-producing input (wheel, touch
- * drag, scroll key, scrollbar grab) *and* a `scroll` event confirming it moved
- * the container. Requiring both keeps our own eased writes from looking like
- * the user, and keeps a gesture that moves nothing -- already at the edge --
- * from switching follow off for no reason.
+ * drag, scroll key, scrollbar grab) *and* a `scroll` event confirming it
+ * moved the container. Requiring both keeps our own eased writes from
+ * looking like the user, and keeps a gesture that moves nothing (already at
+ * the edge) from switching follow off for no reason.
  */
 export function usePianoRollFollow({
   container,
@@ -114,8 +114,8 @@ export function usePianoRollFollow({
     const wasEnabled = stateRef.current.enabled
     stateRef.current = { playheadX, isPlaying, enabled, suspended }
 
-    // Re-engaging is a request to be scrolled, so an earlier gesture must not
-    // stay latched and claim the catch-up as the user's.
+    // Re-engaging is a request to be scrolled, so an earlier gesture must
+    // not stay latched and claim the catch-up as the user's.
     if (enabled && !wasEnabled) {
       userInputAtRef.current = 0
     }
@@ -143,8 +143,8 @@ export function usePianoRollFollow({
       if (SCROLL_KEYS.has(event.key)) noteUserInput()
     }
 
-    // Only a press on the scrollbar is a scroll. A press inside the roll is a
-    // seek, so it clears any stale latch that would steal the seek's own
+    // Only a press on the scrollbar is a scroll. A press inside the roll is
+    // a seek, so it clears any stale latch that would steal the seek's own
     // scroll.
     const handlePointerDown = (event: PointerEvent) => {
       const rect = container.getBoundingClientRect()

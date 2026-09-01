@@ -3,8 +3,8 @@
  *
  * `formatTime` previously existed as five identical copies (DetailPage,
  * PredictionReviewPage, SongsPage, AnnotationModal, DateBrowser) and
- * `formatDate` as three. One of the `formatTime` copies was additionally
- * re-created on every render rather than hoisted to module scope.
+ * `formatDate` as three. One of the `formatTime` copies was re-created on
+ * every render rather than hoisted to module scope.
  */
 
 /** Seconds as `m:ss`, for playback positions and segment bounds. */
@@ -37,8 +37,8 @@ export function formatDate(dateStr: string): string {
 /**
  * Seconds as `m:ss`.
  *
- * Durations and playback positions render identically; DateBrowser had a
- * separate `formatDuration` whose body was byte-identical to `formatTime`, so
- * this is an alias rather than a second implementation.
+ * Durations and playback positions render identically. DateBrowser had a
+ * separate `formatDuration` whose body was byte-identical to `formatTime`,
+ * so this is an alias rather than a second implementation.
  */
 export const formatDuration = formatTime

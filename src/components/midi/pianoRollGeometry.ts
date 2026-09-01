@@ -4,13 +4,14 @@ import type { Note } from '@core/midi/noteSequence'
  * Note-rectangle geometry for the piano roll.
  *
  * This reproduces the layout `@magenta/music`'s `PianoRollSVGVisualizer`
- * produced, so the roll renders identically after that dependency was dropped:
- * two semitones of padding above and below the pitch range, rows growing
- * upward from the bottom edge, and per-note opacity derived from velocity.
+ * produced, so the roll renders identically after that dependency was
+ * dropped: two semitones of padding above and below the pitch range, rows
+ * growing upward from the bottom edge, and per-note opacity derived from
+ * velocity.
  *
  * The horizontal mapping (`time * pixelsPerTimeStep`) is the same one the
- * annotation, prediction and playhead overlays already use, which is why they
- * line up with the notes.
+ * annotation, prediction, and playhead overlays use, which is why they line
+ * up with the notes.
  */
 
 /** Semitones of headroom drawn above and below the sequence's pitch range. */

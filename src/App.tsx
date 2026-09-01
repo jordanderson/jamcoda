@@ -58,7 +58,7 @@ function AppContent() {
     setSyncId(null)
     queryClient.invalidateQueries({ queryKey: ['filesByDate'] })
     queryClient.invalidateQueries({ queryKey: ['syncStatus'] })
-    // Navigate to browse view
+    // Navigate to browse view.
     window.location.hash = '/browse'
   }
 

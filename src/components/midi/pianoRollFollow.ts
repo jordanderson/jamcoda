@@ -5,16 +5,16 @@ import { clamp } from '@core/math'
  *
  * One rule: ease the viewport so the playhead sits at `FOLLOW_ANCHOR` of the
  * visible width, clamped to the scrollable range. Every playback state falls
- * out of that target -- stopping drives the playhead to 0 so the target clamps
- * to 0; starting from 0 holds the view still until the playhead reaches the
- * anchor; a seek just moves the target. No timers, no per-state branches.
+ * out of that target. Stopping drives the playhead to 0, so the target clamps
+ * to 0. Starting from 0 holds the view still until the playhead reaches the
+ * anchor. A seek just moves the target. No timers, no per-state branches.
  */
 
 /** Where the playhead sits in the viewport while following: 35% from the left. */
 export const FOLLOW_ANCHOR = 0.35
 
 /**
- * Fraction of the remaining distance covered per frame: a full-viewport
+ * Fraction of the remaining distance covered per frame. A full-viewport
  * catch-up settles in about a third of a second, and steady playback tracks
  * within a few pixels.
  */
@@ -51,7 +51,7 @@ export function followScrollTarget(
 
 /**
  * One frame of easing toward `target`. Snaps once the step lands within
- * `FOLLOW_SETTLE_EPSILON_PX` so the loop can park instead of approaching
+ * `FOLLOW_SETTLE_EPSILON_PX`, so the loop can park instead of approaching
  * asymptotically forever.
  */
 export function easeScrollLeft(current: number, target: number): number {

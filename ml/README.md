@@ -30,7 +30,10 @@ Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v
   because a window label applies at its centre. Training uses the same rule.
 - filters and merges the segments with confidence and duration limits
 
-This is intentionally simple so you can retrain often as annotations grow. The anchor-and-link structure mirrors how practice sessions actually sound: distinctive phrases are easy to identify, while the generic passages between them get connected into the surrounding song.
+This is intentionally simple so you can retrain often as annotations grow. The
+anchor-and-link structure matches how practice sessions sound: distinctive
+phrases are easy to identify, while the generic passages between them connect
+into the surrounding song.
 
 ## Data Sources
 
@@ -94,8 +97,8 @@ Notes:
   per-label prototype count, so each label uses the same number of neighbours.
 - `--decoder` is `anchor` (default, two-pass anchor-and-link), `viterbi`, or
   `smooth`. `--anchor-margin` and `--min-anchor-run` tune how easily anchor
-  runs form; `--fill-topk -1` links aggressively (a positive value requires the
-  linked song to be a top-K scorer in each linked window).
+  runs form; `--fill-topk -1` links across all windows (a positive value
+  requires the linked song to be a top-K scorer in each linked window).
 - At least 2 annotated files are required.
 - Default behavior includes leave-one-file-out evaluation; use `--skip-eval` to disable.
 
@@ -133,6 +136,18 @@ Useful flags:
 After import, open:
 - `#/reviews?fileId=<id>`
 
+To catch up every incomplete file that has no predictions yet (e.g. right after a
+sync), run the batch form:
+
+```bash
+npm run ml:predict-missing -- [--force] [--limit <n>] [--dry-run]
+```
+
+It only touches files that are incomplete and non-empty and have zero
+`prediction_reviews` rows; `--force` also re-runs files that already have
+predictions (clearing their unpromoted rows first). Files marked complete are
+never touched.
+
 ### 5) Run evals against existing annotations
 
 This evaluates model window predictions against your current annotation truth and writes a JSON report.
@@ -160,6 +175,19 @@ closest single number to "predictions vs annotations".
 You do not need terminal commands for routine iteration:
 - `Run Predictions` button on file detail page calls `POST /api/prediction-reviews/run`
 - `Rebuild Model` button in sidebar calls `POST /api/prediction-reviews/rebuild-model`
+- `Rebuild Model` also re-scores predictions automatically: after saving the new
+  model it re-runs predictions over every file whose unpromoted review queue is
+  entirely `unsure` (nothing reviewed yet), so old predictions are replaced
+  with the new model's output. Files with any confirmed/edited/invalid rows are
+  left untouched, and per-file failures (e.g. a missing MIDI file) are reported
+  in `reRunErrors` without failing the rebuild. This is opt-in and off by
+  default (it can take a long time): the sidebar shows a "Re-score pending
+  predictions" checkbox, or pass `reRunUnsure: true` to the endpoint.
+- The sidebar `Rebuild Model` button shows a badge when annotations have changed
+  since the last build: the count of annotations created or edited after the
+  model's `createdAt`, plus any song names the model has never seen, from
+  `GET /api/prediction-reviews/rebuild-status`. It is a hint only — rebuilding
+  is always a manual action, and the badge clears after a rebuild.
 
 ## Device Passage Bookmarks and Silence Gaps
 
@@ -220,8 +248,10 @@ Prediction output is post-filtered against:
 ## Review States and Promotion
 
 `prediction_reviews.status` values:
-- `unsure`: unreviewed queue item
-- `invalid`: rejected prediction or merged-away source segment
+- `unsure`: unreviewed queue item (the only status that still "needs review")
+- `invalid`: rejected prediction or merged-away source segment -- settled, like
+  `confirmed`/`edited`, and therefore excluded from the review queue. Still
+  visible under "All Unpromoted" so rejections and merge history stay inspectable.
 - `confirmed`: accepted as-is
 - `edited`: accepted with corrected song and/or time bounds
 

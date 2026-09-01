@@ -2,7 +2,7 @@
 
 ## Overview
 
-JamCoda uses a minimalist black/white/gray design. Color is reserved for data visualization, status indicators, and a single accent used for focus and links. This creates a clean, professional interface that lets the data stand out.
+JamCoda uses a minimalist black/white/gray design. Color is reserved for data visualization, status indicators, and a single accent used for focus and links. This keeps the data clearly visible.
 
 ## Color Palette
 

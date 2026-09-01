@@ -3,8 +3,8 @@
  *
  * These live here rather than in `core/cli/args` because that module is
  * Node-only (it reads `process.argv` and touches the filesystem) and so is
- * excluded from the browser program -- which is why the piano roll ended up
- * with its own copy of `clamp`.
+ * excluded from the browser program. The piano roll previously kept its own
+ * copy of `clamp` for that reason.
  */
 
 export function clamp(value: number, min: number, max: number): number {

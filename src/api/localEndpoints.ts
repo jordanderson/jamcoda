@@ -1,4 +1,4 @@
-// API client for local backend (Express server on localhost:3001)
+// API client for the local Express backend on localhost:3001.
 import type {
   CreateIgnoredSectionRequest,
   CreateIgnoredSectionResponse,
@@ -14,6 +14,7 @@ import type {
   RenameSongNameResponse,
   RebuildPredictionModelRequest,
   RebuildPredictionModelResponse,
+  RebuildStatusResponse,
   PromotePredictionReviewResponse,
   PromoteReviewedPredictionReviewsResponse,
   SongPlayHistoryResponse,
@@ -322,6 +323,14 @@ export const predictionReviewsApi = {
     });
     if (!response.ok) {
       return throwApiError(response, 'Failed to rebuild model');
+    }
+    return response.json();
+  },
+
+  getRebuildStatus: async (): Promise<RebuildStatusResponse> => {
+    const response = await fetch('/api/prediction-reviews/rebuild-status');
+    if (!response.ok) {
+      return throwApiError(response, 'Failed to get rebuild status');
     }
     return response.json();
   }

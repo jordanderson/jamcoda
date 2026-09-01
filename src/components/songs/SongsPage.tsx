@@ -37,7 +37,7 @@ export function SongsPage() {
     clearPlaybackError
   } = useSegmentPlayer(activeSegmentBounds);
 
-  // Load failures are tracked here; playback failures come from the hook.
+  // Load failures are tracked here. Playback failures come from the hook.
   const displayedPlaybackError = playbackError ?? segmentPlaybackError;
   const [showRenamePanel, setShowRenamePanel] = useState(false);
   const [renameFrom, setRenameFrom] = useState('');

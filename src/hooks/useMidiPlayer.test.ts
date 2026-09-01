@@ -3,9 +3,9 @@ import { act, renderHook, waitFor, type RenderHookResult } from '@testing-librar
 import type { NoteSequence } from '@core/midi/noteSequence'
 
 /**
- * Starting playback is asynchronous: the sampler resumes the AudioContext and
- * loads samples before any note is scheduled. These tests hold that window open
- * so a stop, pause or seek can land inside it.
+ * Starting playback is asynchronous. The sampler resumes the AudioContext
+ * and loads samples before any note is scheduled. These tests hold that
+ * window open so a stop, pause, or seek can land inside it.
  */
 
 const sequence: NoteSequence = {
@@ -63,7 +63,7 @@ async function loadedPlayer(): Promise<Player> {
 
 /**
  * Run `action` and settle until the sampler is waiting on samples. Asserting
- * the preload is really pending matters: without it the interruption tests
+ * the preload is really pending matters. Without it the interruption tests
  * would pass vacuously, never reaching the window they exercise.
  */
 async function startAndSuspend(action: () => void) {

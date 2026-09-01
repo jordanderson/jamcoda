@@ -101,8 +101,8 @@ describe('PianoRollVisualizer', () => {
   })
 
   it('widens the timeline to cover overlays that outrun the last note', () => {
-    // An annotation or prediction can extend past the sequence, and the roll
-    // has to be wide enough to scroll to it.
+    // An annotation or prediction can extend past the sequence. The roll has
+    // to be wide enough to scroll to it.
     render(
       <PianoRollVisualizer
         sequence={sequence}

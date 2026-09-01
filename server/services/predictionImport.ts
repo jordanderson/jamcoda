@@ -23,14 +23,14 @@ import {
  * Run the segmentation model over one file and import the results as
  * prediction reviews.
  *
- * This is the single implementation of that pipeline. It previously existed
- * twice -- once in `POST /api/prediction-reviews/run` against the model layer,
- * and once in `ml/predictAndImport.ts` against string-interpolated SQL run
- * through the `sqlite3` CLI, complete with its own `CREATE TABLE IF NOT
- * EXISTS` that was a third source of schema truth beside the migrations. Both
- * callers now come through here, so the exclusion rules, the model version
- * string and the insert shape cannot drift, and the CLI no longer needs the
- * `sqlite3` binary.
+ * This is the single implementation of that pipeline. It previously
+ * existed twice — once in `POST /api/prediction-reviews/run` against the
+ * model layer, and once in `ml/predictAndImport.ts` against string-
+ * interpolated SQL run through the `sqlite3` CLI, complete with its own
+ * `CREATE TABLE IF NOT EXISTS` that was a third source of schema truth
+ * beside the migrations. Both callers now come through here, so the
+ * exclusion rules, the model version string, and the insert shape cannot
+ * drift, and the CLI no longer needs the `sqlite3` binary.
  */
 
 export interface RunPredictionOptions {
@@ -135,8 +135,8 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
     throw new PredictionImportError(`File ${fileId} not found`, 'not_found');
   }
 
-  // File completion is authoritative: a completed file's annotations are
-  // final, so re-running predictions over it is rejected rather than silently
+  // File completion is authoritative. A completed file's annotations are
+  // final, so re-running predictions is rejected rather than silently
   // producing rows that can never be promoted.
   if (file.is_complete) {
     throw new PredictionImportError(

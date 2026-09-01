@@ -10,8 +10,8 @@ export function useLocalFileDownload(fileId: number | null, enabled: boolean = t
       return localFilesApi.download(fileId);
     },
     enabled: enabled && !!fileId,
-    staleTime: Infinity, // Downloaded files never go stale
-    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
-    retry: 1 // Only retry once on failure
+    staleTime: Infinity, // Downloaded files never go stale.
+    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes.
+    retry: 1 // Only retry once on failure.
   });
 }

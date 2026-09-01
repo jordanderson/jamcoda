@@ -39,8 +39,8 @@ describe('followScrollTarget', () => {
   })
 
   it('holds at the left edge until the playhead reaches the anchor', () => {
-    // What keeps starting from a stop from jumping: the target stays clamped at
-    // 0 while the playhead crosses the first 35% of the viewport.
+    // What keeps starting from a stop from jumping. The target stays clamped
+    // at 0 while the playhead crosses the first 35% of the viewport.
     expect(followScrollTarget(0, VIEWPORT)).toBe(0)
     expect(followScrollTarget(ANCHOR_PX - 1, VIEWPORT)).toBe(0)
     expect(followScrollTarget(ANCHOR_PX + 100, VIEWPORT)).toBe(100)
@@ -82,8 +82,8 @@ describe('easeScrollLeft', () => {
   })
 
   it('keeps pace with playback without visible lag', () => {
-    // 50 px/s at 60fps is under a pixel of new distance per frame, so a settled
-    // follower stays within a couple of pixels.
+    // 50 px/s at 60fps is under a pixel of new distance per frame, so a
+    // settled follower stays within a couple of pixels.
     const perFrame = 50 / 60
     let scroll = 5000 - ANCHOR_PX
     let playheadX = 5000

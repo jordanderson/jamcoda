@@ -4,11 +4,11 @@ import { useMidiPlayer } from '@/hooks/useMidiPlayer'
 /**
  * Playback scoped to one time range of the loaded file.
  *
- * SongsPage and PredictionReviewPage both needed "play just this segment, with
- * a scrubber relative to its own start". They had independent copies:
+ * SongsPage and PredictionReviewPage both needed "play just this segment,
+ * with a scrubber relative to its own start". They had independent copies:
  * `segmentCurrentTime` and `segmentElapsed` were byte-identical, while the
- * seek handlers had quietly diverged -- one parked the playhead at the segment
- * end after stopping and surfaced errors in the UI, the other did neither.
+ * seek handlers had quietly diverged. One parked the playhead at the segment
+ * end after stopping and surfaced errors in the UI; the other did neither.
  * This is the single implementation, taking the more complete behaviour of
  * the two.
  */
@@ -34,7 +34,7 @@ export interface UseSegmentPlayerResult extends ReturnType<typeof useMidiPlayer>
   isScrubbing: boolean
   /**
    * Range-input handlers. A pointer drag calls start -> change* -> commit and
-   * only seeks once, on commit; a keyboard change arrives without `start` and
+   * only seeks once, on commit. A keyboard change arrives without `start` and
    * seeks immediately.
    */
   onScrubStart: () => void
@@ -125,8 +125,9 @@ export function useSegmentPlayer(bounds: SegmentBounds | null): UseSegmentPlayer
     onScrubStart: () => setIsScrubbing(true),
     onScrubChange: (time: number) => {
       setScrubValue(time)
-      // Keyboard changes arrive without a preceding pointer-down, so they take
-      // effect immediately rather than waiting for a commit that never comes.
+      // Keyboard changes arrive without a preceding pointer-down, so they
+      // take effect immediately rather than waiting for a commit that never
+      // comes.
       if (!isScrubbing) {
         void seekWithinSegment(time)
       }

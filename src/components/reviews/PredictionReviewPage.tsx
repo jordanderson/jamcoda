@@ -129,7 +129,7 @@ export function PredictionReviewPage() {
     });
 
     if (reviewFilter === 'all') return reviews;
-    return reviews.filter((review) => review.status === 'unsure' || review.status === 'invalid');
+    return reviews.filter((review) => review.status === 'unsure');
   }, [reviewListResponse?.reviews, reviewFilter]);
 
   const selectedReviews = useMemo(() => {
@@ -233,7 +233,7 @@ export function PredictionReviewPage() {
     playbackError: segmentPlaybackError
   } = useSegmentPlayer(activeSegmentBounds);
 
-  // Load/decoding failures surface as `playerError`; segment transport
+  // Load/decoding failures surface as `playerError`. Segment transport
   // failures come from the segment hook.
   const playbackError = playerError ?? segmentPlaybackError;
 

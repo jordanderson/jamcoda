@@ -162,7 +162,8 @@ describe('windowsToSegments', () => {
 });
 describe('segment boundaries', () => {
   // A window label applies at the window centre. A run of windows must
-  // therefore cover the span of its centres, not the union of its full extents.
+  // therefore cover the span of its centres, not the union of its full
+  // extents.
   function windowsForTruth(windowSec: number, stepSec: number, totalSec: number) {
     const windows = [];
     for (let t = 0; t + windowSec <= totalSec; t += stepSec) {
@@ -202,9 +203,9 @@ describe('segment boundaries', () => {
     }
   });
 
-  // This test records a known defect. The duration limit applies before the
-  // merge, so two short runs of one song are discarded. A merge before the
-  // duration limit decreased accuracy; see ml/CHANGELOG.md.
+  // This test records a known defect. The duration limit applies before
+  // the merge, so two short runs of one song are discarded. A merge before
+  // the duration limit decreased accuracy; see ml/CHANGELOG.md.
   it('discards short same-song runs instead of merging them (known defect)', () => {
     const windows = [
       ...Array.from({ length: 5 }, (_, i) => ({ startTime: i, endTime: i + 1, label: 'Song A', confidence: 0.9 })),
@@ -238,7 +239,7 @@ describe('per-label scoring fairness', () => {
   });
 
   // This test records a known defect. It does not approve of it. Three
-  // corrections failed; see ml/CHANGELOG.md. The test fixes the current
+  // corrections failed; see ml/CHANGELOG.md. The test pins the current
   // behaviour, so a future correction has a baseline to change.
   it('selects a label with more training windows too often (known defect)', () => {
     // Both songs use one distribution, so a correct scorer selects each song
@@ -290,10 +291,10 @@ describe('per-label scoring fairness', () => {
 });
 
 describe('anchor confidence scale', () => {
-  // This test records a known defect. An anchor window keeps a raw margin of
-  // 0.15 to 0.3. A linked window gets 0.5. `minSegmentConfidence` can therefore
-  // discard the segment with the better evidence. One shared scale decreased
-  // accuracy; see ml/CHANGELOG.md.
+  // This test records a known defect. An anchor window keeps a raw margin
+  // of 0.15 to 0.3. A linked window gets 0.5. `minSegmentConfidence` can
+  // therefore discard the segment with the better evidence. One shared scale
+  // decreased accuracy; see ml/CHANGELOG.md.
   it('discards an anchor run that a linked run survives (known defect)', () => {
     const mk = (n: number, confidence: number, t0: number) => Array.from({ length: n }, (_, i) => ({
       startTime: t0 + i, endTime: t0 + i + 1, label: 'Song A', confidence
@@ -311,8 +312,8 @@ describe('anchor confidence scale', () => {
 describe('loadModel', () => {
   it('rejects a model trained against a different feature set', () => {
     // An 18-feature model loaded without an error before. It then returned
-    // __none__ for every window, because a 25-feature vector normalized against
-    // 18 constants gives NaN, and every NaN comparison is false.
+    // __none__ for every window, because a 25-feature vector normalized
+    // against 18 constants gives NaN, and every NaN comparison is false.
     const stalePath = path.join(mkdtempSync(path.join(tmpdir(), 'jamcoda-model-')), 'stale.json');
     writeFileSync(stalePath, JSON.stringify({
       modelType: 'knn-song-segmenter',
@@ -345,8 +346,8 @@ describe('loadModel', () => {
 
     const loaded = loadModel(modelPath);
     assert.equal(loaded.featureNames.length, 25);
-    // The model stores the resolved config, so a change to a default does not
-    // change the behaviour of this model.
+    // The model stores the resolved config, so a change to a default does
+    // not change the behaviour of this model.
     assert.equal(loaded.config.decoder, 'anchor');
     assert.equal(loaded.config.scoreMode, 'min');
     assert.equal(loaded.config.featureScaling, 'minmax');

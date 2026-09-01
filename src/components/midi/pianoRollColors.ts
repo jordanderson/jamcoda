@@ -1,8 +1,8 @@
 /**
  * Colour and label helpers for the piano roll's overlay layers.
  *
- * Song colours are derived from the name so the same song keeps its colour
- * across files and across the annotation, timeline and prediction rows.
+ * Song colours are derived from the name, so the same song keeps its colour
+ * across files and across the annotation, timeline, and prediction rows.
  */
 
 function hashString(value: string): number {
@@ -44,7 +44,7 @@ export function stringToPredictionTimelineColor(
  * Label positions inside a timeline chip.
  *
  * A chip can be thousands of pixels wide, so the label repeats along it and
- * stays readable wherever the roll happens to be scrolled.
+ * stays readable wherever the roll is scrolled.
  */
 export function buildRepeatingLabelOffsets(widthPx: number): number[] {
   const offsets: number[] = []

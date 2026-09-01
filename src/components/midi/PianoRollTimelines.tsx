@@ -10,12 +10,12 @@ import {
 import type { RollAnnotation, RollIgnoredSection, RollPrediction } from './pianoRollTypes'
 
 /**
- * The three chip rows below the notes: annotations, predictions and ignored
+ * The three chip rows below the notes: annotations, predictions, and ignored
  * sections.
  *
- * Each row is `memo`'d. A chip repeats its label once per 1000px, plus resize
- * handles and a delete button per label for annotations, and none of it
- * depends on the playhead -- so keeping it out of the per-frame render is what
+ * Each row is `memo`'d. A chip repeats its label once per 1000px, plus
+ * resize handles and a delete button per label for annotations. None of it
+ * depends on the playhead, so keeping it out of the per-frame render is what
  * stops playback stuttering on a long recording.
  */
 

@@ -1,29 +1,30 @@
 import type { JmxBookmark, JmxMetadata, JmxSkip } from '../types/index';
 
 /**
- * Lightweight parser for Jamcorder JMX meta events embedded in a Standard MIDI
- * File. Extracts the fields this app needs for reliable sync:
+ * Lightweight parser for Jamcorder JMX meta events embedded in a Standard
+ * MIDI File. Extracts the fields this app needs for reliable sync:
  *
- * - `assetUuid` from `jmxStoneHdr` (stable asset identity recommended by the
- *   official JMX spec as the sync key, vs. path/filename which can change).
+ * - `assetUuid` from `jmxStoneHdr` (stable asset identity recommended by
+ *   the official JMX spec as the sync key; path and filename can change).
  * - `time` from `jmxAsset` (authoritative local recording date).
- * - `totalMillis` / `totalNotes` / `fileOffset` from `jmxEof` (silence-compressed
- *   duration, note count, and the byte offset of the renewable trailer, used for
- *   incremental re-sync and for recognising empty recordings).
- * - `bookmarks` from `jmxBookmark` (user-triggered passage markers), each with
- *   its position on the silence-compressed playback timeline in seconds.
- * - `skips` from `jmxSkip` (wall-clock silence omitted from the timeline), each
- *   with its omitted duration and playback position. Silence gaps are far more
- *   common than bookmarks and can hint at song/session boundaries.
+ * - `totalMillis`, `totalNotes`, `fileOffset` from `jmxEof` (silence-
+ *   compressed duration, note count, and the byte offset of the renewable
+ *   trailer for incremental re-sync and for recognising empty recordings).
+ * - `bookmarks` from `jmxBookmark` (user-triggered passage markers) with
+ *   their position on the silence-compressed playback timeline in seconds.
+ * - `skips` from `jmxSkip` (wall-clock silence omitted from the timeline)
+ *   with their omitted duration and playback position. Silence gaps are
+ *   far more common than bookmarks and can hint at song or session
+ *   boundaries.
  *
- * Returns an empty object for non-JMX or malformed files rather than throwing,
- * so callers can degrade gracefully.
+ * Returns an empty object for non-JMX or malformed files rather than
+ * throwing, so callers can degrade gracefully.
  *
- * Playback position: JMX writes one millisecond per SMF delta tick (458 ticks
- * per quarter note at 458000 microseconds per quarter note), and the playback
- * timeline is the sum of delta-times with `jmxSkip` silence compressed out.
- * That is the same coordinate system the app's annotations use, so a bookmark's
- * position here maps directly onto note/annotation times.
+ * Playback position: JMX writes one millisecond per SMF delta tick (458
+ * ticks per quarter note at 458000 microseconds per quarter note), and
+ * the playback timeline is the sum of delta-times with `jmxSkip` silence
+ * compressed out. That is the same coordinate system the app's annotations
+ * use, so a bookmark's position maps directly onto note/annotation times.
  */
 export function parseJmxMetadata(buffer: Buffer): JmxMetadata {
   const meta: JmxMetadata = {};

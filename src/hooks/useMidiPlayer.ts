@@ -15,9 +15,9 @@ interface PlayerState {
   currentTime: number
   duration: number
   /**
-   * Mirrors `sequenceRef` for rendering. Held in state rather than read off the
-   * ref so the render output is a pure function of the state, and a file switch
-   * cannot paint one file's notes against another's playback position.
+   * Mirrors `sequenceRef` for rendering. Held in state rather than read off
+   * the ref, so the render output is a pure function of the state, and a file
+   * switch cannot paint one file's notes against another's playback position.
    */
   sequence: NoteSequence | null
 }
@@ -48,8 +48,9 @@ interface ActivePlayback {
  * Local MIDI playback controller.
  *
  * Built on `PianoSampler` (Web Audio) since dropping `@magenta/music`. All
- * notes sound as grand piano, which is the only instrument the sampler loads
- * -- previously this was enforced by rewriting each note's program number.
+ * notes sound as grand piano, which is the only instrument the sampler
+ * loads. Previously this was enforced by rewriting each note's program
+ * number.
  *
  * Supports full-track play, segment play, pause/resume, stop, and seek.
  */
@@ -62,9 +63,10 @@ export function useMidiPlayer(): UseMidiPlayerResult {
   const resumeFromRef = useRef<number>(0)
   /**
    * Bumped by every halt and captured by `beginPlayback` before it awaits.
-   * Starting playback is asynchronous (resume the AudioContext, load samples);
-   * comparing generations lets a stop or pause issued during that window cancel
-   * a start that has not landed yet, instead of it running on to play anyway.
+   * Starting playback is asynchronous (resume the AudioContext, load
+   * samples). Comparing generations lets a stop or pause issued during that
+   * window cancel a start that has not landed yet, instead of it running on
+   * to play anyway.
    */
   const playbackGenerationRef = useRef(0)
   /** True while a `beginPlayback` is awaiting samples. */
@@ -73,9 +75,10 @@ export function useMidiPlayer(): UseMidiPlayerResult {
    * Mirrors `state.isLoaded` for the guards below.
    *
    * A caller typically does `await loadMidi(blob)` then immediately
-   * `playSegment(...)` inside one handler. Reading `state.isLoaded` there sees
-   * the value captured when the handler's closure was created -- still false --
-   * so the play call silently no-ops and the first click does nothing.
+   * `playSegment(...)` inside one handler. Reading `state.isLoaded` there
+   * sees the value captured when the handler's closure was created (still
+   * false), so the play call silently no-ops and the first click does
+   * nothing.
    */
   const isLoadedRef = useRef(false)
 
@@ -266,8 +269,8 @@ export function useMidiPlayer(): UseMidiPlayerResult {
   const pause = useCallback(() => {
     const playback = playbackRef.current
     if (!playback) {
-      // Nothing is sounding yet, but a start may be loading samples: cancel it
-      // so the click is not swallowed and audio does not begin afterwards.
+      // Nothing is sounding yet, but a start may be loading samples. Cancel
+      // it so the click is not swallowed and audio does not begin afterwards.
       if (!isStartPendingRef.current) return
       haltPlayback()
       setState((prev) => ({ ...prev, isPlaying: false }))
@@ -294,8 +297,8 @@ export function useMidiPlayer(): UseMidiPlayerResult {
     const sequence = sequenceRef.current
     if (!sequence || !isLoadedRef.current) return
 
-    // A start still loading samples counts as playing: seeking during it moves
-    // the playhead and keeps going rather than cancelling playback.
+    // A start still loading samples counts as playing. Seeking during it
+    // moves the playhead and keeps going rather than cancelling playback.
     const wasPlaying = playbackRef.current !== null || isStartPendingRef.current
     const target = Math.min(Math.max(0, time), sequence.totalTime)
 

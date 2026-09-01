@@ -6,9 +6,9 @@ import { usePianoRollFollow } from './usePianoRollFollow'
  * The follow state machine across its transitions: stopping, starting again,
  * seeking while paused, and scrolling by hand.
  *
- * jsdom does no layout, so the container's metrics are stubbed. It also emits
- * no scroll events of its own, which lets each test say explicitly whether a
- * scroll came from the app or from the user.
+ * jsdom does no layout, so the container's metrics are stubbed. It also
+ * emits no scroll events of its own, which lets each test say explicitly
+ * whether a scroll came from the app or from the user.
  */
 
 const CLIENT_WIDTH = 1000
@@ -124,7 +124,7 @@ describe('usePianoRollFollow', () => {
   })
 
   it('animates a seek made while paused', () => {
-    // Paused there are no playback frames to ride on, so the input change
+    // Paused, there are no playback frames to ride on, so the input change
     // itself must wake the loop.
     const { rerender } = render({ playheadX: 0, isPlaying: false, enabled: true })
     runFrames(5)
@@ -140,8 +140,9 @@ describe('usePianoRollFollow', () => {
     runFrames()
     expect(container.scrollLeft).toBeCloseTo(5000 - ANCHOR_PX, 0)
 
-    // Parked means nothing reclaims the scroll, so the page stays idle between
-    // seeks rather than holding a frame callback open for the whole session.
+    // Parked means nothing reclaims the scroll, so the page stays idle
+    // between seeks rather than holding a frame callback open for the whole
+    // session.
     container.scrollLeft = 42
     runFrames(60)
     expect(container.scrollLeft).toBe(42)
@@ -151,8 +152,8 @@ describe('usePianoRollFollow', () => {
     render({ playheadX: 5000, isPlaying: true, enabled: true })
     runFrames()
 
-    // No prop change: the running loop must pull the view back on its own,
-    // which is what keeps playback tracked between renders.
+    // No prop change: the running loop must pull the view back on its own.
+    // That is what keeps playback tracked between renders.
     container.scrollLeft = 0
     runFrames()
     expect(container.scrollLeft).toBeCloseTo(5000 - ANCHOR_PX, 0)
@@ -219,8 +220,8 @@ describe('usePianoRollFollow', () => {
     render({ playheadX: 0, isPlaying: false, enabled: true })
     runFrames()
 
-    // Wheeling at the left edge scrolls nothing, so no scroll event follows and
-    // follow stays on rather than being switched off for nothing.
+    // Wheeling at the left edge scrolls nothing, so no scroll event follows.
+    // Follow stays on rather than being switched off for nothing.
     act(() => {
       container.dispatchEvent(new Event('wheel'))
     })
@@ -307,7 +308,7 @@ describe('usePianoRollFollow', () => {
     runFrames()
 
     // Once the user takes over, their scroll position must survive the next
-    // frame -- otherwise scrolling feels locked.
+    // frame. Otherwise scrolling feels locked.
     rerender({ playheadX: 5000, isPlaying: true, enabled: false })
     container.scrollLeft = 100
     runFrames(60)

@@ -8,11 +8,11 @@ export function useSyncProgress(syncId: string | null, enabled: boolean) {
     enabled: enabled && !!syncId,
     refetchInterval: (query) => {
       const data = query.state.data as any;
-      // Stop polling when completed or errored
+      // Stop polling when completed or errored.
       if (!data || data.status === 'completed' || data.status === 'error') {
         return false;
       }
-      return 500; // Poll every 500ms during sync
+      return 500; // Poll every 500ms during sync.
     }
   });
 }

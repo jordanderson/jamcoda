@@ -7,10 +7,10 @@ import type { JmxBookmark, JmxSkip } from '../types';
 
 /**
  * Backfill `files.bookmarks_json` and `files.skips_json` for files synced
- * before JMX boundary parsing existed. Sync now records both on every
- * new/re-synced file; this is a one-time pass over the already-synced library
- * so passage markers and silence gaps on older recordings surface without a
- * device re-sync. Safe to re-run.
+ * before JMX boundary parsing existed. Sync now records both on every new
+ * or re-synced file. This is a one-time pass over the already-synced
+ * library so older recordings expose passage markers and silence gaps
+ * without a device re-sync. Safe to re-run.
  */
 
 interface FileRow {

@@ -101,9 +101,9 @@ describe('countModifiedSegments', () => {
   });
 
   /*
-   * Why this exists rather than comparing array lengths: splitting one segment
-   * yields two, so `after.length - before.length` is +1 for a segment that was
-   * very much modified, and the old `Math.max(0, ...)` reported 0.
+   * Why this exists rather than comparing array lengths: splitting one
+   * segment yields two, so `after.length - before.length` is +1 for a segment
+   * that was modified, and the old `Math.max(0, ...)` reported 0.
    */
   it('counts a split segment as modified even though the count grew', () => {
     const before = [segment(0, 60)];

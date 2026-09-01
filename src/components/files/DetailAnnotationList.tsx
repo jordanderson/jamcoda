@@ -33,8 +33,8 @@ const GAP_ACTION_TITLE: Record<GapAction, string> = {
 
 /**
  * The annotation list below the roll. `memo`'d because `DetailPage` re-renders
- * every animation frame during playback (its time readout depends on
- * `currentTime`) and this is the largest subtree that does not depend on the
+ * every animation frame during playback. Its time readout depends on
+ * `currentTime`, and this is the largest subtree that does not depend on the
  * playhead.
  */
 export const DetailAnnotationList = memo(function DetailAnnotationList({

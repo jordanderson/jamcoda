@@ -84,7 +84,7 @@ The 1184s decrease in predicted time is the boundary correction. It removes
 about 3s from each of 364 segments. Some of that time covered real annotations,
 which is why recall decreases more than precision increases.
 
-The value of this release is correct output and loud failures, not accuracy.
+The value of this release is correct output and clear error reporting, not accuracy.
 
 ### Failed experiments
 
@@ -112,7 +112,7 @@ The bias is real. Three corrections failed:
    it corrected the controlled test from 81% to 51%. On real data it gave F1
    23.37% and window accuracy 17.18%. Spacing does not separate "few
    prototypes" from "varied class". `__none__` is a varied class, so
-   calibration gave it a large advantage and it absorbed the timeline.
+   calibration gave it a large advantage and it covered most of the timeline.
 
 Conclusion: sqrt(support) budgeting works as a prior, because a well-annotated
 song is both more frequent and more varied. The prototype advantage of
@@ -173,7 +173,7 @@ No accuracy delta (hints only). Two workflow wins: (1) the ~30s+ silence gaps
 now keep predictions from merging across genuine pauses/sessions, and (2) the
 piano roll surfaces device boundaries during annotation. The dominant failure
 mode remains: most song changes have *no* large gap (rapid transitions), so the
-ML model still does the heavy lifting.
+ML model still does most of the work.
 
 ---
 
@@ -224,8 +224,8 @@ whether the device also stores *section names*; it does not (see below).
 
 No accuracy delta (bookmarks do not change the model). The win is workflow:
 device-marked passages now structure the review queue automatically. Given how
-sparse bookmarks are, this is groundwork — the signal will matter more as the
-player uses the trigger regularly.
+sparse bookmarks are, the signal will matter more as the player uses the
+trigger regularly.
 
 ### Known limitations
 
@@ -256,7 +256,7 @@ problems in practice:
 
 - **Condensed prototype representation.** Instead of retaining every training
   window, each label keeps a small set of prototype vectors (budget scales
-  with √support so rare songs are not drowned out; `__none__` gets a hard
+  with √support so rare songs still get prototypes; `__none__` gets a hard
   cap). 73,164 windows → 1,129 prototypes. Model file 36 MB → ~0.7 MB, eval
   runs in seconds.
 - **Richer features (18 → 25).** Added `velocity_std`, `duration_std`,

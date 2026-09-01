@@ -9,6 +9,7 @@ import {
   PredictionImportError,
   runPredictionImport
 } from '../services/predictionImport';
+import { getRebuildStatus } from '../services/rebuildStatus';
 import {
   evaluateLeaveOneOut,
   loadAnnotatedMidiFiles,
@@ -19,6 +20,14 @@ import {
 } from '../../ml/songSegmentation';
 
 const router = express.Router();
+
+const DEFAULT_PREDICT_CONFIG: PredictConfig = {
+  minWindowConfidence: 0.45,
+  smoothingWindows: 5,
+  minSegmentSec: 8,
+  minSegmentConfidence: 0.3,
+  mergeGapSec: 3
+};
 
 function toNumber(value: unknown): number {
   if (typeof value === 'number') return value;
@@ -360,11 +369,11 @@ router.post('/run', async (req: Request, res: Response) => {
     }
 
     const config: PredictConfig = {
-      minWindowConfidence: clamp(parseOptionalNumber(req.body.minWindowConfidence) ?? 0.45, 0, 1),
-      smoothingWindows: Math.max(1, Math.floor(parseOptionalNumber(req.body.smoothingWindows) ?? 5)),
-      minSegmentSec: Math.max(0, parseOptionalNumber(req.body.minSegmentSec) ?? 8),
-      minSegmentConfidence: clamp(parseOptionalNumber(req.body.minSegmentConfidence) ?? 0.3, 0, 1),
-      mergeGapSec: Math.max(0, parseOptionalNumber(req.body.mergeGapSec) ?? 3)
+      minWindowConfidence: clamp(parseOptionalNumber(req.body.minWindowConfidence) ?? DEFAULT_PREDICT_CONFIG.minWindowConfidence, 0, 1),
+      smoothingWindows: Math.max(1, Math.floor(parseOptionalNumber(req.body.smoothingWindows) ?? DEFAULT_PREDICT_CONFIG.smoothingWindows)),
+      minSegmentSec: Math.max(0, parseOptionalNumber(req.body.minSegmentSec) ?? DEFAULT_PREDICT_CONFIG.minSegmentSec),
+      minSegmentConfidence: clamp(parseOptionalNumber(req.body.minSegmentConfidence) ?? DEFAULT_PREDICT_CONFIG.minSegmentConfidence, 0, 1),
+      mergeGapSec: Math.max(0, parseOptionalNumber(req.body.mergeGapSec) ?? DEFAULT_PREDICT_CONFIG.mergeGapSec)
     };
     const clearUnpromoted = parseOptionalBoolean(req.body.clearUnpromoted) ?? true;
     const minSkipSplitSec = Math.max(0, parseOptionalNumber(req.body.minSkipSplitSec) ?? 30);
@@ -451,6 +460,7 @@ router.post('/rebuild-model', async (req: Request, res: Response) => {
       linkConfidence: clamp(parseOptionalNumber(req.body.linkConfidence) ?? 0.5, 0, 1)
     };
     const includeEvaluation = parseOptionalBoolean(req.body.includeEvaluation) ?? false;
+    const reRunUnsure = parseOptionalBoolean(req.body.reRunUnsure) ?? false;
 
     if (!(config.windowSec > 0 && config.stepSec > 0)) {
       return res.status(400).json({ error: 'windowSec and stepSec must be > 0' });
@@ -466,6 +476,43 @@ router.post('/rebuild-model', async (req: Request, res: Response) => {
     const annotationCount = files.reduce((sum, file) => sum + file.annotations.length, 0);
     const { model, samplesByFile } = trainModel(files, config);
     saveModel(model, modelPath);
+
+    const reRunResults: Array<{
+      fileId: number;
+      filename: string;
+      clearedCount: number;
+      insertedCount: number;
+      segmentCount: number;
+    }> = [];
+    const reRunErrors: Array<{ fileId: number; error: string }> = [];
+    let reRunFileCount = 0;
+    if (reRunUnsure) {
+      const eligibleFileIds = PredictionReviewModel.findFileIdsWithOnlyUnsureUnpromoted();
+      reRunFileCount = eligibleFileIds.length;
+      for (const fileId of eligibleFileIds) {
+        try {
+          const result = runPredictionImport({
+            fileId,
+            modelPath,
+            config: { ...DEFAULT_PREDICT_CONFIG },
+            clearUnpromoted: true,
+            rootDir
+          });
+          reRunResults.push({
+            fileId: result.fileId,
+            filename: result.filename,
+            clearedCount: result.clearedCount,
+            insertedCount: result.insertedCount,
+            segmentCount: result.segments.length
+          });
+        } catch (error) {
+          reRunErrors.push({
+            fileId,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
+    }
 
     let evaluation:
       | {
@@ -491,11 +538,25 @@ router.post('/rebuild-model', async (req: Request, res: Response) => {
       annotationsUsed: annotationCount,
       trainingSummary: model.trainingSummary,
       labels: model.labels,
-      evaluation
+      evaluation,
+      reRunUnsure,
+      reRunFileCount,
+      reRunResults,
+      reRunErrors
     });
   } catch (error) {
     console.error('Error rebuilding model:', error);
     res.status(500).json({ error: 'Failed to rebuild model' });
+  }
+});
+
+router.get('/rebuild-status', async (_req: Request, res: Response) => {
+  try {
+    const modelPath = path.resolve(process.cwd(), 'data/ml/model.json');
+    res.json(getRebuildStatus(modelPath));
+  } catch (error) {
+    console.error('Error getting rebuild status:', error);
+    res.status(500).json({ error: 'Failed to get rebuild status' });
   }
 });
 

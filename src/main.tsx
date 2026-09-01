@@ -7,8 +7,8 @@ import App from './App.tsx'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes - MIDI file list won't change often
-      gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache
+      staleTime: 5 * 60 * 1000, // 5 minutes: the MIDI file list does not change often.
+      gcTime: 10 * 60 * 1000, // 10 minutes in cache.
       retry: 2,
     },
   },

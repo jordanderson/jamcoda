@@ -49,8 +49,8 @@ before running `npm install` on a different version.
 
 - Shared: `core/` -- pure, isomorphic domain code with no I/O. It is typechecked
   against both the DOM and Node libs (it appears in `tsconfig.json` *and*
-  `tsconfig.server.json`), which is what keeps it safe for both. `core/cli/` is
-  the one deliberately Node-only corner.
+  `tsconfig.server.json`), which keeps it safe for both. `core/cli/` is the one
+  deliberately Node-only part.
 - Frontend: React + Vite + hash routing.
 - Local backend: Express on `http://localhost:3001`.
 - External device API: Jamcorder at `http://jamcorder.local` (default; override with `JAMCORDER_URL`).
@@ -85,16 +85,20 @@ Core frontend routes:
 - The prediction pipeline has one implementation,
   `server/services/predictionImport.ts`. The API route and `ml:predict-import`
   both call it; neither reimplements exclusion, inserts, or schema.
+- The model-staleness badge is read-only: `GET /api/prediction-reviews/rebuild-status`
+  compares annotation `updated_at` against the saved model's `createdAt` and the
+  current unique song names against the model's labels. It never trains, and it
+  must clear after a rebuild.
 - Playback is normalized to grand piano (`src/audio/pianoSampler.ts` loads no
   other instrument), and soundfont cache worker stores piano assets only.
 - Sync uses a cheap filesystem walk over the detailed file listing (real sizes → skip-unchanged), falls back to the library API when the walk fails, skips unchanged assets by size, and records a high-water mark so a library-API fallback is fast. `POST /api/sync/start?full=1` forces a full pass. The library API is crash-prone on low-power firmware, so it is never the primary discovery source.
 - A device file that is smaller than the synced copy is skipped with a warning (device-side truncation hazard); do not overwrite local data with it.
-- A *new* device asset with no notes is not imported at all — skipped on reported size before download, and again on the JMX trailer's `totalNotes`/`totalMillis` after. The device produces these in bursts (hundreds in a minute); importing them buries real recordings. Never infer emptiness from a local parse failure. See `API_NOTES.md`.
+- A *new* device asset with no notes is not imported at all — skipped on reported size before download, and again on the JMX trailer's `totalNotes`/`totalMillis` after. The device produces these in bursts (hundreds in a minute); importing them hides real recordings. Never infer emptiness from a local parse failure. See `API_NOTES.md`.
 - The Jamcorder firmware is resource-constrained and may drop requests or crash; the sync client uses small library pages, generous inter-page/inter-download delays, and per-page/per-file retries.
 - Piano roll "follow playback" has one rule, in
   `src/components/midi/pianoRollFollow.ts`: ease the viewport so the playhead
   sits at `FOLLOW_ANCHOR` of the visible width, clamped to the scroll range.
-  Stop, restart, seek and re-enable all fall out of that target. Do not add
+  Stop, restart, seek and re-enable all follow from that target. Do not add
   per-playback-state branches; that is how the rules previously disagreed at
   every transition.
 - A user scroll needs a scroll-producing *input* (wheel, touch drag, scroll key,
@@ -113,7 +117,10 @@ Core frontend routes:
 
 ## Typical Workflow Changes
 
-- New annotations or song rename should be followed by model rebuild.
+- New annotations or song rename should be followed by model rebuild. The
+  sidebar's `Rebuild Model` button shows a badge (annotations created or edited
+  after the model's `createdAt`, plus song names the model has never seen) when
+  a rebuild would help; it is a hint, never an automatic trigger.
 - If user reports `no such table: prediction_reviews`, run `npm run db:migrate`.
 - If CLI prediction output does not appear in UI, use `Run Predictions` in detail page or `ml:predict-import`.
 - If predictions are over-fragmented, prefer merge and threshold tuning over manual DB edits.

@@ -120,8 +120,8 @@ export function DetailPage({ fileId }: DetailPageProps) {
   // ---------------------------------------------------------------------------
   // Derived data
   //
-  // All memoised: this component re-renders every animation frame during
-  // playback (the time readout depends on `currentTime`), so an inline array
+  // All memoised. This component re-renders every animation frame during
+  // playback (the time readout depends on `currentTime`). An inline array
   // would be rebuilt sixty times a second and would hand a fresh identity to
   // children that could otherwise be skipped.
   // ---------------------------------------------------------------------------
@@ -183,7 +183,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
     ) ?? null;
   }, [reviewListResponse?.reviews, selectedPredictionReviewId]);
 
-  /** The sequence's own end, when it is usable as a clamp for overlay times. */
+  /** The sequence's own end, used as a clamp for overlay times when valid. */
   const timelineEndLimit = useMemo(() => {
     const total = sequence?.totalTime;
     return typeof total === 'number' && Number.isFinite(total) && total > 0
@@ -275,9 +275,9 @@ export function DetailPage({ fileId }: DetailPageProps) {
   /**
    * Load the downloaded MIDI into the player.
    *
-   * Keyed on the blob, not on `isLoaded`: `loadMidi` reports a parse failure by
-   * leaving `isLoaded` false rather than rejecting, so retrying on that would
-   * re-parse an unreadable file on every render. Recording the blob we
+   * Keyed on the blob, not on `isLoaded`. `loadMidi` reports a parse failure
+   * by leaving `isLoaded` false rather than rejecting, so retrying on that
+   * would re-parse an unreadable file on every render. Recording the blob we
    * attempted tries each one once.
    */
   const attemptedBlobRef = useRef<Blob | null>(null);
@@ -294,7 +294,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
    * Honour a `?time=` parameter once the player is ready for this file.
    *
    * Guarded on `loadedFileId`, not bare `isLoaded`, so a timer left from the
-   * previous file cannot seek into this one; clearing it on unmount keeps a
+   * previous file cannot seek into this one. Clearing it on unmount keeps a
    * fast navigation from seeking a torn-down player.
    */
   useEffect(() => {
@@ -318,9 +318,9 @@ export function DetailPage({ fileId }: DetailPageProps) {
   }, [isLoaded, loadedFileId, fileId, handleSeek]);
 
   /**
-   * Reset per-file view state when navigating to another recording:
-   * checkpoints, the follow toggle, region-select mode and the feedback banners
-   * all describe the file that was open, not the one being opened.
+   * Reset per-file view state when navigating to another recording.
+   * Checkpoints, the follow toggle, region-select mode, and the feedback
+   * banners all describe the file that was open, not the one being opened.
    */
   useEffect(() => {
     setStartCheckpoint(null);
@@ -359,8 +359,8 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
   /**
    * Latest values for the keyboard handler, read through a ref so the window
-   * listener is subscribed once. Depending on `currentTime` directly would tear
-   * it down and re-add it on every animation frame during playback.
+   * listener is subscribed once. Depending on `currentTime` directly would
+   * tear it down and re-add it on every animation frame during playback.
    */
   const shortcutsRef = useRef({
     isLoaded,
@@ -385,7 +385,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Not while typing, and not while a modal owns the screen -- otherwise
+      // Not while typing, and not while a modal owns the screen. Otherwise
       // these would act on the piano roll hidden behind it.
       const target = e.target;
       if (
@@ -406,7 +406,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
       switch (e.key.toLowerCase()) {
         case 'p':
           if (!shortcuts.isLoaded) return;
-          // The space bar already scrolls the page; P is the unambiguous binding.
+          // Space already scrolls the page. P is the unambiguous binding.
           e.preventDefault();
           shortcuts.handlePlayPause();
           return;
@@ -875,12 +875,12 @@ export function DetailPage({ fileId }: DetailPageProps) {
   const showErrorMessage = showError instanceof Error
     ? showError.message
     : (typeof showError === 'string' ? showError : 'Failed to load MIDI file');
-  // A failed parse leaves `isLoaded` false for good, so the spinner cannot wait
+  // A failed parse leaves `isLoaded` false for good. The spinner cannot wait
   // on it; the error banner is the terminal state there.
   const loadingMidi = !showError && (isDownloading || (!!midiBlob && (!isLoaded || loadedFileId !== fileId)));
   const rollReady = !loadingMidi && isLoaded && !!sequence && loadedFileId === fileId;
   const pendingReviewCount = (reviewListResponse?.reviews ?? []).filter(
-    (review) => review.status === 'unsure' || review.status === 'invalid'
+    (review) => review.status === 'unsure'
   ).length;
   const pendingReviewBadge = pendingReviewCount > 99 ? '99+' : String(pendingReviewCount);
   const isPredictionActionPending = (
@@ -1029,8 +1029,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
             {/* First Row: Title and Main Controls */}
             <div className="flex justify-between items-center mb-3">
               <div className="flex items-center gap-4">
-                <h2 className="text-lg font-bold text-gray-900">Piano Roll</h2>
-
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handlePlayPause}

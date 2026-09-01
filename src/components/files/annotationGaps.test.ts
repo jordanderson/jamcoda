@@ -89,7 +89,7 @@ describe('getGapAction', () => {
   })
 
   it('treats a sub-millisecond inset as flush with the edge', () => {
-    // Times are stored to the millisecond; an exact comparison would call this
+    // Times are stored to the millisecond. An exact comparison would call this
     // interior and offer a split leaving an empty segment.
     expect(getGapAction({ startTime: 100.0005, endTime: 130, durationSec: 30 }, annotation))
       .toBe('trim-start')

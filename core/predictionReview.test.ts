@@ -64,10 +64,10 @@ describe('resolveReviewFields', () => {
 
   /*
    * The regression this rule was consolidated for. `update()` writes
-   * `reviewed_*` and `status` independently, so a row can carry reviewed times
-   * while still being `unsure`. The UI and the promotion path both ignored
-   * those values, but a `COALESCE` in the ignored-section cleanup query used
-   * them -- so the two disagreed about which range a row occupied.
+   * `reviewed_*` and `status` independently, so a row can carry reviewed
+   * times while still being `unsure`. The UI and the promotion path both
+   * ignored those values, but a `COALESCE` in the ignored-section cleanup
+   * query used them, so the two disagreed about which range a row occupied.
    */
   const nonEdited: PredictionReviewStatus[] = ['unsure', 'confirmed', 'invalid'];
 

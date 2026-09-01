@@ -98,9 +98,24 @@ export function useRunPredictionForFile() {
 }
 
 export function useRebuildPredictionModel() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (params: RebuildPredictionModelRequest) =>
-      predictionReviewsApi.rebuildModel(params)
+      predictionReviewsApi.rebuildModel(params),
+    onSuccess: () => {
+      // A fresh model is newer than every prior annotation edit, so the
+      // staleness badge clears.
+      queryClient.invalidateQueries({ queryKey: ['rebuildStatus'] });
+    }
+  });
+}
+
+export function useRebuildStatus() {
+  return useQuery({
+    queryKey: ['rebuildStatus'],
+    queryFn: () => predictionReviewsApi.getRebuildStatus(),
+    staleTime: 15000,
+    refetchInterval: 60000
   });
 }
 

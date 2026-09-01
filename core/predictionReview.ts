@@ -5,19 +5,19 @@ import type { PredictionReview, PredictionReviewStatus } from './types';
  * values.
  *
  * A review carries both what the model predicted and what a human entered
- * while reviewing. Only a row whose status is `edited` is understood to have
- * had its values deliberately changed, so only that status reads from the
- * `reviewed_*` columns. `confirmed` means "the prediction was right as-is",
- * and therefore still resolves to the predicted values.
+ * while reviewing. Only a row whose status is `edited` has had its values
+ * deliberately changed, so only that status reads from the `reviewed_*`
+ * columns. `confirmed` means "the prediction was right as-is", so it still
+ * resolves to the predicted values.
  *
- * This rule previously existed in four places -- two React components, the
- * promotion helper, and a SQL `COALESCE` -- and the SQL copy disagreed with
- * the other three: it read `reviewed_*` whenever they were non-null,
- * regardless of status. Because `update()` writes `reviewed_*` and `status`
- * independently, a row could be left `unsure` with reviewed times set, and the
- * two rules then pointed at different time ranges for the same row. Everything
- * now derives from `resolveReviewFields` or from `RESOLVED_*_SQL` below, which
- * encode the same gating.
+ * This rule previously existed in four places: two React components, the
+ * promotion helper, and a SQL `COALESCE`. The SQL copy disagreed with the
+ * other three: it read `reviewed_*` whenever they were non-null, regardless
+ * of status. Because `update()` writes `reviewed_*` and `status`
+ * independently, a row could be left `unsure` with reviewed times set, and
+ * the two rules then pointed at different time ranges for the same row.
+ * Everything now derives from `resolveReviewFields` or from `RESOLVED_*_SQL`
+ * below, which encode the same gating.
  */
 
 export const PREDICTION_REVIEW_STATUSES: readonly PredictionReviewStatus[] = [
@@ -65,10 +65,10 @@ export function resolveReviewFields(review: PredictionReview): ResolvedReviewFie
 }
 
 /**
- * SQL expressions matching `resolveReviewFields`, for queries that must filter
- * on the resolved range without loading rows into JS.
+ * SQL expressions matching `resolveReviewFields`, for queries that must
+ * filter on the resolved range without loading rows into JS.
  *
- * Keep these in lockstep with the function above -- they are the same rule
+ * Keep these in lockstep with the function above. They are the same rule
  * expressed twice because SQLite cannot call into TypeScript.
  */
 export const RESOLVED_START_TIME_SQL =

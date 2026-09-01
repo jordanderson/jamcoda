@@ -23,12 +23,12 @@ import {
  * Predict song segments for one MIDI file and import them as prediction
  * reviews.
  *
- * The pipeline itself lives in `server/services/predictionImport`, shared with
- * `POST /api/prediction-reviews/run`. This file is now just argument parsing
- * and reporting. It previously reimplemented the whole thing against the
- * `sqlite3` CLI with interpolated SQL and its own `CREATE TABLE IF NOT EXISTS`,
- * which could leave a table shaped differently from what the migrations
- * produce; schema is now solely the migration runner's job.
+ * The pipeline lives in `server/services/predictionImport`, shared with
+ * `POST /api/prediction-reviews/run`. This file is argument parsing and
+ * reporting. It previously reimplemented the whole thing against the
+ * `sqlite3` CLI with interpolated SQL and its own `CREATE TABLE IF NOT
+ * EXISTS`, which could leave a table shaped differently from what migrations
+ * produce. Schema is now solely the migration runner's job.
  */
 
 function usage() {
@@ -80,11 +80,11 @@ async function main() {
   }
 
   // The models read through `@config/database`, which resolves the DB path
-  // from JAMCODA_DB_PATH; honour --db by setting it before connecting.
+  // from JAMCODA_DB_PATH. Honour --db by setting it before connecting.
   process.env.JAMCODA_DB_PATH = resolveDbPath();
 
-  // Also applies pending migrations, so the schema this CLI writes against is
-  // whatever the migration runner defines -- it no longer creates tables itself.
+  // Applies pending migrations too, so the schema this CLI writes against is
+  // whatever the migration runner defines. It no longer creates tables itself.
   const { appliedMigrations } = initializeDatabase();
   if (appliedMigrations.length > 0) {
     console.log(`Applied ${appliedMigrations.length} pending migration(s).`);

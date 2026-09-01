@@ -128,9 +128,20 @@ export function mergeOverlappingSameSong(id: number): Annotation | undefined {
       WHERE id = ?
     `).run(mergedStart, mergedEnd, now, current.id);
 
-    if (idsToDelete.size > 0) {
-      const ids = [...idsToDelete];
-      const placeholders = ids.map(() => '?').join(', ');
+      if (idsToDelete.size > 0) {
+        const ids = [...idsToDelete];
+        const placeholders = ids.map(() => '?').join(', ');
+        // An absorbed annotation becomes part of the survivor, so reviews
+        // promoted into it stay promoted and follow the merge. Run this
+        // before the delete: the promoted_annotation_id foreign key
+        // (ON DELETE SET NULL) would otherwise revert those reviews to
+        // unpromoted and let a re-promote create a duplicate annotation.
+      db.prepare(`
+        UPDATE prediction_reviews
+        SET promoted_annotation_id = ?, updated_at = ?
+        WHERE promoted_annotation_id IN (${placeholders})
+      `).run(current.id, now, ...ids);
+
       db.prepare(`DELETE FROM annotations WHERE id IN (${placeholders})`).run(...ids);
     }
   });
@@ -141,8 +152,23 @@ export function mergeOverlappingSameSong(id: number): Annotation | undefined {
 
 export function remove(id: number): boolean {
   const db = getDb();
-  const result = db.prepare('DELETE FROM annotations WHERE id = ?').run(id);
-  return result.changes > 0;
+  const now = Math.floor(Date.now() / 1000);
+
+  const tx = db.transaction(() => {
+    // Deleting the annotation a review was promoted into un-promotes that
+    // review. Clear the promotion here rather than rely on the foreign key:
+    // it nulls promoted_annotation_id but would leave promoted_at set for a
+    // promotion that no longer exists.
+    db.prepare(`
+      UPDATE prediction_reviews
+      SET promoted_annotation_id = NULL, promoted_at = NULL, updated_at = ?
+      WHERE promoted_annotation_id = ?
+    `).run(now, id);
+
+    return db.prepare('DELETE FROM annotations WHERE id = ?').run(id).changes > 0;
+  });
+
+  return tx();
 }
 
 export function countByFileId(fileId: number): number {
@@ -155,6 +181,17 @@ export function getUniqueSongNames(): string[] {
   const db = getDb();
   const results = db.prepare('SELECT DISTINCT song_name FROM annotations ORDER BY song_name ASC').all() as Array<{ song_name: string }>;
   return results.map(r => r.song_name);
+}
+
+/**
+ * Count annotations created or edited after a unix timestamp. `updated_at`
+ * is set on insert and edit, so this covers both new and changed rows since
+ * the model was built.
+ */
+export function countChangedSince(timestamp: number): number {
+  const db = getDb();
+  const result = db.prepare('SELECT COUNT(*) as count FROM annotations WHERE updated_at > ?').get(timestamp) as { count: number };
+  return result.count;
 }
 
 export function getTotalAnnotatedDuration(fileId: number): number {

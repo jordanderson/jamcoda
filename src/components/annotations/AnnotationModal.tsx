@@ -51,14 +51,14 @@ export function AnnotationModal({
   );
   const songSuggestions = suggestionsQuery.data?.suggestions ?? [];
 
-  // Filter suggestions based on input
+  // Filter suggestions based on the current input.
   const suggestions = inputValue.trim()
     ? existingSongNames.filter(name =>
         name.toLowerCase().includes(inputValue.toLowerCase())
       )
     : existingSongNames;
 
-  // Reset state when modal opens
+  // Reset state when the modal opens.
   useEffect(() => {
     if (isOpen) {
       setInputValue(initialSongName);
@@ -67,12 +67,12 @@ export function AnnotationModal({
       setEditEndTime(endTime);
       setActionType(initialAction);
       setSelectedIndex(0);
-      // Focus input after modal renders
+      // Focus the input once the modal has rendered.
       setTimeout(() => inputRef.current?.focus(), 10);
     }
   }, [isOpen, initialSongName, startTime, endTime, initialAction]);
 
-  // Reset selected index when suggestions change
+  // Reset the selected index when suggestions change.
   useEffect(() => {
     setSelectedIndex(0);
   }, [inputValue]);
@@ -101,7 +101,7 @@ export function AnnotationModal({
 
   const handleSelectSuggestion = (songName: string) => {
     setInputValue(songName);
-    // Submit immediately when selecting from autocomplete (only if not editing times)
+    // Submit immediately when selecting from autocomplete (only when not editing times).
     if (!allowTimeEdit && actionType === 'annotation') {
       onSubmit(songName);
     }

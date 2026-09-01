@@ -6,14 +6,14 @@ import { parseJmxMetadata } from '../utils/jmxParser';
 
 /**
  * Remove already-synced empty recordings — assets the Jamcorder opened and
- * closed without recording a note. Sync no longer imports these, but libraries
- * synced before that change carry hundreds of them (118 on 2026-02-19, 147 on
- * 2026-04-11 on the observed device).
+ * closed without recording a note. Sync no longer imports these, but
+ * libraries synced before that change carry hundreds of them (118 on
+ * 2026-02-19, 147 on 2026-04-11 on the observed device).
  *
- * Deleting is safe because there is nothing in them to lose: the device keeps
- * its own copy, and re-syncing will not bring them back. The script still
- * refuses to touch any row that has annotation work attached, and confirms each
- * file really is empty by reading its JMX trailer before unlinking it.
+ * Deleting is safe: the device keeps its own copy, re-syncing will not
+ * bring them back, and there is no annotation work to lose. The script
+ * refuses to touch rows with annotations attached and confirms each file
+ * is empty by reading its JMX trailer before unlinking.
  */
 
 interface Candidate {
@@ -63,8 +63,8 @@ function findProtectedIds(): Set<number> {
 }
 
 /**
- * Confirm the file on disk holds no music, using the device's own EOF trailer.
- * A file we cannot read or cannot parse is reported and kept — the stored
+ * Confirm a file on disk holds no music, using the device's own EOF trailer.
+ * A file we cannot read or cannot parse is reported and kept. The stored
  * duration alone is not enough to justify deleting bytes.
  */
 function verifyEmptyOnDisk(localPath: string): { empty: boolean; reason: string } {
@@ -166,7 +166,7 @@ async function main() {
     const dirs = new Set<string>();
     let filesRemoved = 0;
 
-    // Unlink first, then drop the rows in one transaction: a crash mid-run
+    // Unlink first, then drop the rows in one transaction. A crash mid-run
     // leaves rows pointing at missing files, which the next run treats as
     // "already gone from disk" and finishes cleanly.
     for (const candidate of deletable) {

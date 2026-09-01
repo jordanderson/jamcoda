@@ -14,8 +14,8 @@ interface ErrorBoundaryState {
  * the tree with a generic error view instead of a blank or broken screen.
  *
  * Per-component pages already surface their own loading/error states for
- * fetch failures; this boundary is for the cases that slip through (e.g. a
- * render-time exception). It does not catch errors in event handlers, async
+ * fetch failures. This boundary handles the cases that slip through, such as
+ * a render-time exception. It does not catch errors in event handlers, async
  * callbacks, or the boundary's own render.
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -31,8 +31,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   private handleReset = (): void => {
     // Clear the error so the subtree renders again. Hash routing re-renders
-    // whatever the current route is; navigating to browse first means a
-    // route-specific crash gives the user a usable screen.
+    // whatever the current route is. Navigating to browse first means a
+    // route-specific crash leaves the user with a usable screen.
     window.location.hash = '/browse'
     this.setState({ error: null })
   }

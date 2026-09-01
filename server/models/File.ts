@@ -37,20 +37,20 @@ export function existsByPath(jamcorderPath: string): boolean {
 /**
  * SQL predicate for rows the app should show.
  *
- * The device sometimes opens an asset and closes it without recording a note
- * (see `API_NOTES.md`); those sync down as valid but empty MIDI files. They are
- * real device state, so they stay in `files` for sync bookkeeping, but they are
- * noise for annotation and are excluded from every user-facing listing.
+ * The device sometimes opens an asset and closes it without recording a
+ * note (see `API_NOTES.md`); those sync as valid but empty MIDI files.
+ * They are real device state, so they stay in `files` for sync bookkeeping,
+ * but they are excluded from every user-facing listing as annotation noise.
  *
- * A NULL duration means "not parsed yet", not "empty" — those rows stay visible
- * so the lazy duration backfill in the by-date route still gets a chance to run.
+ * A NULL duration means "not parsed yet", not "empty". Those rows stay
+ * visible so the lazy duration backfill in the by-date route still runs.
  */
 const NOT_EMPTY_RECORDING = '(midi_duration IS NULL OR midi_duration > 0)';
 
 /**
- * Every synced row, empty recordings included. Sync relies on this: the stubs
- * must stay visible to change detection, or each pass would re-download all of
- * them and re-insert duplicate rows.
+ * Every synced row, including empty recordings. Sync needs the stubs to
+ * stay visible for change detection, or each pass would re-download them
+ * and re-insert duplicate rows.
  */
 export function findAll(): FileRecord[] {
   const db = getDb();

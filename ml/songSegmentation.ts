@@ -17,7 +17,7 @@ export const NO_SONG_LABEL = '__none__';
  *   silence_ratio                                 how much of the window is dead air
  *   pitch_span                                    register width of the phrase
  *   tempo_bpm                                     median inter-onset interval tempo
- *   regularity                                    peak autocorrelation of the onset
+ *   regularity                                    peak autocorrelation of onset
  *                                                 density (rhythmic pulse strength)
  */
 const FEATURE_NAMES = [
@@ -106,9 +106,9 @@ export interface TrainConfig {
   scoreMode?: 'min' | 'avg';
   /**
    * 'min' mode: the number of nearest prototypes to average per label
-   * (default 1, the single nearest). A higher value prevents one prototype from
-   * deciding a label. The fit clamps this value to the smallest per-label
-   * prototype count. A value above 1 did not improve accuracy.
+   * (default 1, the single nearest). A higher value prevents one prototype
+   * from deciding a label. The fit clamps this value to the smallest
+   * per-label prototype count. A value above 1 did not improve accuracy.
    */
   scoreNeighbors?: number;
   /** Anchor-link decoder: minimum margin for an anchor seed window (default 0.15). */
@@ -124,11 +124,11 @@ export interface TrainConfig {
    * Anchor-link decoder: the minimum confidence for a linked window
    * (default 0.5).
    *
-   * Known defect: an anchor window keeps its raw margin, which is usually 0.15
-   * to 0.3. A linked window gets this higher value. `windowsToSegments` then
-   * averages the confidences, so it can discard a segment of strong anchors and
-   * keep a segment of mostly linked windows. One shared scale is the obvious
-   * correction, but it decreased accuracy. See ml/CHANGELOG.md.
+   * Known defect: an anchor window keeps its raw margin, which is usually
+   * 0.15 to 0.3. A linked window gets this higher value. `windowsToSegments`
+   * then averages the confidences, so it can discard a segment of strong
+   * anchors and keep a segment of mostly linked windows. One shared scale is
+   * the obvious correction, but it decreased accuracy. See ml/CHANGELOG.md.
    */
   linkConfidence?: number;
 }
@@ -198,7 +198,7 @@ export interface PredictConfig {
   /**
    * The width of the majority-vote smoothing window.
    *
-   * The `anchor` and `viterbi` decoders ignore this value, because they make
+   * The `anchor` and `viterbi` decoders ignore this value because they make
    * continuous runs. Applies to `smooth` only.
    */
   smoothingWindows: number;
@@ -245,8 +245,8 @@ function toNum(value: unknown): number {
 }
 
 /**
- * Resolve each optional setting to the value that the fit and the decoder use.
- * The defaults occur once, here. A saved model records these values, so a
+ * Resolve each optional setting to the value that the fit and the decoder
+ * use. Defaults are applied here. A saved model records these values, so a
  * change to a default does not change the behaviour of an existing model.
  */
 export function resolveTrainConfig(config: TrainConfig): Required<
@@ -282,7 +282,7 @@ export function resolveTrainConfig(config: TrainConfig): Required<
  *
  * Previously this shelled out to the `sqlite3` CLI, an undeclared system
  * requirement that made `ml:train` fail on a fresh clone without it. The
- * server already depends on better-sqlite3, so use that instead.
+ * server already depends on better-sqlite3, so this uses that instead.
  */
 function sqliteJsonQuery<T>(dbPath: string, sql: string): T[] {
   const db = new Database(dbPath, { readonly: true });
@@ -347,7 +347,7 @@ export function loadAnnotatedMidiFiles(dbPath: string, rootDir: string): Annotat
 export function extractNotesFromMidi(midiPath: string): NoteEvent[] {
   const sequence = parseNoteSequence(new Uint8Array(readFileSync(midiPath)));
 
-  // `core` yields absolute start/end times; the feature extractor works in
+  // `core` yields absolute start/end times. The feature extractor works in
   // `startSec`/`endSec`, so adapt here rather than in the shared module.
   return sequence.notes.map((note) => ({
     pitch: note.pitch,
@@ -708,18 +708,19 @@ function squaredDistance(a: number[], b: number[]): number {
 }
 
 /**
- * Allocate a prototype count per label. Budgets scale with sqrt(support), then
- * normalize to `prototypeBudget`. The `__none__` class has a hard cap, because
- * its window set is large and varied.
+ * Allocate a prototype count per label. Budgets scale with sqrt(support),
+ * then normalize to `prototypeBudget`. The `__none__` class has a hard cap
+ * because its window set is large and varied.
  *
- * Counts are unequal on purpose. A song with 4000 annotated windows covers more
- * material than a song with 50. Equal budgets discard that coverage: segment F1
- * fell from 48.5% to 37.4%.
+ * Counts are unequal on purpose. A song with 4000 annotated windows covers
+ * more material than a song with 50. Equal budgets discard that coverage:
+ * segment F1 fell from 48.5% to 37.4%.
  *
- * Unequal counts also cause a bias. A nearest-prototype distance decreases as a
- * label gains prototypes, so a well-annotated song wins comparisons it must
- * lose. The bias is real and unfixed. Read the v2.3 entry in ml/CHANGELOG.md
- * before you try to correct it. Three corrections failed.
+ * Unequal counts also cause a bias. A nearest-prototype distance decreases
+ * as a label gains prototypes, so a well-annotated song beats its rivals in
+ * comparisons it should lose. The bias is real and unfixed. Read the v2.3
+ * entry in ml/CHANGELOG.md before you try to correct it. Three corrections
+ * failed.
  */
 function allocatePrototypeBudgets(
   support: Map<number, number>,
@@ -747,8 +748,8 @@ function allocatePrototypeBudgets(
 }
 
 /**
- * Estimate the exp(-d/sigma) kernel scale from the training distribution: the
- * median distance from a sample to its nearest prototype. A deterministic
+ * Estimate the exp(-d/sigma) kernel scale from the training distribution:
+ * the median distance from a sample to its nearest prototype. A deterministic
  * subsample keeps this cheap for leave-one-out folds.
  */
 function estimateKernelScale(
@@ -812,8 +813,8 @@ function buildPrototypesFromGroups(
     prototypeCounts[labelIndex] = sampled.length;
   }
 
-  // Score every label on the same number of neighbours. More neighbours give a
-  // label an advantage, so the smallest per-label count sets the limit.
+  // Score every label on the same number of neighbours. More neighbours give
+  // a label an advantage, so the smallest per-label count sets the limit.
   const smallestCount = prototypeCounts.reduce(
     (min, count) => (count > 0 && count < min ? count : min),
     Number.POSITIVE_INFINITY
@@ -893,9 +894,9 @@ function fitModelFromSamples(
     modelType: 'knn-song-segmenter',
     version: 2,
     createdAt: new Date().toISOString(),
-    // Save the resolved config, not the partial config from the caller. A model
-    // that omits `decoder`, `scoreMode` or `featureScaling` changes behaviour
-    // when a default changes.
+    // Save the resolved config, not the partial config from the caller. A
+    // model that omits `decoder`, `scoreMode` or `featureScaling` changes
+    // behaviour when a default changes.
     config: resolveTrainConfig(config),
     featureNames: [...FEATURE_NAMES],
     labels,
@@ -976,7 +977,7 @@ function computePrototypeScores(normalizedVector: number[], model: SongSegmentMo
   // 'min' mode: score each label by the distance to its nearest prototypes.
   // The score is negative, so a higher score is a better match.
   //
-  // Labels with more prototypes score better than they must. See
+  // Labels with more prototypes score better than they should. See
   // `allocatePrototypeBudgets` for the measurements.
   const neighbors = Math.max(1, model.scoreNeighbors ?? 1);
   const nearest: number[][] = Array.from({ length: model.labels.length }, () => []);
@@ -1014,10 +1015,11 @@ function computeLabelScores(normalizedVector: number[], model: SongSegmentModel)
   return computeKnnScores(normalizedVector, model);
 }
 
-// This file contained `predictLabelIndex`, a per-window argmax. Its confidence
-// was `max(0, best) / sum(max(0, scores))`. In 'min' score mode every score is
-// negative, so the sum was always 0 and the confidence was always 0. Its only
-// caller, leave-one-out evaluation, now uses `predictWindowsFromSamples`.
+// This file contained `predictLabelIndex`, a per-window argmax. Its
+// confidence was `max(0, best) / sum(max(0, scores))`. In 'min' score mode
+// every score is negative, so the sum was always 0 and the confidence was
+// always 0. Its only caller, leave-one-out evaluation, now uses
+// `predictWindowsFromSamples`.
 
 function scoresToLogProbs(scores: number[], temperature: number): number[] {
   let maxScore = -Infinity;
@@ -1134,12 +1136,12 @@ function computeEvidence(scoresList: number[][]): WindowEvidence[] {
  * Two-pass "anchor and link" decoder.
  *
  * Pass 1 finds recognizable anchor runs: consecutive windows whose top label
- * beats the runner-up by a wide margin. These are the phrases of a song that
- * are easy to identify. Pass 2 links those anchors together by extending each
- * run across intervening windows whose evidence is weak or ambiguous -- the
- * generic vamping, left-hand-only, or warm-up passages that sit between the
- * recognizable moments. Extension stops at a strong anchor of a different
- * song (a real transition) or a strong `__none__` anchor (genuine silence).
+ * beats the runner-up by a wide margin. These are the easy-to-recognize
+ * phrases of a song. Pass 2 links those anchors by extending each run across
+ * intervening windows whose evidence is weak or ambiguous: the generic
+ * vamping, left-hand-only, or warm-up passages between recognizable moments.
+ * Extension stops at a strong anchor of a different song (a real transition)
+ * or a strong `__none__` anchor (genuine silence).
  */
 function anchorLinkDecode(
   evidence: WindowEvidence[],
@@ -1174,8 +1176,8 @@ function anchorLinkDecode(
     return true;
   };
 
-  // Pass 1: seed runs of consecutive same-label anchors. Linked windows get the
-  // run margin, or `linkConfidence` if the margin is lower.
+  // Pass 1: seed runs of consecutive same-label anchors. Linked windows get
+  // the run margin, or `linkConfidence` if the margin is lower.
   for (let i = 0; i < n; ) {
     if (!isAnchor[i]) {
       i++;
@@ -1277,10 +1279,10 @@ export function evaluateLeaveOneOut(
     let songTotal = 0;
     let songCorrect = 0;
 
-    // Measure the decoder that the app uses. This code used a per-window argmax
-    // before. That path has no anchor seeding, no linking and no `__none__`
-    // handling, so `ml:train` and `rebuild-model` reported an accuracy for a
-    // path that no caller runs, and disagreed with `ml:eval`.
+    // Measure the decoder that the app uses. This code used a per-window
+    // argmax before. That path has no anchor seeding, no linking, and no
+    // `__none__` handling, so `ml:train` and `rebuild-model` reported an
+    // accuracy for a path that no caller runs, and disagreed with `ml:eval`.
     const predictions = predictWindowsFromSamples(foldModel, testSamples, {
       minWindowConfidence: 0,
       smoothingWindows: 1
@@ -1347,12 +1349,12 @@ export function loadModel(modelPath: string): SongSegmentModel {
     throw new Error('Model has no training vectors or prototypes.');
   }
 
-  // A model with a different feature set fails without an error.
-  // `normalizeVector`
-  // reads past the end of `featureMeans`, so each distance becomes NaN. Each
-  // comparison with NaN is false, and the decoder returns `__none__` for every
-  // window. The user sees 0 segments and no error. The feature vector changed
-  // from 18 to 25 entries in v2.0, so check it.
+// A model with a different feature set fails without an error.
+    // `normalizeVector` reads past the end of `featureMeans`, so each distance
+    // becomes NaN. Every comparison with NaN is false, and the decoder
+    // returns `__none__` for every window. The user sees 0 segments and no
+    // error. The feature vector changed from 18 to 25 entries in v2.0, so
+    // check it.
   const expected = FEATURE_NAMES as readonly string[];
   const actual = Array.isArray(parsed.featureNames) ? parsed.featureNames : [];
   const mismatched = actual.length !== expected.length
@@ -1549,14 +1551,15 @@ function rangeWindowStarts(
 }
 
 /**
- * Rank songs for a time range in one MIDI file, for annotate-time suggestions.
+ * Rank songs for a time range in one MIDI file, for annotate-time
+ * suggestions.
  *
  * Runs the raw classifier over windows covering `[startTime, endTime]`, then
  * aggregates each window's margin (top-label evidence strength) by song. The
- * result is the share of confident evidence each song received, so a segment
+ * result is the share of confident evidence each song received. A segment
  * that clearly matches one song comes back with a single high-confidence
- * suggestion, while ambiguous/new material spreads the evidence thin and
- * usually falls below `minConfidence`.
+ * suggestion. Ambiguous or new material spreads the evidence thin and usually
+ * falls below `minConfidence`.
  */
 export function suggestSongsForRange(
   model: SongSegmentModel,
@@ -1638,14 +1641,14 @@ export function windowsToSegments(
   //
   // The full window extent is therefore the wrong span. It made each segment
   // half a window too long at each end, and made adjacent segments overlap by
-  // `windowSec - stepSec`, which is 3s at the 4s/1s default. These segments go
-  // into `prediction_reviews`, and then into annotations. Centres give the
-  // correct span.
+  // `windowSec - stepSec` (3s at the 4s/1s default). These segments go into
+  // `prediction_reviews` and then into annotations. Centres give the correct
+  // span.
   const lastIndex = windows.length - 1;
   const stepSec = inferStepSec(windows);
   const centreOf = (i: number) => (windows[i].startTime + windows[i].endTime) / 2;
-  // The first run starts at the start of the audio. The last run continues to
-  // the end. Other runs continue to the centre of the next window.
+  // The first run starts at the start of the audio. The last run continues
+  // to the end. Other runs continue to the centre of the next window.
   const boundStart = (i: number) => (i === 0 ? windows[0].startTime : centreOf(i));
   const boundEnd = (i: number) => (
     i === lastIndex

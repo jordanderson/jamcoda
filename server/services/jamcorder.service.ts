@@ -12,9 +12,9 @@ const execFileAsync = promisify(execFile);
 
 const JAMCORDER_URL = process.env.JAMCORDER_URL || 'http://jamcorder.local';
 const REQUEST_TIMEOUT = 30000; // 30 seconds
-// The firmware runs on low-power hardware (e.g. Raspberry Pi 3) and can be
-// overwhelmed or crash under load. Keep pages very small, pause generously
-// between them, and back off slowly when a request drops.
+// The firmware runs on low-power hardware (e.g. Raspberry Pi 3) and can
+// crash under load. Keep pages small, pause generously between them, and
+// back off slowly when a request drops.
 const LIBRARY_PAGE_SIZE = Number(process.env.JAMCORDER_LIBRARY_PAGE_SIZE || 5);
 const LIBRARY_PAGE_DELAY_MS = Number(process.env.JAMCORDER_LIBRARY_PAGE_DELAY_MS || 1000);
 const DOWNLOAD_RETRIES = Number(process.env.JAMCORDER_DOWNLOAD_RETRIES || 2);
@@ -37,19 +37,20 @@ interface LibraryListResponse {
 
 export interface LibraryListOptions {
   /**
-   * Stop paginating as soon as we reach an asset with `assetIdx <= this`
-   * (assets are returned newest-first). Combined with a high-water mark this
-   * keeps steady-state syncs to a single page instead of walking the whole
-   * library. Only applied when `jamcorderUuid` matches the device that wrote
-   * the water mark, so a new device/SD card still gets a full pass.
+   * Stop paginating at the first asset with `assetIdx <= this` (assets are
+   * returned newest-first). Combined with a high-water mark, this keeps
+   * steady-state syncs to a single page instead of walking the whole
+   * library. Only applied when `jamcorderUuid` matches the device that
+   * wrote the water mark, so a new device or SD card still gets a full
+   * pass.
    */
   newerThanAssetIdx?: number;
   jamcorderUuid?: string;
 }
 
-// got instance for JSON endpoints (listing/library). These don't exhibit the
-// download endpoint's invalid-header quirk, so a standards-compliant client is
-// safe here.
+// got instance for JSON endpoints (listing/library). These endpoints do not
+// exhibit the download endpoint's invalid-header quirk, so a standards-
+// compliant client is safe here.
 const client = got.extend({
   timeout: {
     request: REQUEST_TIMEOUT
@@ -95,13 +96,13 @@ export async function listFilesDetailed(path: string): Promise<JamcorderDetailed
 }
 
 /**
- * List all recording assets via the library API, paging with `midiPathContinue`.
- * The library API is the authoritative recordings catalog and returns sizes
- * without a full filesystem traversal. Pages are kept small (with a delay
- * between them) because the firmware is resource-constrained. `getJmxEof` is
- * intentionally left off: parsing EOF summaries for every asset is heavy on
- * low-power devices, and the duration is parsed locally from each downloaded
- * file anyway.
+ * List all recording assets via the library API, paging with
+ * `midiPathContinue`. The library API is the authoritative recordings
+ * catalog and returns sizes without a full filesystem traversal. Pages
+ * are kept small with a delay between them because the firmware is
+ * resource-constrained. `getJmxEof` is intentionally left off: parsing
+ * EOF summaries for every asset is heavy on low-power devices, and the
+ * duration is parsed locally from each downloaded file anyway.
  */
 export async function listLibraryAssets(options?: LibraryListOptions): Promise<JamcorderAsset[]> {
   const assets: JamcorderAsset[] = [];
@@ -193,18 +194,19 @@ export function jamcorderUuidFromPath(midiPath: string): string | null {
 
 /**
  * Download a whole file. Shells out to curl because the firmware violates
- * HTTP/1.1 by sending both Content-Length and Transfer-Encoding on download
- * responses; curl tolerates this while strict clients (got) reject it.
+ * HTTP/1.1 by sending both Content-Length and Transfer-Encoding on
+ * download responses. curl tolerates this; strict clients like `got`
+ * reject it.
  */
 export async function downloadFile(filepath: string): Promise<Buffer> {
   return curlPost('/api/files/download/simple', { filepath });
 }
 
 /**
- * Download a byte range of a file via `/api/files/download/offset`.
- * Negative `offset` is relative to EOF; `length <= 0` means through EOF.
- * Used for incremental re-sync (fetch only bytes appended since the last
- * sync) and for resuming interrupted downloads.
+ * Download a byte range via `/api/files/download/offset`. Negative
+ * `offset` is relative to EOF; `length <= 0` means through EOF. Used for
+ * incremental re-sync (bytes appended since the last sync) and for
+ * resuming interrupted downloads.
  */
 export async function downloadFileRange(filepath: string, offset: number, length = -1): Promise<Buffer> {
   return curlPost('/api/files/download/offset', { filepath, offset, length });
@@ -214,11 +216,11 @@ export async function downloadFileRange(filepath: string, offset: number, length
  * Download one JMX stone (~45 KiB chunk of a recording). `stoneIdx` is
  * 1-based; negative indices count backward from the newest stone.
  *
- * NOTE: on the currently observed firmware, this endpoint fails for the
- * actively-growing asset ("expected size != actual size") because it validates
- * the file size against the cached stone offsets at open time. It is reliable
- * for completed assets. The incremental sync path therefore uses
- * `downloadFileRange` for the live asset and keeps this for completed-file use.
+ * NOTE: on the observed firmware this endpoint fails for the actively-
+ * growing asset ("expected size != actual size") because it validates the
+ * file size against the cached stone offsets at open time. It is reliable
+ * for completed assets. Incremental sync therefore uses `downloadFileRange`
+ * for the live asset and keeps this for completed files.
  */
 export async function downloadStone(midiPath: string, stoneIdx: number): Promise<Buffer> {
   return curlPost('/api/midi-stones/download/stone', { midiPath, stoneIdx });

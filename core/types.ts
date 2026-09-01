@@ -2,12 +2,12 @@
  * Row shapes that cross the HTTP boundary.
  *
  * These live in `core/` because both the Express layer and the browser client
- * need the same definitions. Previously each side declared its own copy, which
- * had already drifted: `IgnoredSection.reason` was `string | null` on the
- * server and `reason?: string` in the client.
+ * need the same definitions. Each side previously declared its own copy, which
+ * had drifted: `IgnoredSection.reason` was `string | null` on the server and
+ * `reason?: string` in the client.
  *
- * Server-only payload types (the `Create...Data` / `Update...Data` shapes)
- * stay in `server/types`; these are strictly what gets serialized to JSON.
+ * Server-only payload types (`Create...Data` / `Update...Data` shapes) stay
+ * in `server/types`. These are what gets serialized to JSON.
  *
  * Field names are snake_case to match the SQLite columns they come from.
  */

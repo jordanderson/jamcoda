@@ -3,7 +3,7 @@ import { normalizeJamcorderTempoMap } from './tempoNormalization';
 
 /**
  * `@tonejs/midi` ships as CommonJS with no `exports` map, so Node's ESM loader
- * cannot statically see its named exports: `import { Midi }` typechecks (the
+ * cannot statically see its named exports. `import { Midi }` typechecks (the
  * .d.ts declares it) and works under Vite, but throws
  * "does not provide an export named 'Midi'" in the Node-run CLIs.
  *
@@ -20,8 +20,8 @@ const Midi = (
  *
  * The browser used to decode via `@magenta/music`'s `midiToSequenceProto`
  * while the server and ML pipeline used `@tonejs/midi` directly, so the two
- * could in principle disagree about the notes in a file. Both now come through
- * here, on top of the same Jamcorder tempo-map fix.
+ * could disagree about the notes in a file. Both now come through here, on
+ * top of the same Jamcorder tempo-map fix.
  *
  * Isomorphic: takes bytes, touches no filesystem, and is typechecked against
  * both the DOM and Node libs.
@@ -50,7 +50,7 @@ function clamp01(value: number): number {
 /**
  * Decode Standard MIDI File bytes into a flat, time-ordered note list.
  *
- * Tracks are flattened: Jamcorder captures a single performance, and every
+ * Tracks are flattened. Jamcorder captures a single performance, and every
  * consumer (playback, piano roll, feature extraction) wants one stream.
  */
 export function parseNoteSequence(rawBytes: Uint8Array): NoteSequence {

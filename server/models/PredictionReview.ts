@@ -263,15 +263,15 @@ export function update(id: number, data: UpdatePredictionReviewData): boolean {
 }
 
 /**
- * Get queue candidates prioritized for manual review.
- * Includes only unpromoted rows in `unsure` or `invalid` status.
+ * Queue candidates prioritized for manual review. `invalid` rows are
+ * already settled, so only unpromoted `unsure` rows still need a human.
  */
 export function getReviewQueue(limit = 50, fileId?: number): PredictionReview[] {
   const db = getDb();
   const params: Array<number> = [];
   let whereSql = `
     WHERE promoted_annotation_id IS NULL
-      AND (status = 'unsure' OR status = 'invalid')
+      AND status = 'unsure'
   `;
 
   if (fileId !== undefined) {
@@ -316,6 +316,29 @@ export function listPromotableUnpromoted(limit = 100, fileId?: number): Predicti
   `;
 
   return db.prepare(sql).all(...params, limit) as PredictionReview[];
+}
+
+/**
+ * File ids whose unpromoted queue is entirely `unsure` — nothing has been
+ * reviewed yet. Safe to re-score after a model rebuild: the re-run pipeline
+ * uses `deleteUnpromotedByFileId`, which would otherwise wipe reviewed rows.
+ */
+export function findFileIdsWithOnlyUnsureUnpromoted(): number[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT DISTINCT pr.file_id
+    FROM prediction_reviews pr
+    WHERE pr.promoted_annotation_id IS NULL
+      AND pr.status = 'unsure'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM prediction_reviews other
+        WHERE other.file_id = pr.file_id
+          AND other.promoted_annotation_id IS NULL
+          AND other.status <> 'unsure'
+      )
+  `).all() as Array<{ file_id: number }>;
+  return rows.map((row) => row.file_id);
 }
 
 /** Delete all unpromoted review rows for one file. */
@@ -545,20 +568,38 @@ export function promoteToAnnotation(id: number): PromotePredictionReviewResult {
     let created = false;
 
     if (annotationId !== null) {
-      const row = db.prepare('SELECT id FROM annotations WHERE id = ?').get(annotationId) as { id: number } | undefined;
+      const row = db.prepare(
+        'SELECT id, start_time, end_time FROM annotations WHERE id = ?'
+      ).get(annotationId) as { id: number; start_time: number; end_time: number } | undefined;
       if (row) {
-        db.prepare(`
-          UPDATE annotations
-          SET file_id = ?, song_name = ?, start_time = ?, end_time = ?, updated_at = ?
-          WHERE id = ?
-        `).run(
-          existing.file_id,
-          promotion.songName,
-          promotion.startTime,
-          promotion.endTime,
-          now,
-          annotationId
+        // A same-song merge re-points absorbed reviews at the surviving
+        // annotation, so the link can name a row that covers more than this
+        // one review. Rewrite only when this review exclusively owns the
+        // annotation; shrinking it would undo the merge.
+        const sharedWithOtherReview = (db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM prediction_reviews
+          WHERE promoted_annotation_id = ? AND id != ?
+        `).get(annotationId, existing.id) as { count: number }).count > 0;
+
+        const coversMoreThanReview = (
+          row.start_time < promotion.startTime || row.end_time > promotion.endTime
         );
+
+        if (!sharedWithOtherReview && !coversMoreThanReview) {
+          db.prepare(`
+            UPDATE annotations
+            SET file_id = ?, song_name = ?, start_time = ?, end_time = ?, updated_at = ?
+            WHERE id = ?
+          `).run(
+            existing.file_id,
+            promotion.songName,
+            promotion.startTime,
+            promotion.endTime,
+            now,
+            annotationId
+          );
+        }
       } else {
         annotationId = null;
       }

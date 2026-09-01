@@ -12,7 +12,7 @@ export function SyncModal({ syncId, onComplete }: SyncModalProps) {
 
   useEffect(() => {
     if (progress?.status === 'completed') {
-      setTimeout(onComplete, 2000); // Auto-close after 2s
+      setTimeout(onComplete, 2000); // Auto-close after 2s.
     }
   }, [progress?.status, onComplete]);
 

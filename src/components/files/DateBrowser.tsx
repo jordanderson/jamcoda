@@ -7,7 +7,7 @@ interface DateBrowserProps {
   onFileSelect: (fileId: number, startTime?: number) => void;
 }
 
-// Hash string to color for consistent song colors
+// Hash a string to a colour, so the same song keeps its colour across the UI.
 function stringToColor(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -64,10 +64,10 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
     );
   }
 
-  // Flatten files from all dates
+  // Flatten files from all dates and sort by date descending.
   const allFiles = data.dates.flatMap(({ date, files }) =>
     files.map((file: FileByDateRow) => ({ ...file, date }))
-  ).sort((a, b) => b.date.localeCompare(a.date)); // Sort by date descending
+  ).sort((a, b) => b.date.localeCompare(a.date));
 
   const totalFiles = allFiles.length;
   const emptyRecordingCount = data.emptyRecordingCount ?? 0;

@@ -8,9 +8,9 @@ interface DragState {
 
 interface UsePianoRollInteractionProps {
   /**
-   * The `<svg>` the drag is measured against. Passed in rather than owned here
-   * so there is a single ref to the element; a copy kept in sync by an effect
-   * goes stale on remount and measures against a detached node.
+   * The `<svg>` the drag is measured against. Passed in rather than owned
+   * here so there is a single ref to the element. A copy kept in sync by an
+   * effect goes stale on remount and measures against a detached node.
    */
   svgRef: RefObject<SVGSVGElement | null>
   pixelsPerTimeStep: number

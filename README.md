@@ -4,19 +4,19 @@ JamCoda is a local-first MIDI workflow for Jamcorder practice sessions.
 
 It does four things end-to-end:
 1. Sync `.mid/.midi` files from Jamcorder into local storage.
-2. Let you annotate song segments with start/end times.
+2. Annotate song segments with start/end times.
 3. Run an ML segmentation model that proposes song segments.
 4. Review, edit, merge, and promote predictions into new annotations.
 
-This README is for both daily use and fast codebase onboarding.
+Use this README for daily use and fast codebase onboarding.
 
 ## Current Product Workflow
 
 ### 1) Sync and browse
 - Use `Sync Now` in the sidebar.
-- Recordings that contain no notes are not imported (the device sometimes opens
-  and closes assets without recording). The sync summary says how many were
-  ignored, and the browse header notes any already in the library.
+- Recordings that contain no notes are not imported. The device sometimes opens
+  and closes assets without recording. The sync summary reports how many were
+  ignored. The browse header notes any already in the library.
 - Files appear in `#/browse` (Date View) with:
   - annotation progress (or `Complete`)
   - unreviewed prediction count (click count to open review queue)
@@ -24,17 +24,17 @@ This README is for both daily use and fast codebase onboarding.
 
 ### 2) Annotate on file detail page
 - Open a file (`#/detail/:id`).
-- Use piano roll playback + `S/E/C` checkpoints or manual region selection.
-- Add/edit/delete annotations.
+- Use piano roll playback with `S/E/C` checkpoints or manual region selection.
+- Add, edit, and delete annotations.
 - Add ignored sections for ranges you do not plan to annotate.
 - Use `Run Predictions` for that file.
-- Use `Mark Complete` when remaining unannotated time is just noodling.
+- Use `Mark Complete` when the remaining unannotated time is improvised playing.
   - Marking complete clears all predictions for that file.
   - Complete files cannot run prediction again until marked incomplete.
 
 ### 3) Review predictions
 - Open `#/reviews` or `#/reviews?fileId=<id>`.
-- Review list focuses on unpromoted rows.
+- The review list focuses on unpromoted rows.
 - API queue (`GET /api/prediction-reviews/queue`) prioritizes low-confidence and shorter segments.
 - Actions:
   - `Confirm + Promote`
@@ -42,22 +42,22 @@ This README is for both daily use and fast codebase onboarding.
   - `Mark Invalid`
   - `Merge Selected` (consecutive rows, same file, same song)
   - `Promote Reviewed` (batch promote confirmed/edited)
-- Review status values are currently:
+- Review status values are:
   - `unsure`, `invalid`, `confirmed`, `edited`
 - `ready` is intentionally removed.
 
 ### 4) Song-level operations
 - Open `#/songs` for all annotated segments across files.
 - Sort client-side by song or date.
-- Play segment in a modal with pause/stop and seekable segment bar.
-- Rename a song globally; this updates:
+- Play a segment in a modal with pause/stop and a seekable segment bar.
+- Rename a song globally. This updates:
   - `annotations.song_name`
   - `prediction_reviews.predicted_song_name`
   - `prediction_reviews.reviewed_song_name`
-- Rename flow also triggers model rebuild from the UI.
+- The rename flow also triggers a model rebuild from the UI.
 
 ### 5) Rebuild model globally
-- Sidebar has `Rebuild Model`.
+- The sidebar has `Rebuild Model`.
 - This retrains from all current annotations and writes `data/ml/model.json`.
 
 ## Routes (Frontend)
@@ -113,7 +113,7 @@ The app uses `http://localhost:3001` for local state and ML actions.
 
 - SQLite DB: `data/jamcoda.db`
 - Synced MIDI files: `data/midi/YYYY-MM-DD/<filename>.mid`
-- Empty recordings are never written here. To clear out ones synced before that
+- Empty recordings are never written here. To clear ones synced before this
   rule existed, run `npm run db:prune-empty` (dry run) then add `--apply`.
 
 Main tables:
@@ -127,12 +127,11 @@ Main tables:
 
 - Playback uses a small Web Audio sampler (`src/audio/pianoSampler.ts`) with no
   audio dependencies.
-- Everything sounds as acoustic grand piano; that is the only instrument the
-  sampler loads.
+- All sounds use acoustic grand piano. The sampler loads no other instrument.
 - Samples come from the `sgm_plus` soundfont
   (`{pitch}_v{velocity}.mp3`, pitches 21-108, 8 velocity layers).
-- Service worker caches only grand piano soundfont assets (`public/soundfont-cache-sw.js`).
-- Sidebar shows cache registration and cached asset count.
+- The service worker caches only grand piano soundfont assets (`public/soundfont-cache-sw.js`).
+- The sidebar shows cache registration and the cached asset count.
 - The piano roll draws its own SVG note rects (`src/components/midi/pianoRollGeometry.ts`).
 
 ## Development
@@ -147,11 +146,10 @@ Main tables:
 npm install
 ```
 
-`better-sqlite3` is a native module, so its compiled binary is tied to the Node
-major version that installed it. If you later switch Node versions, the server
-will fail at startup with `ERR_DLOPEN_FAILED` and a `NODE_MODULE_VERSION`
-mismatch. The client and build are unaffected, which makes it easy to
-misdiagnose. Fix with:
+`better-sqlite3` is a native module. Its compiled binary is tied to the Node
+major version that installed it. If you switch Node versions, the server fails
+at startup with `ERR_DLOPEN_FAILED` and a `NODE_MODULE_VERSION` mismatch. The
+client and build are unaffected, which makes the cause easy to miss. Fix with:
 
 ```bash
 nvm use && npm rebuild better-sqlite3
@@ -164,15 +162,14 @@ npm run setup
 ```
 
 This asks where your Jamcorder is and where you want your data stored, then
-writes a `.env` file for you. Press Enter at each prompt to accept the default.
-It also checks that your Jamcorder actually answers at the address you gave, so
-a typo or an offline device shows up now rather than at your first sync. That
-check is advisory — you can save an address for a device that is not switched
-on yet. It is safe to re-run at any time — your current answers become the new
-defaults.
+writes a `.env` file. Press Enter at each prompt to accept the default. It also
+checks that your Jamcorder answers at the address you give, so a typo or an
+offline device shows up now rather than at your first sync. The check is
+advisory. You can save an address for a device that is not switched on yet. It
+is safe to re-run at any time. Your current answers become the new defaults.
 
 Prefer to do it by hand? Copy `.env.example` to `.env` and edit it. Skipping
-this step entirely also works; the defaults in the table below are used.
+this step entirely also works. The defaults in the table below are used.
 
 ### Run
 
@@ -195,7 +192,7 @@ fill these in interactively, or copy `.env.example` to `.env` and edit it by han
 | `JAMCORDER_URL` | `http://jamcorder.local` | Backend, Vite proxy, frontend | Base URL of your Jamcorder device (mDNS name or IP). |
 | `JAMCODA_DB_PATH` | `./data/jamcoda.db` | Backend + ML scripts | Override the SQLite database location. |
 | `JAMCODA_MIDI_DIR` | `./data/midi` | Backend (sync) | Where synced MIDI files are written. Absolute paths are supported, so the library can live outside the repo. |
-| `JAMCORDER_LIBRARY_PAGE_SIZE` | `5` | Backend (sync) | Assets per library API page during sync. Keep small — large pages can crash low-power firmware. |
+| `JAMCORDER_LIBRARY_PAGE_SIZE` | `5` | Backend (sync) | Assets per library API page during sync. Keep small. Large pages can crash low-power firmware. |
 | `JAMCORDER_LIBRARY_PAGE_DELAY_MS` | `1000` | Backend (sync) | Pause between library pages to keep low-power firmware responsive. |
 | `JAMCODA_SYNC_DOWNLOAD_PACE_MS` | `300` | Backend (sync) | Pause between individual file downloads during sync. |
 | `JAMCODA_SYNC_EMPTY_ASSET_MAX_BYTES` | `1024` | Backend (sync) | Device assets at or below this size hold no notes and are not imported. |
@@ -216,6 +213,7 @@ Note: the local backend always runs on `http://localhost:3001`.
 - `npm run ml:train`: train model from annotations
 - `npm run ml:predict`: predict segments from one MIDI file
 - `npm run ml:predict-import`: predict and import into `prediction_reviews`
+- `npm run ml:predict-missing`: predict and import for every incomplete file that has no predictions yet (`--force` re-runs files that already have some)
 - `npm run ml:eval`: evaluate model predictions against existing annotations and write JSON report
 
 ## Database Migrations
@@ -228,8 +226,8 @@ Note: the local backend always runs on `http://localhost:3001`.
 
 ## Coding Agent Quick Start
 
-The shared module is the place to start — anything needed on more than one
-side of a tier boundary lives there:
+The shared module is the place to start. Anything needed on more than one side
+of a tier boundary lives there:
 - `core/types.ts` — DB row shapes used by both the server and the browser
 - `core/predictionReview.ts` — how a review resolves to effective values
 - `core/timeRanges.ts` — segment/range algebra used by the API and the CLI
@@ -269,7 +267,7 @@ Important behavior constraints:
 
 ## Documentation
 
-- [`API_NOTES.md`](API_NOTES.md) — Jamcorder behaviors we've learned that the official docs don't cover.
+- [`API_NOTES.md`](API_NOTES.md) — Jamcorder behaviors we have learned that the official docs do not cover.
 - Official Jamcorder device API reference: <https://www.jamcorder.com/docs/device-api>
 - Official JMX MIDI file format spec: <https://www.jamcorder.com/docs/jmx-midi-files>
 - ML workflow details: [`ml/README.md`](ml/README.md)
@@ -277,15 +275,15 @@ Important behavior constraints:
 ## Security Notes
 
 `npm audit` should report zero vulnerabilities. If that changes, treat it as a
-regression rather than an accepted risk.
+regression, not an accepted risk.
 
 This used to read differently. `@magenta/music@1.23.1` (last published in 2021)
-was used for MIDI decoding, playback and the piano roll, and it pinned an
-ancient `@tensorflow/tfjs` tree that carried four critical and five high
-advisories (`protobufjs@6.x`, and `static-eval` / `minimist` via
-`cwise` → `static-module`) with no upstream fix available.
+handled MIDI decoding, playback, and the piano roll. It pinned an old
+`@tensorflow/tfjs` tree with four critical and five high advisories
+(`protobufjs@6.x`, and `static-eval` / `minimist` via `cwise` → `static-module`)
+and no upstream fix.
 
-It has been removed. The three things it provided were replaced in place:
+The package is removed. Its three roles were replaced in place:
 
 | Was | Now |
 | --- | --- |
@@ -294,8 +292,8 @@ It has been removed. The three things it provided were replaced in place:
 | `PianoRollSVGVisualizer` | `src/components/midi/pianoRollGeometry.ts` (SVG rects) |
 
 The sampler fetches the same soundfont URLs Magenta used, so existing service
-worker caches keep working. Dropping the dependency also removed TensorFlow.js,
-protobufjs and Tone.js from the tree: 361 → 257 packages, 485 MB → 239 MB
+worker caches keep working. Removing the dependency also removed TensorFlow.js,
+protobufjs, and Tone.js from the tree: 361 → 257 packages, 485 MB → 239 MB
 installed.
 
 ## License

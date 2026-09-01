@@ -57,6 +57,36 @@ after(() => {
   delete process.env.JAMCODA_DB_PATH;
 });
 
+test('getReviewQueue returns only unsure rows, excluding settled invalid rows', () => {
+  const fileId = createTestFile();
+  PredictionReviewModel.create({
+    fileId,
+    predictedSongName: 'Song A',
+    predictedStartTime: 0,
+    predictedEndTime: 10
+  });
+  const rejectedId = PredictionReviewModel.create({
+    fileId,
+    predictedSongName: 'Song B',
+    predictedStartTime: 10,
+    predictedEndTime: 20
+  });
+  const confirmedId = PredictionReviewModel.create({
+    fileId,
+    predictedSongName: 'Song C',
+    predictedStartTime: 20,
+    predictedEndTime: 30,
+    status: 'confirmed'
+  });
+  PredictionReviewModel.update(rejectedId, { status: 'invalid' });
+
+  const queue = PredictionReviewModel.getReviewQueue(50, fileId);
+  assert.equal(queue.length, 1);
+  assert.equal(queue[0].status, 'unsure');
+  assert.notEqual(queue[0].id, rejectedId);
+  assert.notEqual(queue[0].id, confirmedId);
+});
+
 test('mergeReviews creates one edited row and marks source rows invalid', () => {
   const fileId = createTestFile();
   const leftId = PredictionReviewModel.create({
@@ -208,4 +238,64 @@ test('renameSongNameReferences updates predicted and reviewed names', () => {
     row.predicted_song_name === 'Old Name' || row.reviewed_song_name === 'Old Name'
   );
   assert.equal(hasOldName, false);
+});
+
+test('findFileIdsWithOnlyUnsureUnpromoted returns only untouched pending files', () => {
+  const untouchedFileId = createTestFile();
+  const reviewedFileId = createTestFile();
+  const dismissedFileId = createTestFile();
+  const promotedFileId = createTestFile();
+
+  PredictionReviewModel.create({
+    fileId: untouchedFileId,
+    predictedSongName: 'Song A',
+    predictedStartTime: 0,
+    predictedEndTime: 10
+  });
+  PredictionReviewModel.create({
+    fileId: untouchedFileId,
+    predictedSongName: 'Song B',
+    predictedStartTime: 10,
+    predictedEndTime: 20
+  });
+
+  PredictionReviewModel.create({
+    fileId: reviewedFileId,
+    predictedSongName: 'Song C',
+    predictedStartTime: 0,
+    predictedEndTime: 10
+  });
+  const reviewedId = PredictionReviewModel.create({
+    fileId: reviewedFileId,
+    predictedSongName: 'Song D',
+    predictedStartTime: 10,
+    predictedEndTime: 20
+  });
+  PredictionReviewModel.update(reviewedId, { status: 'confirmed' });
+
+  PredictionReviewModel.create({
+    fileId: dismissedFileId,
+    predictedSongName: 'Song E',
+    predictedStartTime: 0,
+    predictedEndTime: 10
+  });
+  const dismissedId = PredictionReviewModel.create({
+    fileId: dismissedFileId,
+    predictedSongName: 'Song F',
+    predictedStartTime: 10,
+    predictedEndTime: 20
+  });
+  PredictionReviewModel.update(dismissedId, { status: 'invalid' });
+
+  const promotedId = PredictionReviewModel.create({
+    fileId: promotedFileId,
+    predictedSongName: 'Song G',
+    predictedStartTime: 0,
+    predictedEndTime: 10,
+    status: 'confirmed'
+  });
+  PredictionReviewModel.promoteToAnnotation(promotedId);
+
+  const ids = PredictionReviewModel.findFileIdsWithOnlyUnsureUnpromoted();
+  assert.deepEqual(ids, [untouchedFileId]);
 });

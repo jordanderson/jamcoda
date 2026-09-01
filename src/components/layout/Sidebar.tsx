@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { ClipboardCheck, Library, Music, RefreshCw } from 'lucide-react'
 import { useSyncStatus } from '../../hooks/useSyncStatus'
 import { useSoundfontCacheStatus } from '../../hooks/useSoundfontCacheStatus'
-import { useRebuildPredictionModel } from '../../hooks/usePredictionReviews'
+import { useRebuildPredictionModel, useRebuildStatus } from '../../hooks/usePredictionReviews'
+import type { RebuildStatusResponse } from '../../api/localTypes'
 
 interface SidebarProps {
   onStartSync: (full?: boolean) => void
@@ -11,11 +12,29 @@ interface SidebarProps {
 
 const jamcorderHost = (import.meta.env.JAMCORDER_URL || 'http://jamcorder.local').replace(/^https?:\/\//, '')
 
+function buildRebuildBadgeTitle(status: RebuildStatusResponse | undefined): string {
+  if (!status) return 'Rebuild the segmentation model from annotations'
+  const parts: string[] = []
+  if (status.pendingAnnotationCount > 0) {
+    parts.push(
+      `${status.pendingAnnotationCount} annotation${status.pendingAnnotationCount === 1 ? '' : 's'} changed since the model was built`
+    )
+  }
+  if (status.missingLabels.length > 0) {
+    const preview = status.missingLabels.slice(0, 3).join(', ')
+    const more = status.missingLabels.length > 3 ? '…' : ''
+    parts.push(`${status.missingLabels.length} new song label${status.missingLabels.length === 1 ? '' : 's'}: ${preview}${more}`)
+  }
+  return `Model is stale — ${parts.join('; ')}. Run Rebuild Model to retrain.`
+}
+
 export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
   const currentRoute = window.location.hash.slice(1) || '/browse'
   const { data: syncStatus } = useSyncStatus()
   const rebuildModel = useRebuildPredictionModel()
+  const rebuildStatus = useRebuildStatus()
   const [mlFeedback, setMlFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [reRunUnsure, setReRunUnsure] = useState(false)
   const {
     isSupported: isSoundfontCacheSupported,
     isRegistered: isSoundfontCacheRegistered,
@@ -41,12 +60,15 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
   const handleRebuildModel = () => {
     setMlFeedback(null)
     rebuildModel.mutate(
-      {},
+      { reRunUnsure },
       {
         onSuccess: (result) => {
+          const reScored = result.reRunFileCount > 0
+            ? `; re-scored ${result.reRunResults.length} file${result.reRunResults.length === 1 ? '' : 's'} with pending predictions${result.reRunErrors.length > 0 ? ` (${result.reRunErrors.length} failed)` : ''}`
+            : '';
           setMlFeedback({
             type: 'success',
-            message: `Model rebuilt (${result.filesUsed} files, ${result.annotationsUsed} annotations)`
+            message: `Model rebuilt (${result.filesUsed} files, ${result.annotationsUsed} annotations)${reScored}`
           })
         },
         onError: (error) => {
@@ -74,13 +96,17 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
     return `${diffDays}d ago`
   }
 
+  const rebuildStatusData = rebuildStatus.data
+  const rebuildPending = rebuildStatusData?.modelExists && rebuildStatusData.hasPendingChanges
+  const rebuildBadgeCount = rebuildStatusData?.pendingAnnotationCount || rebuildStatusData?.missingLabels.length || 0
+
   return (
     <aside className="w-64 bg-gray-900 text-white h-screen flex flex-col">
       <div className="p-6 border-b border-gray-800">
         <h1 className="text-2xl font-bold text-white">
           JamCoda
         </h1>
-        <p className="text-sm text-gray-400 mt-1">MIDI Sync & Player</p>
+        <p className="text-sm text-gray-400 mt-1">Jamcorder Practice Journal</p>
       </div>
 
       <nav className="flex-1 p-4">
@@ -121,9 +147,30 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
             <>
               <RefreshCw className="w-4 h-4" />
               Rebuild Model
+              {rebuildPending && (
+                <span
+                  title={buildRebuildBadgeTitle(rebuildStatusData)}
+                  className="ml-1 rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-bold leading-none text-emerald-950"
+                >
+                  {rebuildBadgeCount}
+                </span>
+              )}
             </>
           )}
         </button>
+        <label
+          className="flex items-center gap-2 text-xs text-gray-400 hover:text-gray-200 cursor-pointer select-none"
+          title="Re-run predictions over files whose unpromoted queue is entirely 'unsure' after saving the model. Can take a long time."
+        >
+          <input
+            type="checkbox"
+            checked={reRunUnsure}
+            onChange={(e) => setReRunUnsure(e.target.checked)}
+            disabled={rebuildModel.isPending}
+            className="w-3.5 h-3.5 accent-emerald-600"
+          />
+          Re-score pending predictions
+        </label>
         <button
           onClick={() => handleSyncClick()}
           disabled={isSyncStarting}

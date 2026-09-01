@@ -58,7 +58,7 @@ const ROLL_CONFIG = {
   pixelsPerTimeStep: 50,
   noteHeight: 3,
   noteSpacing: 1,
-  noteRGB: '148, 152, 229' // Matches theme color #9198E5
+  noteRGB: '148, 152, 229' // Matches theme color #9198E5.
 } as const
 
 const EMPTY_ANNOTATIONS: RollAnnotation[] = []
@@ -70,11 +70,12 @@ const EMPTY_SKIPS: RollSkip[] = []
 /**
  * The piano roll.
  *
- * Re-renders every animation frame during playback, since the playhead arrives
- * as a prop. Everything expensive therefore sits behind a `memo` boundary --
- * the notes, the three chip rows, the bands and the device markers -- so a
- * frame costs this small tree plus one repositioned `<div>`. Callers must pass
- * stable handlers for that to hold; `DetailPage` uses `useCallback` throughout.
+ * Re-renders every animation frame during playback, since the playhead
+ * arrives as a prop. Everything expensive sits behind a `memo` boundary: the
+ * notes, the three chip rows, the bands, and the device markers. A frame
+ * costs this small tree plus one repositioned `<div>`. Callers must pass
+ * stable handlers for that to hold; `DetailPage` uses `useCallback`
+ * throughout.
  */
 function PianoRollVisualizerImpl({
   sequence,
@@ -124,8 +125,8 @@ function PianoRollVisualizerImpl({
     isEnabled: isAnnotationMode
   })
 
-  // Annotations and predictions can extend past the last note, and the
-  // timeline has to be wide enough to reach them.
+  // Annotations and predictions can extend past the last note, so the timeline
+  // has to be wide enough to reach them.
   const timelineTotalTime = useMemo(() => {
     let end = sequence?.totalTime ?? 0
     for (const annotation of displayedAnnotations) {
@@ -166,7 +167,7 @@ function PianoRollVisualizerImpl({
     if (scrollContainer) scrollContainer.scrollLeft = 0
   }, [scrollContainer, sequence])
 
-  // Otherwise a stale hover readout outlives the switch into region-select.
+  // A stale hover readout outlives the switch into region-select, so clear it.
   useEffect(() => {
     if (!isAnnotationMode) return
     setHoverX(null)

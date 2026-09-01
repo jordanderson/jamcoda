@@ -1,8 +1,8 @@
 /**
  * Response and request shapes for the local backend API.
  *
- * The underlying DB row types come from `core/types`, shared with the server,
- * so the two sides cannot drift -- they previously did: `IgnoredSection.reason`
+ * DB row types are re-exported from `core/types`, shared with the server, so
+ * the two sides cannot drift. They previously did: `IgnoredSection.reason`
  * was `string | null` on the server but `reason?: string` here.
  */
 export type {
@@ -114,6 +114,8 @@ export interface RebuildPredictionModelRequest {
   k?: number;
   maxNoneToSongRatio?: number;
   includeEvaluation?: boolean;
+  /** After saving the model, re-score files whose unpromoted queue is entirely `unsure`. Default false. */
+  reRunUnsure?: boolean;
 }
 
 /** Response body for model rebuild, including training summary. */
@@ -142,9 +144,36 @@ export interface RebuildPredictionModelResponse {
     meanOverallAccuracy: number;
     meanSongAccuracy: number;
   } | null;
+  reRunUnsure: boolean;
+  /** Number of files eligible for re-scoring (unpromoted queue entirely `unsure`). */
+  reRunFileCount: number;
+  /** Successful per-file re-scoring results. */
+  reRunResults: {
+    fileId: number;
+    filename: string;
+    clearedCount: number;
+    insertedCount: number;
+    segmentCount: number;
+  }[];
+  /** Per-file re-scoring failures (e.g. missing MIDI, file marked complete). */
+  reRunErrors: {
+    fileId: number;
+    error: string;
+  }[];
 }
 
-/** One annotated song segment used by the Songs page table/modal. */
+/** Read-only staleness signal that drives the Rebuild Model button badge. */
+export interface RebuildStatusResponse {
+  modelExists: boolean;
+  modelCreatedAt: string | null;
+  modelAnnotationsUsed: number | null;
+  /** Annotations created or edited since the model was built. */
+  pendingAnnotationCount: number;
+  /** Song names in the DB the model has never seen. */
+  missingLabels: string[];
+  hasPendingChanges: boolean;
+}
+
 /** Songs page list payload. */
 export interface SongPlayHistoryResponse {
   songs: SongPlayHistoryRow[];
@@ -215,7 +244,6 @@ export interface FileDetailAnnotation {
   updated_at: number;
 }
 
-/** Ignored section row shape embedded in file detail responses. */
 /** Standalone ignored-sections list response. */
 export interface IgnoredSectionListResponse {
   sections: IgnoredSection[];

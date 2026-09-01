@@ -15,8 +15,7 @@ import type { Note, NoteSequence } from '@core/midi/noteSequence'
  *   {BASE}/p{pitch}_v{velocity}.mp3   pitch 21-108, velocity in VELOCITY_LAYERS
  *
  * Like Magenta's player, control changes (including sustain, CC64) are not
- * interpreted -- its SoundFontPlayer ignored them too, so playback is
- * unchanged.
+ * interpreted. Its SoundFontPlayer ignored them too, so playback is unchanged.
  */
 
 const SOUNDFONT_BASE =
@@ -37,11 +36,11 @@ const SCHEDULE_LEAD_SECONDS = 0.12
 /**
  * How far ahead of the playhead notes get scheduled, and how often to top up.
  *
- * Scheduling a whole recording at once does not work: a 39-minute file is
+ * Scheduling a whole recording at once does not work. A 39-minute file is
  * ~20,000 notes, and creating that many source+gain node pairs swamps the
  * audio thread badly enough that `AudioContext.currentTime` stops tracking
- * real time (measured at ~4% of wall clock), which stalls both playback and
- * the playhead. Only a small window is scheduled at a time, topped up by a
+ * real time (measured at ~4% of wall clock). That stalls playback and the
+ * playhead. Only a small window is scheduled at a time, topped up by a
  * timer -- the standard Web Audio look-ahead pattern.
  */
 const SCHEDULE_AHEAD_SECONDS = 1.5

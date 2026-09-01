@@ -1,10 +1,9 @@
 /**
  * Argument parsing and small file helpers shared by every CLI entrypoint.
  *
- * `readArg` and `hasFlag` were previously copy-pasted byte-for-byte into all
- * four `ml/` entrypoints and `server/scripts/migrate.ts`; `parseNum`,
- * `clamp` and `ensureDirForFile` into most of them. `ensureDirForFile` had
- * additionally been fixed in one copy only.
+ * `readArg`, `hasFlag`, `parseNum`, `clamp` and `ensureDirForFile` were
+ * duplicated across the four `ml/` entrypoints and `server/scripts/migrate.ts`.
+ * `ensureDirForFile` was also fixed in only one copy.
  *
  * Node-only: this module reads `process.argv` and touches the filesystem, so
  * it is excluded from the browser program in tsconfig.json.

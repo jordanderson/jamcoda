@@ -6,7 +6,7 @@
  * offer a split or a trim instead of leaving the operator to eyeball the roll.
  */
 
-/** Pauses shorter than this are just musical rests, not take boundaries. */
+/** Pauses shorter than this are musical rests, not take boundaries. */
 export const LARGE_ANNOTATION_GAP_SECONDS = 6
 
 /**
@@ -33,7 +33,7 @@ export type GapAction = 'split' | 'trim-start' | 'trim-end' | 'none'
 /**
  * Gaps of at least `minGapSec` between `start` and `end` where no note sounds.
  *
- * `notes` may cover the whole file; only the parts overlapping the window are
+ * `notes` may cover the whole file. Only the parts overlapping the window are
  * considered.
  */
 export function getLargeAnnotationGaps(
@@ -97,10 +97,10 @@ export function getLargeAnnotationGaps(
 }
 
 /**
- * The one edit a gap admits: an interior gap splits the annotation, a gap flush
- * against one edge trims that edge inward, and a gap covering the whole
- * annotation admits neither. Deciding it here keeps the button's label, handler
- * and disabled state from disagreeing.
+ * The one edit a gap admits. An interior gap splits the annotation. A gap
+ * flush against one edge trims that edge inward. A gap covering the whole
+ * annotation admits neither. Deciding it here keeps the button's label,
+ * handler, and disabled state from disagreeing.
  */
 export function getGapAction(
   gap: AnnotationGap,

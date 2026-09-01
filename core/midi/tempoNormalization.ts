@@ -16,18 +16,18 @@ type ParsedMidiLike = {
 const TEMPO_MATCH_EPSILON = 1;
 
 /**
- * Jamcorder files can include their first global tempo event late in the track
- * (not at tick 0). Some parsers then build a non-monotonic second map, causing
- * two different tick regions to collapse into the same displayed time range.
+ * Jamcorder files can include their first global tempo event late in the
+ * track (not at tick 0). Some parsers then build a non-monotonic second map,
+ * causing two tick regions to collapse into the same displayed time range.
  *
  * When we detect the Jamcorder-style "1ms per tick" tempo event pattern, we
  * mirror that first tempo at tick 0 to keep time mapping monotonic.
  *
- * The "1ms per tick" pattern is the JMX time model: 458 ticks per quarter note
- * with a Set Tempo of 458,000 microseconds per quarter note, i.e. exactly
- * 1,000 microseconds per tick. That is why the check below is
- * `ticksPerBeat * 1000`, which generalizes the ratio rather than hard-coding
- * 458. See https://www.jamcorder.com/docs/jmx-midi-files
+ * The "1ms per tick" pattern is the JMX time model: 458 ticks per quarter
+ * note with a Set Tempo of 458,000 microseconds per quarter note, i.e.
+ * exactly 1,000 microseconds per tick. The check below is `ticksPerBeat * 1000`
+ * to generalize the ratio rather than hard-code 458.
+ * See https://www.jamcorder.com/docs/jmx-midi-files
  */
 export function normalizeJamcorderTempoMap(rawBytes: Uint8Array): Uint8Array {
   let parsed: ParsedMidiLike;

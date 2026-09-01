@@ -15,12 +15,12 @@ const DOWNLOAD_PACE_MS = Number(process.env.JAMCODA_SYNC_DOWNLOAD_PACE_MS || 300
 /**
  * Device assets at or below this size hold no music and are not imported.
  *
- * The firmware sometimes opens an asset and closes it without recording a note
- * — occasionally hundreds in a burst (118 in 42s on 2026-02-19). Those land as
- * valid but empty MIDI files: header + JMX trailer + end-of-track. On the
- * observed device every one is 256 bytes (truncated leftovers are 22), while
- * the smallest real recording seen is 2397 bytes, so the threshold sits in a
- * wide gap. Tunable in case another firmware writes fatter stubs.
+ * The firmware sometimes opens an asset and closes it without recording a
+ * note — occasionally hundreds in a burst (118 in 42s on 2026-02-19).
+ * Those land as valid but empty MIDI files: header + JMX trailer + end-
+ * of-track. On the observed device every one is 256 bytes (truncated
+ * leftovers are 22), while the smallest real recording seen is 2397 bytes.
+ * The threshold sits in a wide gap and is tunable for fatter stubs.
  */
 const EMPTY_ASSET_MAX_BYTES = Number(process.env.JAMCODA_SYNC_EMPTY_ASSET_MAX_BYTES || 1024);
 
@@ -59,10 +59,10 @@ async function performSync(progress: SyncProgress, full = false) {
   try {
     console.log(`Starting sync${full ? ' (full re-sync)' : ''}...`);
 
-    // 1. Discover remote recordings (library API first, filesystem walk fallback).
-    //    On steady-state syncs, a high-water mark from the last clean sync lets
-    //    discovery stop at the newest already-synced asset instead of walking
-    //    the entire library.
+    // 1. Discover remote recordings: filesystem walk first, library API
+    //    fallback. On steady-state syncs, a high-water mark from the last
+    //    clean sync lets discovery stop at the newest already-synced asset
+    //    instead of walking the entire library.
     const remoteFiles = await discoverFiles(full);
     console.log(`Found ${remoteFiles.length} MIDI files on device to consider`);
 
@@ -79,21 +79,21 @@ async function performSync(progress: SyncProgress, full = false) {
     for (const entry of remoteFiles) {
       const existing = existingByPath.get(entry.path);
       if (!existing) {
-        // Never import an empty asset. Skipping before the download keeps them
-        // out of the database and off disk entirely, rather than filtering them
-        // back out of every view later. There is nothing to lose by skipping:
-        // if the device ever appends to one it grows past the threshold and the
-        // next sync picks it up as a normal new file.
+        // Never import an empty asset. Skipping before the download keeps
+        // them out of the database and off disk, rather than filtering them
+        // out of every view later. If the device appends to one later, it
+        // grows past the threshold and the next sync picks it up as a normal
+        // new file.
         if (entry.size <= EMPTY_ASSET_MAX_BYTES) {
           emptySkipped++;
           // Deliberately do NOT advance the high-water mark here. A skipped
           // asset was never verified, and a file reading 0 bytes can be a
-          // *live* recording the device has not flushed to disk yet rather
-          // than a permanent stub. Advancing the mark would let the
-          // library-API discovery fallback permanently skip it once the
-          // recording is finally written (newerThanAssetIdx would start past
-          // it). The filesystem walk (the primary source) re-checks it by
-          // size on every pass, so it is picked up the moment it grows.
+          // live recording the device has not flushed to disk yet. Advancing
+          // the mark would let the library-API fallback permanently skip it
+          // once the recording is finally written (newerThanAssetIdx would
+          // start past it). The filesystem walk (the primary source) re-
+          // checks by size on every pass, so the file is picked up the moment
+          // it grows.
           if (entry.size <= 0) {
             const warning = `${entry.name} is 0 bytes on the device (may be a live recording not yet flushed to disk); will re-check next sync`;
             console.warn(warning);
@@ -108,9 +108,9 @@ async function performSync(progress: SyncProgress, full = false) {
         toDownload.push({ entry, existing });
       } else if (entry.size < existing.file_size) {
         // The device copy is smaller than what we already synced. On the
-        // observed device this happens when an old file was truncated or left
-        // as a header-only stub. Overwriting good local data with a smaller
-        // device copy risks data loss, so skip it and warn.
+        // observed device this happens when an old file was truncated or
+        // left as a header-only stub. Skip and warn; overwriting local data
+        // with a smaller copy risks data loss.
         const warning = 'Device file is smaller than the synced copy (possibly truncated on device); skipped to avoid overwriting local data';
         console.warn(`${entry.name}: ${warning}`);
         progress.warnings.push({ file: entry.name, warning });
@@ -165,11 +165,11 @@ async function performSync(progress: SyncProgress, full = false) {
       }
     }
 
-    // 3.5. Newly imported files that carry Jamcorder passage bookmarks get
-    //      predictions auto-run right after the sync, so the device's own
+    // 3.5. Newly imported files with Jamcorder passage bookmarks get
+    //      predictions auto-run right after the sync. The device's own
     //      passage boundaries become reviewable segments without a manual
-    //      "Run Predictions" step. Only files with bookmarks are touched and
-    //      any failure is logged, never fatal to the sync.
+    //      "Run Predictions" step. Only files with bookmarks are touched,
+    //      and any failure is logged rather than thrown.
     await runPredictionsForBookmarkedFiles(importedIds);
 
     // 4. Record a high-water mark only after a completely clean pass. If any
@@ -198,14 +198,14 @@ async function performSync(progress: SyncProgress, full = false) {
 }
 
 /**
- * Discover remote recordings. Primary source is a recursive walk over the
- * detailed file listing: it is only a handful of cheap directory reads (the
- * device tree is shallow) and returns real file sizes, which is what enables
- * skip-unchanged syncs. It is far gentler on this device's firmware than the
- * library API, which has proven crash-prone on low-power hardware.
+ * Discover remote recordings. The primary source is a recursive walk over
+ * the detailed file listing: it is only a handful of cheap directory reads
+ * (the device tree is shallow) and returns real file sizes, which enables
+ * skip-unchanged syncs. It is gentler on the firmware than the library
+ * API, which has proven crash-prone on low-power hardware.
  *
- * The library API is kept as a fallback (and honors the high-water mark for
- * steady-state syncs when it is reachable).
+ * The library API is kept as a fallback and honors the high-water mark
+ * for steady-state syncs when it is reachable.
  */
 async function discoverFiles(full: boolean): Promise<JamcorderFileEntry[]> {
   try {
@@ -307,11 +307,11 @@ async function syncNewFile(entry: JamcorderFileEntry): Promise<number | null> {
   }
   const jmx = parseJmxMetadata(data);
 
-  // Backstop for an empty asset that slipped past the size check (a fatter stub
-  // than the ones we have measured). This trusts the device's own EOF trailer
-  // rather than a local parse: a MIDI parse failure also yields "0 duration",
-  // and discarding a file on that basis would lose real data. No metadata, or
-  // any note at all, means keep it.
+  // Backstop for an empty asset that slipped past the size check (a fatter
+  // stub than the ones we have measured). This trusts the device's own
+  // EOF trailer rather than a local parse: a MIDI parse failure also
+  // yields "0 duration", and discarding on that basis would lose real
+  // data. No metadata, or any note at all, means keep it.
   if (jmx.totalNotes === 0 && jmx.totalMillis === 0) {
     console.log(`  Empty recording (0 notes); not imported`);
     return null;
@@ -347,13 +347,13 @@ function serializeJmxList<T>(items: T[] | undefined): string | null {
 }
 
 /**
- * Re-sync a file that changed on the device. For files we know the JMX trailer
- * offset of, fetch only the bytes appended since the last sync via
- * `download/offset` and splice them in (the trailer region is rewritten, so we
- * re-fetch from the stored offset to EOF). This keeps re-sync of a live,
- * growing recording incremental instead of re-downloading the whole file. Any
- * doubt (missing metadata, truncated local file, unparseable result) falls back
- * to a full re-download.
+ * Re-sync a file that changed on the device. For files we know the JMX
+ * trailer offset of, fetch only the bytes appended since the last sync via
+ * `download/offset` and splice them in (the trailer region is rewritten,
+ * so we re-fetch from the stored offset to EOF). This keeps re-sync of a
+ * live, growing recording incremental instead of re-downloading the whole
+ * file. Any doubt (missing metadata, truncated local file, unparseable
+ * result) falls back to a full re-download.
  */
 async function resyncFile(entry: JamcorderFileEntry, existing: ReturnType<typeof FileModel.findAll>[number]): Promise<number> {
   const localPath = existing.local_path;
@@ -412,12 +412,13 @@ async function resyncFile(entry: JamcorderFileEntry, existing: ReturnType<typeof
 /**
  * Run the prediction pipeline over files that carried Jamcorder passage
  * bookmarks in this sync. Bookmarks have no names, so we never auto-create
- * annotations here; the model names each passage and the results land in the
- * review queue as `prediction_reviews`, split at the device's own boundaries.
+ * annotations here. The model names each passage and the results land in
+ * the review queue as `prediction_reviews`, split at the device's own
+ * boundaries.
  *
- * Conservative by design: only files with stored bookmarks are touched, only
- * if a model file exists, and every failure is logged rather than thrown so a
- * bad file can never break the sync.
+ * Conservative by design: only files with stored bookmarks are touched,
+ * only if a model file exists, and every failure is logged rather than
+ * thrown so a bad file can never break the sync.
  */
 async function runPredictionsForBookmarkedFiles(importedIds: number[]): Promise<void> {
   if (importedIds.length === 0) return;

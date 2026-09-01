@@ -13,6 +13,7 @@ export function useCreateAnnotation() {
       // A brand-new song name must show up in the autocomplete for the next
       // segment without leaving the detail view.
       queryClient.invalidateQueries({ queryKey: ['uniqueSongNames'] });
+      queryClient.invalidateQueries({ queryKey: ['rebuildStatus'] });
     }
   });
 }
@@ -28,6 +29,12 @@ export function useUpdateAnnotation() {
       queryClient.invalidateQueries({ queryKey: ['filesByDate'] });
       queryClient.invalidateQueries({ queryKey: ['songPlayHistory'] });
       queryClient.invalidateQueries({ queryKey: ['uniqueSongNames'] });
+      queryClient.invalidateQueries({ queryKey: ['rebuildStatus'] });
+      // Editing an annotation can merge it with an overlapping same-song one.
+      // Merging or deleting re-points or clears the promotion on any prediction
+      // review promoted into it, so the review lists are stale too.
+      queryClient.invalidateQueries({ queryKey: ['predictionReviews'] });
+      queryClient.invalidateQueries({ queryKey: ['predictionReviewQueue'] });
     }
   });
 }
@@ -42,6 +49,11 @@ export function useDeleteAnnotation() {
       queryClient.invalidateQueries({ queryKey: ['filesByDate'] });
       queryClient.invalidateQueries({ queryKey: ['songPlayHistory'] });
       queryClient.invalidateQueries({ queryKey: ['uniqueSongNames'] });
+      queryClient.invalidateQueries({ queryKey: ['rebuildStatus'] });
+      // Deleting a promoted annotation un-promotes its review, which puts the
+      // review back on the roll and in the queue.
+      queryClient.invalidateQueries({ queryKey: ['predictionReviews'] });
+      queryClient.invalidateQueries({ queryKey: ['predictionReviewQueue'] });
     }
   });
 }

@@ -5,9 +5,9 @@ import type { RollAnnotation, RollBookmark, RollSkip } from './pianoRollTypes'
 /**
  * Static layers drawn over the notes.
  *
- * `memo`'d for the same reason `PianoRollNotes` is: the roll re-renders every
- * animation frame while the playhead moves, and these layers hold hundreds of
- * absolutely positioned elements that only change with the annotations.
+ * `memo`'d for the same reason `PianoRollNotes` is. The roll re-renders every
+ * animation frame while the playhead moves, and these layers hold hundreds
+ * of absolutely positioned elements that only change with the annotations.
  */
 
 interface AnnotationBandsProps {
@@ -126,8 +126,8 @@ interface PlayheadProps {
 }
 
 /**
- * The playback position line, rendered in every playback state: a hidden
- * playhead leaves no indication of where a paused or stopped file sits, and
+ * The playback position line, rendered in every playback state. A hidden
+ * playhead leaves no indication of where a paused or stopped file sits and
  * nothing visible for follow mode to be following.
  */
 export const Playhead = memo(function Playhead({ x, isPlaying }: PlayheadProps) {

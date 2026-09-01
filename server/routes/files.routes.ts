@@ -18,8 +18,8 @@ router.get('/by-date', async (req, res) => {
     const startDate = req.query.startDate as string | undefined;
     const endDate = req.query.endDate as string | undefined;
 
-    // Empty recordings (device-opened assets with no notes) are filtered out
-    // of the listing; report how many so the UI can say the view is filtered.
+    // Empty recordings (device-opened assets with no notes) are filtered
+    // out. Report how many so the UI can say the view is filtered.
     const files = FileModel.findByDate(startDate, endDate);
     const emptyRecordingCount = FileModel.countEmptyRecordings(startDate, endDate);
 

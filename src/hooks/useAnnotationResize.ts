@@ -45,9 +45,9 @@ function matchesDraft(candidate: ResizeDraft, draft: ResizeDraft): boolean {
  * Drag-to-resize for annotation chips on the timeline row.
  *
  * The draft is local so the chip tracks the pointer without a round trip, and
- * is cleared once the saved annotation catches up (or at once, if the save is
- * rejected). Pointer listeners live on the window because a drag always leaves
- * the handle.
+ * is cleared once the saved annotation catches up (or at once, if the save
+ * is rejected). Pointer listeners live on the window because a drag always
+ * leaves the handle.
  */
 export function useAnnotationResize({
   annotations,
@@ -140,7 +140,7 @@ export function useAnnotationResize({
         return
       }
 
-      // Either way the draft is released; a rejected save snaps the chip back
+      // Either way the draft is released. A rejected save snaps the chip back
       // to the stored times.
       const release = () => {
         setDraft((current) => (current && matchesDraft(current, pending) ? null : current))

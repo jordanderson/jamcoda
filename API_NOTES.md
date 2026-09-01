@@ -3,8 +3,8 @@
 > The authoritative Jamcorder references are the device API docs at
 > <https://www.jamcorder.com/docs/device-api> and the JMX MIDI file format spec
 > at <https://www.jamcorder.com/docs/jmx-midi-files>. These notes capture
-> behaviors we have learned in the wild that the official docs do not cover (or
-> cover only in passing). If anything here contradicts the official docs, trust
+> behaviors we have learned in practice that the official docs do not cover (or
+> cover only in passing). If anything here contradicts the official docs, follow
 > the official docs.
 
 ## Connection
@@ -202,16 +202,17 @@
   EOT) are valid, opened-but-unused assets. **They are not imported.** The
   firmware sometimes opens and closes assets in a burst without recording a note
   — 118 in 42 seconds on 2026-02-19, 147 across two bursts on 2026-04-11 — which
-  would otherwise bury a day's real recording under hundreds of dead rows. Sync
+  would otherwise hide a day's real recordings among hundreds of empty rows. Sync
   drops them two ways:
   - Before download, on the size the device reports: at or below
     `JAMCODA_SYNC_EMPTY_ASSET_MAX_BYTES` (default 1024). Observed stubs are all
     256 bytes (22 for truncated leftovers); the smallest real recording seen is
     2397, so the threshold sits in a wide gap.
   - After download, if the JMX trailer itself reports `totalNotes: 0` and
-    `totalMillis: 0`. This backstop reads the device's own summary rather than a
-    local parse — a failed MIDI parse also looks like "0 duration", and throwing
-    a file away on that basis would lose real data. No trailer means keep it.
+    `totalMillis: 0`. This second check reads the device's own summary rather
+    than a local parse — a failed MIDI parse also looks like "0 duration", and
+    discarding a file on that basis would lose real data. No trailer means
+    keep it.
 
   Skipping is safe: nothing is written, so if the device ever appends to a
   skipped asset it grows past the threshold and the next sync takes it as new.
