@@ -42,3 +42,16 @@ export function formatDate(dateStr: string): string {
  * so this is an alias rather than a second implementation.
  */
 export const formatDuration = formatTime
+
+/**
+ * Seconds as `Nh Nm`, for totals across many files.
+ *
+ * `formatDuration` is `m:ss`, which stops reading once a value runs to
+ * hundreds of hours -- a library total renders there as `11640:00`.
+ */
+export function formatHoursMinutes(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds))
+  const hours = Math.floor(total / 3600)
+  const mins = Math.floor((total % 3600) / 60)
+  return hours === 0 ? `${mins}m` : `${hours}h ${mins}m`
+}

@@ -227,6 +227,37 @@ import { IconName } from 'lucide-react'
 </div>
 ```
 
+### Toasts
+
+Results of a user action -- "Prediction marked invalid.", "File marked
+complete." -- are toasts, not inline banners. A banner in the content column
+pushes the page down as it appears and stays until something else clears it;
+a toast reports the outcome and gets out of the way.
+
+Use `useToasts()` for the queue and render `<ToastStack>` last in the page tree:
+
+```jsx
+const { toasts, showToast, dismissToast, clearToasts } = useToasts()
+
+showToast({ type: 'success', message: 'Ignored section deleted.' })
+showToast({
+  type: 'success',
+  message: 'Generated 4 prediction segments for this file.',
+  action: { label: 'Open review queue', onClick: () => { window.location.hash = '/reviews' } }
+})
+
+<ToastStack toasts={toasts} onDismiss={dismissToast} />
+```
+
+- Fixed bottom-right, at most three at a time, newest at the bottom.
+- Success clears after 5s, errors after 9s; hovering the stack holds both.
+  Every toast also has a close button.
+- Colors follow Status Indicators above: `bg-green-50` / `bg-red-50`.
+
+Inline banners are still right for state that is *not* the result of an
+action and does not resolve on its own -- a file that failed to load, a
+player error, an empty state.
+
 ### Keyboard Shortcuts Display
 ```jsx
 <div className="text-xs text-gray-500">

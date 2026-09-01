@@ -1,10 +1,32 @@
 import { useFilesByDate } from '@/hooks/useFilesByDate';
-import { ChevronRight } from 'lucide-react';
+import { ArrowDown, ChevronRight } from 'lucide-react';
 import type { FileByDateRow } from '@/api/localTypes';
-import { formatDate, formatDuration, formatTime } from '@/utils/format'
+import { formatDate, formatDuration, formatHoursMinutes, formatTime } from '@/utils/format'
+import {
+  applyBrowseView,
+  BROWSE_SORT_LABELS,
+  getBrowseProgress,
+  type BrowseSort,
+  type BrowseView
+} from './browseView';
 
 interface DateBrowserProps {
   onFileSelect: (fileId: number, startTime?: number) => void;
+  /**
+   * Held by the caller so the operator's filter survives a trip into a file
+   * and back -- the browse table unmounts on that navigation.
+   */
+  view: BrowseView;
+  onViewChange: (view: BrowseView) => void;
+}
+
+const SORT_OPTIONS: BrowseSort[] = ['date-desc', 'unreviewed-desc'];
+
+/** Shared by the library bar and the per-file bars, so they read alike. */
+function progressBarColor(percentage: number): string {
+  if (percentage >= 80) return 'bg-green-500';
+  if (percentage >= 50) return 'bg-yellow-500';
+  return 'bg-orange-500';
 }
 
 // Hash a string to a colour, so the same song keeps its colour across the UI.
@@ -26,7 +48,7 @@ function stringToTextColor(str: string): string {
   return `hsl(${hue}, 70%, 35%)`;
 }
 
-export function DateBrowser({ onFileSelect }: DateBrowserProps) {
+export function DateBrowser({ onFileSelect, view, onViewChange }: DateBrowserProps) {
   const { data, isLoading, error } = useFilesByDate();
 
   if (isLoading) {
@@ -64,12 +86,15 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
     );
   }
 
-  // Flatten files from all dates and sort by date descending.
+  // Flatten files out of their date groups, then order them for display.
   const allFiles = data.dates.flatMap(({ date, files }) =>
     files.map((file: FileByDateRow) => ({ ...file, date }))
-  ).sort((a, b) => b.date.localeCompare(a.date));
+  );
+  const visibleFiles = applyBrowseView(allFiles, view);
+  const progress = getBrowseProgress(allFiles);
 
   const totalFiles = allFiles.length;
+  const visibleCount = visibleFiles.length;
   const emptyRecordingCount = data.emptyRecordingCount ?? 0;
 
   return (
@@ -79,7 +104,9 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
           MIDI Files
         </h1>
         <p className="text-gray-600 mt-2">
-          {totalFiles} file{totalFiles !== 1 ? 's' : ''}
+          {view.incompleteOnly
+            ? `${visibleCount} of ${totalFiles} file${totalFiles !== 1 ? 's' : ''}`
+            : `${totalFiles} file${totalFiles !== 1 ? 's' : ''}`}
           {emptyRecordingCount > 0 && (
             <span
               className="text-gray-500"
@@ -91,7 +118,61 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
         </p>
       </div>
 
+      <div
+        data-testid="library-progress"
+        className="border border-gray-200 rounded-lg shadow-sm bg-white p-4"
+      >
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 className="text-sm font-medium text-gray-700">Annotation progress</h2>
+          <span className="text-2xl font-bold text-gray-900">{progress.percentage}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+          <div
+            className={`h-2 rounded-full transition-all ${progressBarColor(progress.percentage)}`}
+            style={{ width: `${progress.percentage}%` }}
+          />
+        </div>
+        <p className="mt-2 text-xs text-gray-500">
+          {formatHoursMinutes(progress.annotatedSeconds)} of {formatHoursMinutes(progress.totalSeconds)}
+          {' '}&middot; {progress.completeFileCount} of {progress.fileCount} file
+          {progress.fileCount !== 1 ? 's' : ''} complete
+        </p>
+      </div>
+
       <div className="border rounded-lg overflow-hidden shadow-sm bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Sort</span>
+            <div className="flex rounded-lg bg-gray-100 p-0.5">
+              {SORT_OPTIONS.map((sort) => (
+                <button
+                  key={sort}
+                  onClick={() => onViewChange({ ...view, sort })}
+                  aria-pressed={view.sort === sort}
+                  className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    view.sort === sort
+                      ? 'bg-gray-900 text-white'
+                      : 'text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                  {BROWSE_SORT_LABELS[sort]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={view.incompleteOnly}
+              onChange={(event) => onViewChange({ ...view, incompleteOnly: event.target.checked })}
+              className="h-4 w-4 accent-gray-900"
+            />
+            Incomplete only
+          </label>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
@@ -106,7 +187,7 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {allFiles.map((file) => (
+              {visibleFiles.map((file) => (
                 <tr
                   key={file.id}
                   onClick={() => onFileSelect(file.id)}
@@ -131,11 +212,7 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
                         <div className="flex-1 min-w-[100px]">
                           <div className="w-full bg-gray-200 rounded-full h-2">
                             <div
-                              className={`h-2 rounded-full transition-all ${
-                                file.percentageAnnotated >= 80 ? 'bg-green-500' :
-                                file.percentageAnnotated >= 50 ? 'bg-yellow-500' :
-                                'bg-orange-500'
-                              }`}
+                              className={`h-2 rounded-full transition-all ${progressBarColor(file.percentageAnnotated)}`}
                               style={{ width: `${file.percentageAnnotated}%` }}
                             />
                           </div>
@@ -197,6 +274,18 @@ export function DateBrowser({ onFileSelect }: DateBrowserProps) {
             </tbody>
           </table>
         </div>
+
+        {view.incompleteOnly && visibleCount === 0 && (
+          <div className="px-4 py-12 text-center">
+            <div className="text-gray-600">Every file is marked complete</div>
+            <button
+              onClick={() => onViewChange({ ...view, incompleteOnly: false })}
+              className="mt-2 text-sm font-medium text-[#9198E5] hover:text-[#E66465]"
+            >
+              Show all {totalFiles} file{totalFiles !== 1 ? 's' : ''}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

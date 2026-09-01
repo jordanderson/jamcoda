@@ -5,6 +5,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { SyncModal } from './components/sync/SyncModal'
 import { WelcomeModal } from './components/sync/WelcomeModal'
 import { DateBrowser } from './components/files/DateBrowser'
+import { DEFAULT_BROWSE_VIEW, type BrowseView } from './components/files/browseView'
 import { DetailPage } from './components/files/DetailPage'
 import { PredictionReviewPage } from './components/reviews/PredictionReviewPage'
 import { SongsPage } from './components/songs/SongsPage'
@@ -16,6 +17,10 @@ function AppContent() {
   const [route, setRoute] = useState(window.location.hash.slice(1) || '/browse')
   const [syncId, setSyncId] = useState<string | null>(null)
   const [isWelcomeDismissed, setIsWelcomeDismissed] = useState(false)
+  // Browse's sort and filter live here, not in the table: opening a file
+  // unmounts the table, and losing the filter on every trip back would defeat
+  // the point of narrowing to the files still needing work.
+  const [browseView, setBrowseView] = useState<BrowseView>(DEFAULT_BROWSE_VIEW)
 
   const queryClient = useQueryClient()
   const { data: syncStatus } = useSyncStatus()
@@ -79,7 +84,13 @@ function AppContent() {
       />
       {syncId && <SyncModal syncId={syncId} onComplete={handleSyncComplete} />}
       <Layout onStartSync={handleStartSync} isSyncStarting={startSync.isPending}>
-        {route === '/browse' && <DateBrowser onFileSelect={handleFileSelect} />}
+        {route === '/browse' && (
+          <DateBrowser
+            onFileSelect={handleFileSelect}
+            view={browseView}
+            onViewChange={setBrowseView}
+          />
+        )}
         {route.startsWith('/songs') && <SongsPage />}
         {route.startsWith('/reviews') && <PredictionReviewPage />}
         {route.startsWith('/detail/') && (

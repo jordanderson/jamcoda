@@ -26,6 +26,8 @@ import type {
   RollSkip
 } from '@/components/midi/pianoRollTypes';
 import { AnnotationModal } from '@/components/annotations/AnnotationModal';
+import { ToastStack } from '@/components/ui/ToastStack';
+import { useToasts } from '@/hooks/useToasts';
 import type { PredictionReview } from '@/api/localTypes';
 import { formatTime, formatTimeHms } from '@/utils/format'
 import { resolveReviewFields } from '@core/predictionReview';
@@ -41,11 +43,6 @@ import { DetailIgnoredSections } from './DetailIgnoredSections';
 
 interface DetailPageProps {
   fileId: number;
-}
-
-interface Feedback {
-  type: 'success' | 'error';
-  message: string;
 }
 
 interface AnnotationModalState {
@@ -101,19 +98,15 @@ export function DetailPage({ fileId }: DetailPageProps) {
     limit: 500
   });
   const { data: uniqueSongNames = [] } = useUniqueSongNames();
+  const { toasts, showToast, dismissToast, clearToasts } = useToasts();
 
   const [isAnnotationMode, setIsAnnotationMode] = useState(false);
   const [startCheckpoint, setStartCheckpoint] = useState<number | null>(null);
   const [endCheckpoint, setEndCheckpoint] = useState<number | null>(null);
   const [annotationModalData, setAnnotationModalData] = useState<AnnotationModalState | null>(null);
   const [snapToPlayback, setSnapToPlayback] = useState(true);
-  const [predictionFeedback, setPredictionFeedback] = useState<Feedback | null>(null);
-  const [completionFeedback, setCompletionFeedback] = useState<Feedback | null>(null);
-  const [predictionReviewFeedback, setPredictionReviewFeedback] = useState<Feedback | null>(null);
   const [selectedPredictionReviewId, setSelectedPredictionReviewId] = useState<number | null>(null);
   const [hoveredRollTime, setHoveredRollTime] = useState<number | null>(null);
-  const [annotationFeedback, setAnnotationFeedback] = useState<Feedback | null>(null);
-  const [ignoredSectionFeedback, setIgnoredSectionFeedback] = useState<Feedback | null>(null);
   const [splittingGapKey, setSplittingGapKey] = useState<string | null>(null);
   const [loadedFileId, setLoadedFileId] = useState<number | null>(null);
 
@@ -319,8 +312,8 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
   /**
    * Reset per-file view state when navigating to another recording.
-   * Checkpoints, the follow toggle, region-select mode, and the feedback
-   * banners all describe the file that was open, not the one being opened.
+   * Checkpoints, the follow toggle, region-select mode, and any queued toasts
+   * all describe the file that was open, not the one being opened.
    */
   useEffect(() => {
     setStartCheckpoint(null);
@@ -331,12 +324,8 @@ export function DetailPage({ fileId }: DetailPageProps) {
     setHoveredRollTime(null);
     setSelectedPredictionReviewId(null);
     setSplittingGapKey(null);
-    setPredictionFeedback(null);
-    setPredictionReviewFeedback(null);
-    setCompletionFeedback(null);
-    setAnnotationFeedback(null);
-    setIgnoredSectionFeedback(null);
-  }, [fileId]);
+    clearToasts();
+  }, [fileId, clearToasts]);
 
   // Drop the quick-review modal if its row disappears from under it.
   useEffect(() => {
@@ -453,10 +442,8 @@ export function DetailPage({ fileId }: DetailPageProps) {
     endTime: number,
     reason?: string
   ) => {
-    setIgnoredSectionFeedback(null);
-
     if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
-      setIgnoredSectionFeedback({
+      showToast({
         type: 'error',
         message: 'Start and end times must be valid numbers.'
       });
@@ -464,7 +451,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
     }
 
     if (startTime >= endTime) {
-      setIgnoredSectionFeedback({
+      showToast({
         type: 'error',
         message: 'Start time must be less than end time.'
       });
@@ -472,7 +459,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
     }
 
     if (startTime < 0) {
-      setIgnoredSectionFeedback({
+      showToast({
         type: 'error',
         message: 'Start time cannot be negative.'
       });
@@ -480,7 +467,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
     }
 
     if (duration > 0 && endTime > duration + 0.001) {
-      setIgnoredSectionFeedback({
+      showToast({
         type: 'error',
         message: `End time must be within file duration (${formatTime(duration)}).`
       });
@@ -499,39 +486,37 @@ export function DetailPage({ fileId }: DetailPageProps) {
       const clearedMessage = cleared > 0
         ? ` Cleared ${cleared} overlapping unpromoted prediction row${cleared === 1 ? '' : 's'}.`
         : '';
-      setIgnoredSectionFeedback({
+      showToast({
         type: 'success',
         message: `Ignored section added.${clearedMessage}`
       });
       setAnnotationModalData(null);
     } catch (error) {
-      setIgnoredSectionFeedback({
+      showToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to add ignored section.'
       });
     }
-  }, [createIgnoredSection.mutateAsync, duration, fileId]);
+  }, [createIgnoredSection.mutateAsync, duration, fileId, showToast]);
 
   const handleDeleteIgnoredSection = useCallback((ignoredSectionId: number) => {
     if (!confirm('Delete this ignored section?')) return;
 
-    setIgnoredSectionFeedback(null);
     deleteIgnoredSection.mutate(ignoredSectionId, {
       onSuccess: () => {
-        setIgnoredSectionFeedback({ type: 'success', message: 'Ignored section deleted.' });
+        showToast({ type: 'success', message: 'Ignored section deleted.' });
       },
       onError: (error) => {
-        setIgnoredSectionFeedback({
+        showToast({
           type: 'error',
           message: error instanceof Error ? error.message : 'Failed to delete ignored section.'
         });
       }
     });
-  }, [deleteIgnoredSection.mutate]);
+  }, [deleteIgnoredSection.mutate, showToast]);
 
   const handleDeleteAnnotation = useCallback((annotationId: number) => {
     if (!confirm('Delete this annotation?')) return;
-    setAnnotationFeedback(null);
     deleteAnnotation.mutate(annotationId);
   }, [deleteAnnotation.mutate]);
 
@@ -550,16 +535,14 @@ export function DetailPage({ fileId }: DetailPageProps) {
     annotationId: number,
     times: { startTime: number; endTime: number }
   ) => {
-    setAnnotationFeedback(null);
-
     if (!Number.isFinite(times.startTime) || !Number.isFinite(times.endTime)) {
       const error = new Error('Resized annotation has invalid time values.');
-      setAnnotationFeedback({ type: 'error', message: error.message });
+      showToast({ type: 'error', message: error.message });
       throw error;
     }
     if (times.startTime >= times.endTime) {
       const error = new Error('Annotation start time must be less than end time.');
-      setAnnotationFeedback({ type: 'error', message: error.message });
+      showToast({ type: 'error', message: error.message });
       throw error;
     }
 
@@ -570,17 +553,16 @@ export function DetailPage({ fileId }: DetailPageProps) {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to resize annotation.';
-      setAnnotationFeedback({ type: 'error', message });
+      showToast({ type: 'error', message });
       throw error;
     }
-  }, [updateAnnotation.mutateAsync]);
+  }, [updateAnnotation.mutateAsync, showToast]);
 
   const handleAnnotationSubmit = useCallback((
     songName: string,
     startTime?: number,
     endTime?: number
   ) => {
-    setAnnotationFeedback(null);
     if (!annotationModalData) return;
 
     if (annotationModalData.mode === 'edit' && annotationModalData.annotationId) {
@@ -608,7 +590,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
   }, []);
 
   const handleEditAnnotation = useCallback((annotation: RollAnnotation) => {
-    setAnnotationFeedback(null);
     setAnnotationModalData({
       startTime: annotation.start_time,
       endTime: annotation.end_time,
@@ -625,7 +606,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
     gapIndex: number
   ) => {
     if (getGapAction(gap, annotation) !== 'split') {
-      setAnnotationFeedback({
+      showToast({
         type: 'error',
         message: 'This gap is at the edge of the annotation and cannot be split into two segments.'
       });
@@ -634,7 +615,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
     const splitKey = `${annotation.id}:${gapIndex}`;
     setSplittingGapKey(splitKey);
-    setAnnotationFeedback(null);
 
     const originalStart = annotation.start_time;
     const originalEnd = annotation.end_time;
@@ -664,19 +644,19 @@ export function DetailPage({ fileId }: DetailPageProps) {
         );
       }
 
-      setAnnotationFeedback({
+      showToast({
         type: 'success',
         message: `Split annotation at gap ${formatTime(gap.startTime)} - ${formatTime(gap.endTime)}.`
       });
     } catch (error) {
-      setAnnotationFeedback({
+      showToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to split annotation at this gap.'
       });
     } finally {
       setSplittingGapKey((current) => (current === splitKey ? null : current));
     }
-  }, [createAnnotation.mutateAsync, fileId, updateAnnotation.mutateAsync]);
+  }, [createAnnotation.mutateAsync, fileId, updateAnnotation.mutateAsync, showToast]);
 
   const handleTrimAnnotationGap = useCallback(async (
     annotation: RollAnnotation,
@@ -685,7 +665,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
   ) => {
     const action = getGapAction(gap, annotation);
     if (action !== 'trim-start' && action !== 'trim-end') {
-      setAnnotationFeedback({
+      showToast({
         type: 'error',
         message: 'This gap cannot be trimmed automatically.'
       });
@@ -694,7 +674,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
     const splitKey = `${annotation.id}:${gapIndex}`;
     setSplittingGapKey(splitKey);
-    setAnnotationFeedback(null);
 
     try {
       if (action === 'trim-end') {
@@ -702,7 +681,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
           id: annotation.id,
           data: { endTime: gap.startTime }
         });
-        setAnnotationFeedback({
+        showToast({
           type: 'success',
           message: `Trimmed annotation end to ${formatTime(gap.startTime)}.`
         });
@@ -711,20 +690,20 @@ export function DetailPage({ fileId }: DetailPageProps) {
           id: annotation.id,
           data: { startTime: gap.endTime }
         });
-        setAnnotationFeedback({
+        showToast({
           type: 'success',
           message: `Trimmed annotation start to ${formatTime(gap.endTime)}.`
         });
       }
     } catch (error) {
-      setAnnotationFeedback({
+      showToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to trim annotation at this gap.'
       });
     } finally {
       setSplittingGapKey((current) => (current === splitKey ? null : current));
     }
-  }, [updateAnnotation.mutateAsync]);
+  }, [updateAnnotation.mutateAsync, showToast]);
 
   // ---------------------------------------------------------------------------
   // Prediction and completion actions
@@ -732,13 +711,12 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
   const handleRunPredictions = useCallback(() => {
     if (file?.isComplete) {
-      setPredictionFeedback({
+      showToast({
         type: 'error',
         message: 'This file is marked complete. Mark it incomplete to run predictions.'
       });
       return;
     }
-    setPredictionFeedback(null);
     runPredictionForFile.mutate(
       { fileId },
       {
@@ -751,20 +729,26 @@ export function DetailPage({ fileId }: DetailPageProps) {
           const clearMessage = cleared > 0
             ? ` Cleared ${cleared} previous unpromoted review row${cleared === 1 ? '' : 's'}.`
             : '';
-          setPredictionFeedback({ type: 'success', message: `${baseMessage}${clearMessage}` });
+          showToast({
+            type: 'success',
+            message: `${baseMessage}${clearMessage}`,
+            action: {
+              label: 'Open review queue for this file',
+              onClick: () => { window.location.hash = `/reviews?fileId=${fileId}`; }
+            }
+          });
         },
         onError: (error) => {
-          setPredictionFeedback({
+          showToast({
             type: 'error',
             message: error instanceof Error ? error.message : 'Failed to run predictions for this file.'
           });
         }
       }
     );
-  }, [file?.isComplete, fileId, runPredictionForFile.mutate]);
+  }, [file?.isComplete, fileId, runPredictionForFile.mutate, showToast]);
 
   const handleOpenPredictionActionModal = useCallback((predictionId: number) => {
-    setPredictionReviewFeedback(null);
     setSelectedPredictionReviewId(predictionId);
   }, []);
 
@@ -774,7 +758,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
   const handleQuickConfirmAndPromote = async () => {
     if (!selectedPredictionReview) return;
-    setPredictionReviewFeedback(null);
 
     try {
       await updatePredictionReview.mutateAsync({
@@ -782,13 +765,13 @@ export function DetailPage({ fileId }: DetailPageProps) {
         data: { status: 'confirmed' }
       });
       await promotePredictionReview.mutateAsync(selectedPredictionReview.id);
-      setPredictionReviewFeedback({
+      showToast({
         type: 'success',
         message: 'Prediction confirmed and promoted to annotations.'
       });
       setSelectedPredictionReviewId(null);
     } catch (error) {
-      setPredictionReviewFeedback({
+      showToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to confirm and promote prediction.'
       });
@@ -797,17 +780,16 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
   const handleQuickMarkInvalid = async () => {
     if (!selectedPredictionReview) return;
-    setPredictionReviewFeedback(null);
 
     try {
       await updatePredictionReview.mutateAsync({
         id: selectedPredictionReview.id,
         data: { status: 'invalid' }
       });
-      setPredictionReviewFeedback({ type: 'success', message: 'Prediction marked invalid.' });
+      showToast({ type: 'success', message: 'Prediction marked invalid.' });
       setSelectedPredictionReviewId(null);
     } catch (error) {
-      setPredictionReviewFeedback({
+      showToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to mark prediction invalid.'
       });
@@ -816,8 +798,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
   const handleToggleFileCompletion = () => {
     if (!file) return;
-    setCompletionFeedback(null);
-    setPredictionFeedback(null);
 
     setFileCompletion.mutate(
       { fileId, isComplete: !file.isComplete },
@@ -825,20 +805,20 @@ export function DetailPage({ fileId }: DetailPageProps) {
         onSuccess: (result) => {
           if (result.isComplete) {
             const cleared = result.clearedPredictionCount;
-            setCompletionFeedback({
+            showToast({
               type: 'success',
               message: `File marked complete. Cleared ${cleared} prediction row${cleared === 1 ? '' : 's'} for this file.`
             });
             return;
           }
 
-          setCompletionFeedback({
+          showToast({
             type: 'success',
             message: 'File marked incomplete. You can run predictions again for this file.'
           });
         },
         onError: (error) => {
-          setCompletionFeedback({
+          showToast({
             type: 'error',
             message: error instanceof Error ? error.message : 'Failed to update file completion status.'
           });
@@ -968,50 +948,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-2">
           <AlertCircle className="w-5 h-5 text-red-700 flex-shrink-0" />
           <p className="text-red-700">{showErrorMessage}</p>
-        </div>
-      )}
-
-      {predictionFeedback && (
-        <div
-          className={`border rounded-lg p-4 mb-6 ${
-            predictionFeedback.type === 'success'
-              ? 'bg-green-50 border-green-200 text-green-800'
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}
-        >
-          <p className="text-sm">{predictionFeedback.message}</p>
-          {predictionFeedback.type === 'success' && (
-            <button
-              onClick={() => { window.location.hash = `/reviews?fileId=${fileId}`; }}
-              className="mt-2 text-sm underline font-medium"
-            >
-              Open review queue for this file
-            </button>
-          )}
-        </div>
-      )}
-
-      {predictionReviewFeedback && (
-        <div
-          className={`border rounded-lg p-4 mb-6 ${
-            predictionReviewFeedback.type === 'success'
-              ? 'bg-green-50 border-green-200 text-green-800'
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}
-        >
-          <p className="text-sm">{predictionReviewFeedback.message}</p>
-        </div>
-      )}
-
-      {completionFeedback && (
-        <div
-          className={`border rounded-lg p-4 mb-6 ${
-            completionFeedback.type === 'success'
-              ? 'bg-green-50 border-green-200 text-green-800'
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}
-        >
-          <p className="text-sm">{completionFeedback.message}</p>
         </div>
       )}
 
@@ -1223,29 +1159,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
           <p className="mb-4 text-xs text-gray-500">
             Gap pills show internal pauses of {LARGE_ANNOTATION_GAP_SECONDS}s or longer. Click a gap label to jump, then use Split or Trim.
           </p>
-          {annotationFeedback && (
-            <div
-              className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
-                annotationFeedback.type === 'success'
-                  ? 'border-green-200 bg-green-50 text-green-800'
-                  : 'border-red-200 bg-red-50 text-red-800'
-              }`}
-            >
-              {annotationFeedback.message}
-            </div>
-          )}
-          {ignoredSectionFeedback && (
-            <div
-              className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
-                ignoredSectionFeedback.type === 'success'
-                  ? 'border-green-200 bg-green-50 text-green-800'
-                  : 'border-red-200 bg-red-50 text-red-800'
-              }`}
-            >
-              {ignoredSectionFeedback.message}
-            </div>
-          )}
-
           <DetailAnnotationList
             annotations={annotations}
             gapsById={annotationGapsById}
@@ -1287,6 +1200,8 @@ export function DetailPage({ fileId }: DetailPageProps) {
           Back to Library
         </button>
       </div>
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
