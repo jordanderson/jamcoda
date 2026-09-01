@@ -18,6 +18,89 @@ How to read the numbers:
 
 ---
 
+## 2026-09-01 — v2.4: split-register chroma features + hand-mask augmentation (rejected)
+
+### Context
+
+Flat pitch-class (chroma) profiles are octave-invariant: a C2 and a C5 both
+increment `pc_C`. Register survived only in `mean_pitch`/`pitch_span`, so the
+model could not see "left-hand content" vs "right-hand content". Practice
+sessions mix two-hand and one-hand performances of the same song; the open
+question was whether making register explicit in the features, and teaching the
+model one-hand variants of each song, helps recognition.
+
+### What changed
+
+**Pitch classes are split by register.** The 12 flat chroma features are
+replaced by 24 (`pcLow_*`, `pcHigh_*`), each register normalized independently
+to sum 1, plus `low_register_ratio` (the low/high energy balance that
+independent normalization hides). 25 → 38 features. The divide is
+`registerDivide` (default 60, middle C), stored in the model config.
+`loadModel`'s feature-set guard rejects older 25-feature models with the usual
+"retrain it" error.
+
+**Hand-mask augmentation (rejected, kept behind `--hand-mask-augment`).** A
+fraction of annotated windows is duplicated with one register's chroma zeroed
+and `low_register_ratio` set to the remaining register's extreme, under the
+same label. Selection is an even stride with alternating masks — no RNG, so
+training and LOO eval stay deterministic. A window whose target register is
+already empty is skipped, so a song window is never masked into a
+silence-shaped vector.
+
+### Results
+
+All LOO numbers below are 57 annotated files (v2.3 was 48 files, so part of the
+jump is data growth, not features).
+
+| metric | v2.3 (48 files) | v2.4 split (57) | +aug 0.15 (57) | +aug 0.5 (57) |
+| --- | --- | --- | --- | --- |
+| window accuracy | 50.91% | 73.65% | 70.23% | 68.35% |
+| segment recall | 51.26% | 74.21% | 70.49% | 68.94% |
+| segment precision | 45.43% | 50.37% | 50.93% | 51.58% |
+| segment F1 | 48.17% | 60.01% | 59.13% | 59.01% |
+| segments emitted | 364 | 512 | — | 524 |
+| predicted seconds | 36,468 | 68,610 | — | 62,423 |
+
+Songs with 60s+ annotation at 0% recall: 13 with split-only vs 16 recorded at
+v2.3 (12 with aug 0.5). The confusions that remain are almost entirely
+song → `__none__` (Bethena 2,039, True Love Leaves No Traces 708): the model
+now mostly fails by *silence*, not by wrong song.
+
+**Split-register chroma is the win.** It is the only change that improved
+accuracy, and it is the register signal the flat chroma was throwing away. The
+window-accuracy jump is large because LOO folds now separate songs that share
+pitch classes but not registers (e.g. a Moonlight-style left-hand ostinato vs a
+melody-led song).
+
+**Hand-mask augmentation is a measured regression, monotone in the fraction.**
+At 0.15 and 0.5 it lowers LOO F1 and window accuracy, and per-window recognition
+of *single-register* windows (insample argmax, no decoder):
+
+| register bucket | split-only | +aug 0.15 | +aug 0.5 |
+| --- | --- | --- | --- |
+| low-only windows (610) | 45.6% | 39.7% | 36.4% |
+| high-only windows (2124) | 61.7% | 54.8% | 49.2% |
+| two-hand windows (43,802) | 68.1% | 67.8% | 62.7% |
+
+So it hurts even the case it was designed for. Likely mechanism: masked copies
+of *different* songs all land in the sparse one-register region of feature
+space, adding confusable prototype mass there, and the extra prototypes amplify
+the known prototype-count bias (v2.3). The headroom is also small: only ~6% of
+annotated windows are single-register. Conclusion: the augmentation idea is
+sound in principle but does not work through the prototype-scoring path. The
+flag stays for when one-hand practice is better represented in the annotations;
+the default is off.
+
+### Notes
+
+- The `Rebuild Model` button now produces a 38-feature model. The existing
+  `data/ml/model.json` (25 features) is rejected at load with a clear error
+  until rebuilt.
+- `registerDivide` and `handMaskAugmentFraction` are train-time knobs:
+  `--register-divide` and `--hand-mask-augment`.
+
+---
+
 ## 2026-08-31 — v2.3: segment boundaries, model-load guard, honest eval
 
 ### Context

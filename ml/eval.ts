@@ -295,7 +295,8 @@ async function main() {
       notes,
       {
         windowSec: model.config.windowSec,
-        stepSec: model.config.stepSec
+        stepSec: model.config.stepSec,
+        registerDivide: model.config.registerDivide ?? 60
       }
     );
     windowsByFile.set(file.fileId, truthWindows);

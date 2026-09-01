@@ -51,7 +51,9 @@ Options:
   --prototype-budget <int>     Total condensed prototype budget (default: 1200)
   --max-none-prototypes <int>  Prototype cap for the __none__ class (default: 120)
   --scaling <zscore|minmax|none>  Feature normalization (default: minmax)
-  --score-mode <min|avg>       Per-label score aggregation (default: min)
+  --register-divide <int>        MIDI note separating low/high register chroma (default: 60, middle C)
+  --hand-mask-augment <float>    Fraction of song windows given a hand-masked copy (default: 0, off; measured to reduce LOO accuracy)
+  --score-mode <min|avg>         Per-label score aggregation (default: min)
   --score-neighbors <int>      Nearest prototypes to average per label (default: 1)
   --decoder <anchor|viterbi|smooth>  Sequential decoding (default: anchor)
   --anchor-margin <float>      Anchor-link seed margin (default: 0.15)
@@ -83,6 +85,8 @@ async function main() {
     prototypeBudget: Math.max(1, parseInt_(readArg('--prototype-budget'), 1200)),
     maxNonePrototypes: Math.max(1, parseInt_(readArg('--max-none-prototypes'), 120)),
     featureScaling: parseScaling(readArg('--scaling')),
+    registerDivide: Math.max(1, parseInt_(readArg('--register-divide'), 60)),
+    handMaskAugmentFraction: clamp(parseNum(readArg('--hand-mask-augment'), 0), 0, 1),
     scoreMode: parseScoreMode(readArg('--score-mode')),
     scoreNeighbors: parseInt_(readArg('--score-neighbors'), 1),
     decoder: parseDecoder(readArg('--decoder')),

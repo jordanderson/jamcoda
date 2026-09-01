@@ -13,7 +13,11 @@ Goal:
 
 Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v2):
 
-- extracts windowed MIDI features (pitch-class profile, onset density, pitch/velocity/duration/polyphony stats, plus tempo, rhythmic regularity, silence ratio and register span)
+- extracts windowed MIDI features (split-register pitch-class profiles —
+  chroma separated into low and high register at `registerDivide`, default
+  middle C — plus onset density, pitch/velocity/duration/polyphony stats,
+  register balance, tempo, rhythmic regularity, silence ratio and register
+  span)
 - condenses training windows into per-label prototypes (a few hundred total) instead of retaining every window, so retraining and prediction are fast and the model file stays small
 - scores each window by its nearest prototype per song (minmax-scaled
   features). Prototype budgets scale with sqrt(support), so a song with more
@@ -88,6 +92,13 @@ npm run ml:train -- \
 
 Notes:
 - `--window` and `--step` are seconds.
+- `--register-divide` sets the MIDI note that separates low/high register
+  chroma (default 60, middle C). The model stores it, so prediction uses the
+  trained divide.
+- `--hand-mask-augment` trains one-hand copies of song windows (fraction of
+  annotated windows, default 0/off). It is a measured regression at 0.15 and
+  0.5 — see `ml/CHANGELOG.md` v2.4 — and is kept behind the flag only for
+  experimentation.
 - `--none-ratio` controls negative sampling volume.
 - `--prototype-budget` caps the total condensed prototypes across all songs;
   `--max-none-prototypes` caps the `__none__` share of that budget.

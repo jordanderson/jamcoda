@@ -450,6 +450,8 @@ router.post('/rebuild-model', async (req: Request, res: Response) => {
       prototypeBudget: Math.max(1, Math.floor(parseOptionalNumber(req.body.prototypeBudget) ?? 1200)),
       maxNonePrototypes: Math.max(1, Math.floor(parseOptionalNumber(req.body.maxNonePrototypes) ?? 120)),
       featureScaling: parseOptionalScaling(req.body.featureScaling),
+      registerDivide: Math.max(1, Math.floor(parseOptionalNumber(req.body.registerDivide) ?? 60)),
+      handMaskAugmentFraction: clamp(parseOptionalNumber(req.body.handMaskAugmentFraction) ?? 0, 0, 1),
       scoreMode: parseOptionalScoreMode(req.body.scoreMode),
       scoreNeighbors: Math.max(1, Math.floor(parseOptionalNumber(req.body.scoreNeighbors) ?? 1)),
       decoder: parseOptionalDecoder(req.body.decoder),

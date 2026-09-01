@@ -7,11 +7,16 @@ import { clamp, ensureDirForFile, roundTo } from '@core/cli/args';
 export const NO_SONG_LABEL = '__none__';
 
 /**
- * Version 2 features:
+ * Version 2 features (v2.4 split chroma):
  *
- * The first 7 entries are carried over from v1 (pitch-class durations plus
- * onset/pitch/velocity/duration/polyphony aggregates). The rest capture
- * characteristics that matter for real piano practice sessions:
+ * Pitch classes are split by register instead of the v2.0 flat chroma. Each
+ * note's duration lands in `pcLow_*` (pitch < `registerDivide`, default middle
+ * C = 60) or `pcHigh_*` (pitch >= `registerDivide`), and each register's
+ * profile is normalized independently to sum 1. This is the "which hand is
+ * playing" signal: a right-hand-only practice window keeps the same
+ * high-register chroma as the full song and reads as all-zero low chroma.
+ * `low_register_ratio` preserves the low/high energy balance that independent
+ * normalization hides. The remaining features are carried over from v2.0:
  *
  *   velocity_std / duration_std / polyphony_std   articulation and texture spread
  *   silence_ratio                                 how much of the window is dead air
@@ -21,18 +26,11 @@ export const NO_SONG_LABEL = '__none__';
  *                                                 density (rhythmic pulse strength)
  */
 const FEATURE_NAMES = [
-  'pc_C',
-  'pc_C#',
-  'pc_D',
-  'pc_D#',
-  'pc_E',
-  'pc_F',
-  'pc_F#',
-  'pc_G',
-  'pc_G#',
-  'pc_A',
-  'pc_A#',
-  'pc_B',
+  'pcLow_C', 'pcLow_C#', 'pcLow_D', 'pcLow_D#', 'pcLow_E', 'pcLow_F',
+  'pcLow_F#', 'pcLow_G', 'pcLow_G#', 'pcLow_A', 'pcLow_A#', 'pcLow_B',
+  'pcHigh_C', 'pcHigh_C#', 'pcHigh_D', 'pcHigh_D#', 'pcHigh_E', 'pcHigh_F',
+  'pcHigh_F#', 'pcHigh_G', 'pcHigh_G#', 'pcHigh_A', 'pcHigh_A#', 'pcHigh_B',
+  'low_register_ratio',
   'onset_density',
   'mean_pitch',
   'pitch_std',
@@ -47,6 +45,14 @@ const FEATURE_NAMES = [
   'tempo_bpm',
   'regularity'
 ] as const;
+
+const CHROMA_SIZE = 12;
+/** Index of the first low-register chroma feature (`pcLow_C`). */
+const LOW_CHROMA_START = FEATURE_NAMES.indexOf('pcLow_C');
+/** Index of the first high-register chroma feature (`pcHigh_C`). */
+const HIGH_CHROMA_START = FEATURE_NAMES.indexOf('pcHigh_C');
+/** Index of `low_register_ratio`. */
+const LOW_REGISTER_RATIO_INDEX = FEATURE_NAMES.indexOf('low_register_ratio');
 
 /** Sub-window bin used for polyphony spread and silence-ratio estimates. */
 const POLYPHONY_BIN_SEC = 0.25;
@@ -102,6 +108,24 @@ export interface TrainConfig {
   temperature?: number;
   /** Feature normalization: 'zscore' (v1 behaviour), 'minmax' (default), 'none'. */
   featureScaling?: 'zscore' | 'minmax' | 'none';
+  /**
+   * MIDI note pitch that separates the low (left-hand) register from the high
+   * (right-hand) register in the split pitch-class features. Middle C is 60.
+   * Default 60.
+   */
+  registerDivide?: number;
+  /**
+   * Fraction of annotated (song) windows that also get a hand-masked copy: the
+   * low or high register chroma is zeroed and the window is added again under
+   * the same label, so the model learns that a one-hand performance of a song
+   * still belongs to that song. 0 disables (default).
+   *
+   * Measured to reduce leave-one-file-out accuracy at 0.15 and 0.5, and to
+   * reduce per-window recognition of single-register windows too. Kept behind
+   * the flag for when one-hand practice is better represented in the
+   * annotations. See the v2.4 entry in ml/CHANGELOG.md.
+   */
+  handMaskAugmentFraction?: number;
   /** v2 per-label score aggregation: 'min' (nearest prototypes, default) or 'avg'. */
   scoreMode?: 'min' | 'avg';
   /**
@@ -158,6 +182,8 @@ export interface SongSegmentModel {
     annotationsUsed: number;
     totalSamples: number;
     positiveSamples: number;
+    /** Hand-masked one-hand copies of song windows added during training. */
+    augmentedSamples?: number;
     noneSamples: number;
     labelCounts: Record<string, number>;
     /** The average per-label prototype budget. */
@@ -255,7 +281,8 @@ export function resolveTrainConfig(config: TrainConfig): Required<
     'prototypeBudget' | 'maxNonePrototypes' | 'featureScaling' | 'scoreMode'
     | 'scoreNeighbors' | 'decoder' | 'anchorMargin' | 'minAnchorRun'
     | 'fillMinMargin' | 'fillTopK' | 'linkConfidence' | 'temperature'
-    | 'viterbiChangePenalty' | 'kernelScale'
+    | 'viterbiChangePenalty' | 'kernelScale' | 'registerDivide'
+    | 'handMaskAugmentFraction'
   >
 > & TrainConfig {
   return {
@@ -263,6 +290,8 @@ export function resolveTrainConfig(config: TrainConfig): Required<
     prototypeBudget: config.prototypeBudget ?? 1200,
     maxNonePrototypes: config.maxNonePrototypes ?? 120,
     featureScaling: config.featureScaling ?? 'minmax',
+    registerDivide: config.registerDivide ?? 60,
+    handMaskAugmentFraction: config.handMaskAugmentFraction ?? 0,
     scoreMode: config.scoreMode ?? 'min',
     scoreNeighbors: config.scoreNeighbors ?? 1,
     decoder: config.decoder ?? 'anchor',
@@ -402,10 +431,12 @@ function extractWindowFeatures(
   notes: NoteEvent[],
   windowStart: number,
   windowSec: number,
-  noteCursorHint: number
+  noteCursorHint: number,
+  registerDivide: number
 ): { features: number[]; nextCursorHint: number } {
   const windowEnd = windowStart + windowSec;
-  const pitchClassDurations = new Array<number>(12).fill(0);
+  const lowPitchClassDurations = new Array<number>(CHROMA_SIZE).fill(0);
+  const highPitchClassDurations = new Array<number>(CHROMA_SIZE).fill(0);
 
   const polyBins = Math.max(1, Math.ceil(windowSec / POLYPHONY_BIN_SEC));
   const binActiveDur = new Array<number>(polyBins).fill(0);
@@ -440,7 +471,12 @@ function extractWindowFeatures(
     const overlapEnd = Math.min(note.endSec, windowEnd);
     const overlap = overlapEnd - overlapStart;
     if (overlap > 0) {
-      pitchClassDurations[note.pitch % 12] += overlap;
+      const pitchClass = note.pitch % CHROMA_SIZE;
+      if (note.pitch < registerDivide) {
+        lowPitchClassDurations[pitchClass] += overlap;
+      } else {
+        highPitchClassDurations[pitchClass] += overlap;
+      }
       activeDuration += overlap;
 
       const bStart = Math.max(0, Math.floor((overlapStart - windowStart) / POLYPHONY_BIN_SEC));
@@ -482,10 +518,16 @@ function extractWindowFeatures(
     }
   }
 
-  const totalPcDuration = pitchClassDurations.reduce((sum, v) => sum + v, 0);
-  const normalizedPc = totalPcDuration > 0
-    ? pitchClassDurations.map((value) => value / totalPcDuration)
-    : pitchClassDurations;
+  const lowTotal = lowPitchClassDurations.reduce((sum, v) => sum + v, 0);
+  const highTotal = highPitchClassDurations.reduce((sum, v) => sum + v, 0);
+  const normalizedLow = lowTotal > 0
+    ? lowPitchClassDurations.map((value) => value / lowTotal)
+    : lowPitchClassDurations;
+  const normalizedHigh = highTotal > 0
+    ? highPitchClassDurations.map((value) => value / highTotal)
+    : highPitchClassDurations;
+  const registerTotal = lowTotal + highTotal;
+  const lowRegisterRatio = registerTotal > 0 ? lowTotal / registerTotal : 0;
 
   const meanPitch = onsetCount > 0 ? (onsetPitchSum / onsetCount) / 127 : 0;
   const pitchVariance = onsetCount > 0
@@ -536,7 +578,9 @@ function extractWindowFeatures(
 
   return {
     features: [
-      ...normalizedPc,
+      ...normalizedLow,
+      ...normalizedHigh,
+      lowRegisterRatio,
       onsetDensity,
       meanPitch,
       pitchStd,
@@ -579,7 +623,7 @@ function getLabelAtTime(
 export function buildSamplesForFile(
   file: AnnotatedMidiFile,
   notes: NoteEvent[],
-  config: Pick<TrainConfig, 'windowSec' | 'stepSec'>
+  config: Pick<TrainConfig, 'windowSec' | 'stepSec' | 'registerDivide'>
 ): WindowSample[] {
   const noteMax = notes.length > 0 ? notes[notes.length - 1].endSec : 0;
   const annotationMax = file.annotations.length > 0
@@ -597,7 +641,8 @@ export function buildSamplesForFile(
       notes,
       startTime,
       config.windowSec,
-      noteCursorHint
+      noteCursorHint,
+      config.registerDivide ?? 60
     );
     noteCursorHint = nextCursorHint;
 
@@ -841,6 +886,57 @@ function buildPrototypesFromGroups(
   };
 }
 
+/**
+ * Deterministic hand-mask augmentation.
+ *
+ * A fraction of the annotated (song) windows is duplicated with one register
+ * zeroed out: the low or high chroma block is set to 0 and
+ * `low_register_ratio` is set to the extreme that matches the remaining
+ * register. The copy keeps the original label, so the model learns that a
+ * one-hand performance of a song still belongs to that song.
+ *
+ * A window whose target register already carries no content is left alone:
+ * zeroing the last active register would turn a song window into a
+ * silence-shaped vector still labelled as the song, which is exactly the
+ * false-positive source this augmentation must avoid.
+ *
+ * Selection uses an even stride over the positive windows and alternates
+ * which hand is masked, with no RNG, so training and leave-one-out eval stay
+ * deterministic.
+ */
+function augmentHandMask(positive: WindowSample[], fraction: number): WindowSample[] {
+  if (!(fraction > 0) || positive.length === 0) return [];
+
+  const count = Math.round(positive.length * fraction);
+  if (count === 0) return [];
+
+  const stride = positive.length / count;
+  const augmented: WindowSample[] = [];
+  for (let k = 0; k < count; k++) {
+    const idx = Math.min(positive.length - 1, Math.floor(k * stride));
+    const sample = positive[idx];
+    const maskLow = k % 2 === 0;
+    const maskStart = maskLow ? LOW_CHROMA_START : HIGH_CHROMA_START;
+    const keepStart = maskLow ? HIGH_CHROMA_START : LOW_CHROMA_START;
+    if (!registerHasContent(sample.features, keepStart)) continue;
+
+    const features = sample.features.slice();
+    for (let i = 0; i < CHROMA_SIZE; i++) {
+      features[maskStart + i] = 0;
+    }
+    features[LOW_REGISTER_RATIO_INDEX] = maskLow ? 0 : 1;
+    augmented.push({ ...sample, features });
+  }
+  return augmented;
+}
+
+function registerHasContent(features: number[], chromaStart: number): boolean {
+  for (let i = 0; i < CHROMA_SIZE; i++) {
+    if (features[chromaStart + i] > 1e-9) return true;
+  }
+  return false;
+}
+
 function fitModelFromSamples(
   samples: WindowSample[],
   config: TrainConfig,
@@ -852,9 +948,10 @@ function fitModelFromSamples(
 
   const positive = samples.filter((sample) => sample.label !== NO_SONG_LABEL);
   const negative = samples.filter((sample) => sample.label === NO_SONG_LABEL);
+  const augmented = augmentHandMask(positive, config.handMaskAugmentFraction ?? 0);
   const maxNone = Math.max(1, Math.floor(positive.length * config.maxNoneToSongRatio));
   const keptNegative = evenlySample(negative, maxNone);
-  const kept = [...positive, ...keptNegative];
+  const kept = [...positive, ...augmented, ...keptNegative];
 
   const labels = [...new Set(kept.map((sample) => sample.label))].sort((a, b) => {
     if (a === NO_SONG_LABEL) return -1;
@@ -911,6 +1008,7 @@ function fitModelFromSamples(
       annotationsUsed: trainingSummaryOverride?.annotationsUsed ?? 0,
       totalSamples: kept.length,
       positiveSamples: positive.length,
+      augmentedSamples: augmented.length,
       noneSamples: keptNegative.length,
       labelCounts,
       prototypesPerLabel: perLabelBudget,
@@ -1373,14 +1471,14 @@ export function loadModel(modelPath: string): SongSegmentModel {
   return parsed;
 }
 
-function buildUnlabeledWindows(notes: NoteEvent[], config: Pick<TrainConfig, 'windowSec' | 'stepSec'>): WindowSample[] {
+function buildUnlabeledWindows(notes: NoteEvent[], config: Pick<TrainConfig, 'windowSec' | 'stepSec' | 'registerDivide'>): WindowSample[] {
   const noteMax = notes.length > 0 ? notes[notes.length - 1].endSec : 0;
   const starts = buildWindowStarts(noteMax, config.windowSec, config.stepSec);
 
   const windows: WindowSample[] = [];
   let noteCursorHint = 0;
   for (const startTime of starts) {
-    const featureInfo = extractWindowFeatures(notes, startTime, config.windowSec, noteCursorHint);
+    const featureInfo = extractWindowFeatures(notes, startTime, config.windowSec, noteCursorHint, config.registerDivide ?? 60);
     noteCursorHint = featureInfo.nextCursorHint;
     windows.push({
       fileId: -1,
@@ -1583,7 +1681,13 @@ export function suggestSongsForRange(
   let noteCursor = 0;
 
   for (const start of starts) {
-    const featureInfo = extractWindowFeatures(notes, start, windowSec, noteCursor);
+    const featureInfo = extractWindowFeatures(
+      notes,
+      start,
+      windowSec,
+      noteCursor,
+      model.config.registerDivide ?? 60
+    );
     noteCursor = featureInfo.nextCursorHint;
     const normalized = normalizeVector(featureInfo.features, model.featureMeans, model.featureStds);
     const scores = computeLabelScores(normalized, model);
