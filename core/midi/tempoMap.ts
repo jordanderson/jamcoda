@@ -59,24 +59,53 @@ function shouldMirrorFirstTempoAtZero(
   return Math.abs(first - ticksPerBeat * 1000) <= TEMPO_MATCH_EPSILON;
 }
 
-/** Absolute-tick Set Tempo events from every track, in tick order. */
-function collectTempoChanges(tracks: MidiEvent[][]): Array<{ tick: number; microsecondsPerBeat: number }> {
-  const collected: Array<{ tick: number; microsecondsPerBeat: number }> = [];
+/**
+ * Is this sequencer-specific payload one of the Jamcorder's own markers?
+ *
+ * JMX writes them as a zero byte followed by an ASCII `jmx…` token, the same
+ * shape `server/utils/jmxParser.ts` reads. Byte comparison rather than a
+ * string decode keeps this module free of Node's Buffer.
+ */
+function isJmxPayload(data: ArrayLike<number> | undefined): boolean {
+  return !!data
+    && data.length >= 4
+    && data[0] === 0x00
+    && data[1] === 0x6a // j
+    && data[2] === 0x6d // m
+    && data[3] === 0x78; // x
+}
+
+interface TempoScan {
+  tempos: Array<{ tick: number; microsecondsPerBeat: number }>;
+  /** Whether the file carries Jamcorder marker events. */
+  isJamcorder: boolean;
+}
+
+/** One pass for the Set Tempo events and for whether this is a JMX recording. */
+function scanTracks(tracks: MidiEvent[][]): TempoScan {
+  const tempos: Array<{ tick: number; microsecondsPerBeat: number }> = [];
+  let isJamcorder = false;
 
   for (const track of tracks) {
     let tick = 0;
     for (const event of track) {
       tick += event.deltaTime ?? 0;
+
+      if (event.type === 'sequencerSpecific') {
+        if (!isJamcorder && isJmxPayload(event.data)) isJamcorder = true;
+        continue;
+      }
       if (event.type !== 'setTempo') continue;
 
       const mpb = Number(event.microsecondsPerBeat);
       if (!Number.isFinite(mpb) || mpb <= 0) continue;
 
-      collected.push({ tick, microsecondsPerBeat: mpb });
+      tempos.push({ tick, microsecondsPerBeat: mpb });
     }
   }
 
-  return collected.sort((a, b) => a.tick - b.tick);
+  tempos.sort((a, b) => a.tick - b.tick);
+  return { tempos, isJamcorder };
 }
 
 export function buildTempoMap(midi: MidiData): TempoMap {
@@ -93,11 +122,24 @@ export function buildTempoMap(midi: MidiData): TempoMap {
   }
 
   const ticksPerBeat = header.ticksPerBeat && header.ticksPerBeat > 0 ? header.ticksPerBeat : 480;
-  const collected = collectTempoChanges(midi.tracks ?? []);
+  const { tempos: collected, isJamcorder } = scanTracks(midi.tracks ?? []);
 
-  if (shouldMirrorFirstTempoAtZero(collected, ticksPerBeat)) {
+  if (isJamcorder && shouldMirrorFirstTempoAtZero(collected, ticksPerBeat)) {
     collected.unshift({ tick: 0, microsecondsPerBeat: collected[0].microsecondsPerBeat });
   }
+
+  /**
+   * A Jamcorder file that never declares a tempo is still on the JMX grid --
+   * `ticksPerBeat` says so, and `jmxParser` already times every bookmark and
+   * skip by it. Falling back to the spec default instead stretches the whole
+   * recording by 9.17% (500000/458000), which is what 89 of these files were
+   * doing: their notes ran 9% long while their device markers, read straight
+   * off the JMX grid, did not.
+   */
+  if (collected.length === 0 && isJamcorder) {
+    collected.push({ tick: 0, microsecondsPerBeat: ticksPerBeat * 1000 });
+  }
+
   if (collected.length === 0 || collected[0].tick !== 0) {
     collected.unshift({ tick: 0, microsecondsPerBeat: DEFAULT_MICROSECONDS_PER_BEAT });
   }

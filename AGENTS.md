@@ -109,6 +109,20 @@ Core frontend routes:
   released them, so there is no honest end time. A note ended by All Notes Off
   is capped (`MAX_ALL_NOTES_OFF_SECONDS`), because that end is an upper bound
   rather than a measured release.
+- **A Jamcorder recording is on the JMX grid of one millisecond per tick even
+  when it declares no tempo.** 89 of 235 files never write a Set Tempo event;
+  reading them at the Standard MIDI File default of 120 BPM stretched them by
+  9.17% (500000/458000), so their notes disagreed with their own device
+  markers -- `jmxParser` has always read bookmarks and skips off the JMX grid.
+  `core/midi/tempoMap.ts` detects a Jamcorder file by its `jmx…`
+  sequencer-specific markers and uses `ticksPerBeat * 1000`; that detection
+  also gates the late-tempo mirror, so a non-JMX file keeps standard SMF
+  behaviour. Times captured against the stretched timeline were rescaled once
+  by `npm run db:rescale-silent-tempo` (migration `006`).
+- The check that catches all of this: a file's decoded duration must match its
+  `jmxEof` trailer's `totalMillis`, which is the device's own statement of how
+  long it recorded. `npm run db:rescale-silent-tempo -- --verify` asserts it
+  across the library.
 - Playback is normalized to grand piano (`src/audio/pianoSampler.ts` loads no
   other instrument), and soundfont cache worker stores piano assets only.
 - Sync uses a cheap filesystem walk over the detailed file listing (real sizes → skip-unchanged), falls back to the library API when the walk fails, skips unchanged assets by size, and records a high-water mark so a library-API fallback is fast. `POST /api/sync/start?full=1` forces a full pass. The library API is crash-prone on low-power firmware, so it is never the primary discovery source.

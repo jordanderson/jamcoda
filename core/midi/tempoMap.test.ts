@@ -5,11 +5,23 @@ import { buildTempoMap, ticksToSeconds } from './tempoMap'
 const JMX_TICKS_PER_BEAT = 458
 const JMX_MICROSECONDS_PER_BEAT = 458_000
 
+/** A `jmxAsset` marker: a zero byte then the ASCII token, as JMX writes it. */
+const JMX_MARKER: MidiEvent = {
+  deltaTime: 0,
+  type: 'sequencerSpecific',
+  meta: true,
+  data: [0x00, 0x6a, 0x6d, 0x78, 0x41, 0x73, 0x73, 0x65, 0x74, 0x7b, 0x7d]
+} as MidiEvent
+
 function midiWithTempos(
   tempos: Array<{ tick: number; microsecondsPerBeat: number }>,
-  ticksPerBeat = JMX_TICKS_PER_BEAT
+  ticksPerBeat = JMX_TICKS_PER_BEAT,
+  options?: { jamcorder?: boolean }
 ): MidiData {
   const track: MidiEvent[] = []
+  // Jamcorder writes its asset marker at tick 0, before anything else.
+  if (options?.jamcorder ?? true) track.push({ ...JMX_MARKER })
+
   let previous = 0
   for (const tempo of [...tempos].sort((a, b) => a.tick - b.tick)) {
     track.push({
@@ -26,12 +38,44 @@ function midiWithTempos(
 }
 
 describe('buildTempoMap', () => {
-  it('puts a file with no tempo event on the SMF default of 120 BPM', () => {
-    const map = buildTempoMap(midiWithTempos([]))
+  it('puts a non-Jamcorder file with no tempo event on the SMF default of 120 BPM', () => {
+    const map = buildTempoMap(midiWithTempos([], JMX_TICKS_PER_BEAT, { jamcorder: false }))
 
     expect(map.changes).toEqual([{ tick: 0, microsecondsPerBeat: 500_000, seconds: 0 }])
     // 500000us / 458 ticks per beat = 1091.7us per tick.
     expect(ticksToSeconds(map, 458)).toBeCloseTo(0.5, 9)
+  })
+
+  /**
+   * 89 recordings never declare a tempo. Reading them at the spec default
+   * stretched every one by 9.17%, so their notes disagreed with their own
+   * device markers -- which `jmxParser` had always timed on the JMX grid.
+   */
+  it('keeps a Jamcorder file that declares no tempo on the JMX grid', () => {
+    const map = buildTempoMap(midiWithTempos([]))
+
+    expect(map.changes).toEqual([
+      { tick: 0, microsecondsPerBeat: JMX_MICROSECONDS_PER_BEAT, seconds: 0 }
+    ])
+    expect(ticksToSeconds(map, 1000)).toBeCloseTo(1, 9)
+    expect(ticksToSeconds(map, 657_600)).toBeCloseTo(657.6, 6)
+  })
+
+  it('derives the silent-file grid from ticksPerBeat rather than assuming 458', () => {
+    const map = buildTempoMap(midiWithTempos([], 960))
+
+    expect(map.changes[0].microsecondsPerBeat).toBe(960_000)
+    expect(ticksToSeconds(map, 1000)).toBeCloseTo(1, 9)
+  })
+
+  it('does not mirror a late tempo in a file that is not a Jamcorder recording', () => {
+    const map = buildTempoMap(midiWithTempos(
+      [{ tick: 723_401, microsecondsPerBeat: JMX_MICROSECONDS_PER_BEAT }],
+      JMX_TICKS_PER_BEAT,
+      { jamcorder: false }
+    ))
+
+    expect(map.changes[0].microsecondsPerBeat).toBe(500_000)
   })
 
   it('reads the JMX grid as one millisecond per tick', () => {
