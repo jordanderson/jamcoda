@@ -75,6 +75,10 @@ interface EvalReport {
   generatedAt: string;
   mode: 'insample' | 'loo';
   modelPath: string;
+  /** Human-readable model release stamp, e.g. "v2.5". */
+  modelVersion: string;
+  /** The model's `createdAt`, so a report pins the exact artifact. */
+  modelCreatedAt: string;
   dbPath: string;
   rootDir: string;
   includeNone: boolean;
@@ -119,7 +123,8 @@ Options:
   --model <path>                 Model file path (default: data/ml/model.json)
   --db <path>                    SQLite DB path (default: data/jamcoda.db)
   --root <path>                  Workspace root for resolving MIDI paths (default: .)
-  --out <path>                   JSON output path (default: data/ml/eval-report.json)
+  --out <path>                   JSON output path (default: a stamped name like
+                                 data/ml/eval-loo-v2.5-20260902-143000.json)
   --mode <insample|loo>          Eval mode (default: insample)
   --min-window-confidence <n>    Window confidence threshold (default: 0.45)
   --smoothing <int>              Smoothing windows (default: 5)
@@ -134,6 +139,24 @@ Options:
 
 function formatCount(value: number): string {
   return value.toLocaleString('en-US');
+}
+
+/**
+ * Compact local timestamp for report filenames: `YYYYMMDD-HHmmss`.
+ */
+function timestampStem(date: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`
+    + `-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+/**
+ * Default report path: mode + model release stamp + timestamp, so runs are
+ * referable without copying or renaming. Old models without a
+ * `modelVersion` fall back to `v<architecture version>`.
+ */
+function defaultReportPath(mode: EvalMode, modelVersion: string): string {
+  return path.resolve('data/ml', `eval-${mode}-${modelVersion}-${timestampStem()}.json`);
 }
 
 type EvalMode = 'insample' | 'loo';
@@ -256,7 +279,7 @@ async function main() {
   const modelPath = path.resolve(readArg('--model') || 'data/ml/model.json');
   const dbPath = resolveDbPath();
   const rootDir = path.resolve(readArg('--root') || '.');
-  const outPath = path.resolve(readArg('--out') || 'data/ml/eval-report.json');
+  const outArg = readArg('--out');
   const includeNone = hasFlag('--include-none');
   const quiet = hasFlag('--quiet');
   const mode = parseMode(readArg('--mode'));
@@ -270,6 +293,8 @@ async function main() {
   };
 
   const model = loadModel(modelPath);
+  const modelVersion = model.modelVersion ?? `v${model.version}`;
+  const outPath = outArg ? path.resolve(outArg) : defaultReportPath(mode, modelVersion);
   const ignored = decoderIgnoredOptions(model.config.decoder);
   if (ignored.length > 0) {
     console.log(
@@ -312,7 +337,7 @@ async function main() {
   }
 
   console.log('Starting evaluation...');
-  console.log(`  model: ${modelPath}`);
+  console.log(`  model: ${modelPath} (${modelVersion}, ${model.createdAt})`);
   console.log(`  db: ${dbPath}`);
   console.log(`  root: ${rootDir}`);
   console.log(`  out: ${outPath}`);
@@ -531,6 +556,8 @@ async function main() {
     generatedAt: new Date().toISOString(),
     mode,
     modelPath,
+    modelVersion,
+    modelCreatedAt: model.createdAt,
     dbPath,
     rootDir,
     includeNone,

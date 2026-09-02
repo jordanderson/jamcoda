@@ -7,6 +7,15 @@ import { clamp, ensureDirForFile, roundTo } from '@core/cli/args';
 export const NO_SONG_LABEL = '__none__';
 
 /**
+ * Human-readable model release stamp, written into every fitted model.
+ * Bump it whenever the features, config resolution or decoding behaviour that
+ * a model captures change. `ml:eval` uses it (and the `createdAt` fallback)
+ * to name its report files, so runs stay referable without manual renaming.
+ * Keep `ml/CHANGELOG.md` in sync with each bump.
+ */
+export const MODEL_VERSION = 'v2.4';
+
+/**
  * Version 2 features (v2.4 split chroma):
  *
  * Pitch classes are split by register instead of the v2.0 flat chroma. Each
@@ -160,6 +169,8 @@ export interface TrainConfig {
 export interface SongSegmentModel {
   modelType: 'knn-song-segmenter';
   version: 1 | 2;
+  /** Human-readable release stamp, e.g. "v2.5". See `MODEL_VERSION`. */
+  modelVersion?: string;
   createdAt: string;
   config: TrainConfig;
   featureNames: string[];
@@ -990,6 +1001,7 @@ function fitModelFromSamples(
   const model: SongSegmentModel = {
     modelType: 'knn-song-segmenter',
     version: 2,
+    modelVersion: MODEL_VERSION,
     createdAt: new Date().toISOString(),
     // Save the resolved config, not the partial config from the caller. A
     // model that omits `decoder`, `scoreMode` or `featureScaling` changes

@@ -18,6 +18,77 @@ How to read the numbers:
 
 ---
 
+## 2026-09-02 — v2.5 experiment: damper-pedal features (rejected)
+
+### Context
+
+The app started modelling the damper (sustain) pedal in playback: a key released
+while the pedal is down keeps ringing until the pedal lifts (`pianoSampler.ts`,
+CC 64 via `core/midi/noteSequence`). The pedal events are decoded in 235 of 236
+files, and a pianist's pedalling is part of a song's identity -- ragtime's
+syncopated re-pedalling versus a ballad's held pedal -- so the open question was
+whether pedal features in the model help recognize songs in LOO evaluation.
+
+### What changed
+
+Added four window features from the CC 64 events (`38 -> 42` features):
+
+- `sustain_ratio` — fraction of the window the pedal was held down
+- `sustain_press_density` — pedal presses per second (capped at 4/s)
+- `mean_sustain_span` — mean pedal-down span length / window length
+- `sustain_span_std` — spread of pedal-down span lengths / window length
+
+Spans were seeded at the window start when the pedal was already down (a press
+before the window extends in), matching `sliceSequence`. `extractMidiSource`
+replaced `extractNotesFromMidi` so feature extraction and playback share one
+decode. `MODEL_VERSION` was bumped to `v2.5`.
+
+### Results
+
+All LOO numbers are 73 annotated files, the same dataset as v2.4.
+
+| metric | v2.4 baseline | v2.5 +pedal | delta |
+| --- | --- | --- | --- |
+| window accuracy | 70.41% | 66.97% | -3.44 pt |
+| segment recall | 71.03% | 67.59% | -3.44 pt |
+| segment precision | 53.49% | 53.44% | -0.05 pt |
+| segment F1 | 61.03% | 59.69% | -1.34 pt |
+| segments emitted | 734 | 618 | -116 |
+| predicted seconds | 80,872 | 77,087 | -3,785 |
+
+**Pedal features are a measured regression and are rejected.** The model now
+fails by *silence* more: `Etude No 2 -> __none__` 1,235 -> 2,066,
+`Bridge Over Troubled Water -> __none__` 688 -> 1,074, `Ashokan Farewell ->
+__none__` 708 -> 1,021, while `Bethena -> __none__` improved 1,668 -> 1,452 and
+`True Love Leaves No Traces -> __none__` improved 708 -> 550.
+
+The mechanism is visible in a per-song diagnostic: for `sustain_ratio`,
+between-song variance is only ~31% of total variance (0.034 vs 0.075
+within-song). Pedalling varies more across a player's repetitions of one song
+within a practice session than it does between songs, so the features add
+within-song noise to the prototype distances. There is real signal at the
+extremes (Peacherine Rag almost no pedal, Silent Night/Away in a Manger ~0.84)
+but not enough to overcome the noise through the prototype-scoring path.
+
+**Reverted.** Feature extraction is back to the 38-feature v2.4 set and the app
+model is retrained on it (deterministic retrain reproduces the baseline numbers
+exactly: 70.41% / 71.03% / 53.49% / 61.03%). The experiment is reproducible
+from this entry and the two stamped LOO reports left on disk.
+
+### Notes
+
+- Reports: `data/ml/eval-loo-v2.4-20260902-152407.json` (baseline) and
+  `data/ml/eval-loo-v2.5-20260902-152738.json` (pedal).
+- Eval reports now stamp their filename with the model release (`v2.4`/`v2.5`,
+  from the model's new `modelVersion` field) and a `YYYYMMDD-HHmmss` timestamp,
+  so runs are referable without copying or renaming. See `ml/eval.ts`.
+- Follow-up candidates if pedal is revisited: a single `sustain_ratio` feature
+  (the most discriminative) instead of four; pedal features gated behind a
+  train-time flag, which requires making the feature count (and the `loadModel`
+  guard) config-dependent.
+
+---
+
 ## 2026-09-01 — v2.4: split-register chroma features + hand-mask augmentation (rejected)
 
 ### Context

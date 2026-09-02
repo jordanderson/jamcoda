@@ -165,7 +165,7 @@ This evaluates model window predictions against your current annotation truth an
 It does not write prediction rows to the DB.
 
 ```bash
-npm run ml:eval -- --out data/ml/eval-report.json
+npm run ml:eval -- --mode loo
 ```
 
 Useful flags:
@@ -174,6 +174,15 @@ Useful flags:
 - `--min-window-confidence`, `--smoothing`, `--min-segment-sec`,
   `--min-segment-confidence`, and `--merge-gap-sec` to compare threshold variants
 - `--quiet` reduces per-file logs
+- `--out <path>` overrides the report path
+
+Reports are named from the run's mode, the model's release stamp and a
+timestamp, so runs stay referable without copying or renaming:
+`data/ml/eval-loo-v2.5-20260902-143000.json`. The report JSON also records the
+`modelVersion` and the model's `createdAt`. The model's release stamp is the
+`modelVersion` field written at fit time (`MODEL_VERSION` in
+`ml/songSegmentation.ts`); old models without it fall back to `v<architecture
+version>`.
 
 The report now includes a **segment-level** comparison against your annotations:
 how much of each annotated span is covered by a same-song predicted segment

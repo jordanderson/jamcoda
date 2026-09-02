@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
+  MODEL_VERSION,
   NO_SONG_LABEL,
   buildSamplesForFile,
   loadModel,
@@ -106,6 +107,7 @@ describe('prototype model training', () => {
     }
     const model = trainModelFromSamples(samples, config);
     assert.equal(model.version, 2);
+    assert.equal(model.modelVersion, MODEL_VERSION);
     assert.ok(model.prototypes && model.prototypes.length > 0);
     assert.ok(model.kernelScale && model.kernelScale > 0);
     assert.equal(model.featureMeans.length, 38);
@@ -428,6 +430,7 @@ describe('loadModel', () => {
 
     const loaded = loadModel(modelPath);
     assert.equal(loaded.featureNames.length, 38);
+    assert.equal(loaded.modelVersion, MODEL_VERSION);
     // The model stores the resolved config, so a change to a default does
     // not change the behaviour of this model.
     assert.equal(loaded.config.decoder, 'anchor');
