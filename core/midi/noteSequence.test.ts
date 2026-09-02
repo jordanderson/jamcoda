@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { writeMidi, type MidiData, type MidiEvent } from 'midi-file'
-import { parseNoteSequence } from './noteSequence'
+import { parseNoteSequence, sliceSequence, sequenceFrom } from './noteSequence'
 
 /**
  * Fixtures are synthesised here rather than read from `data/midi/`: the tests
@@ -52,6 +52,9 @@ const off = (tick: number, noteNumber: number, channel = 0): Step =>
 
 const allNotesOff = (tick: number, channel = 0): Step =>
   ({ tick, event: { type: 'controller', controllerType: 123, value: 0, channel } as never })
+
+const sustain = (tick: number, value: number, channel = 0): Step =>
+  ({ tick, event: { type: 'controller', controllerType: 64, value, channel } as never })
 
 describe('parseNoteSequence', () => {
   it('pairs a note on with its note off', () => {
@@ -167,7 +170,11 @@ describe('parseNoteSequence', () => {
   })
 
   it('returns an empty sequence for bytes that are not a MIDI file', () => {
-    expect(parseNoteSequence(new Uint8Array([1, 2, 3, 4]))).toEqual({ notes: [], totalTime: 0 })
+    expect(parseNoteSequence(new Uint8Array([1, 2, 3, 4]))).toEqual({
+      notes: [],
+      totalTime: 0,
+      sustainEvents: []
+    })
   })
 
   it('sorts by onset then pitch', () => {
@@ -178,5 +185,73 @@ describe('parseNoteSequence', () => {
     ]))
 
     expect(seq.notes.map((note) => note.pitch)).toEqual([62, 67, 60])
+  })
+
+  it('captures damper pedal transitions with their press/release state', () => {
+    const seq = parseNoteSequence(buildMidi([
+      sustain(500, 127), sustain(2500, 0),
+      sustain(3000, 65), sustain(4000, 63)
+    ]))
+
+    expect(seq.sustainEvents).toEqual([
+      { time: 0.5, on: true, value: 127 },
+      { time: 2.5, on: false, value: 0 },
+      { time: 3, on: true, value: 65 },
+      { time: 4, on: false, value: 63 }
+    ])
+  })
+
+  it('reads 64 and above as a pedal press, below as a release', () => {
+    const seq = parseNoteSequence(buildMidi([sustain(1000, 64), sustain(2000, 63)]))
+
+    expect(seq.sustainEvents.map((event) => event.on)).toEqual([true, false])
+  })
+
+  it('returns no sustain events for a file without a damper pedal', () => {
+    const seq = parseNoteSequence(buildMidi([on(1000, 60), off(1500, 60)]))
+
+    expect(seq.sustainEvents).toEqual([])
+  })
+
+  describe('sliceSequence / sequenceFrom', () => {
+    const pedalled = (): ReturnType<typeof parseNoteSequence> => parseNoteSequence(buildMidi([
+      sustain(1000, 127), sustain(5000, 0), sustain(7000, 127),
+      on(2000, 60), off(3000, 60),
+      on(6000, 62), off(6500, 62)
+    ]))
+
+    it('re-bases sustain events into the window', () => {
+      const seq = sliceSequence(pedalled(), 1, 6)
+
+      expect(seq.sustainEvents).toEqual([
+        { time: 0, on: true, value: 127 },
+        { time: 4, on: false, value: 0 }
+      ])
+    })
+
+    it('seeds a press at the window start when the pedal was already down', () => {
+      const seq = sliceSequence(pedalled(), 1.5, 3)
+
+      // 1.5s is inside the first pedal span (1s-5s). The synthetic press at 0
+      // keeps notes released before the first in-window release sustained.
+      expect(seq.sustainEvents).toEqual([{ time: 0, on: true, value: 127 }])
+    })
+
+    it('drops events after the window and leaves ones outside untouched', () => {
+      const seq = sliceSequence(pedalled(), 6, 8)
+
+      expect(seq.sustainEvents).toEqual([
+        { time: 1, on: true, value: 127 }
+      ])
+    })
+
+    it('sequenceFrom keeps events from the start onward, re-based', () => {
+      const seq = sequenceFrom(pedalled(), 1.5)
+
+      expect(seq.sustainEvents).toEqual([
+        { time: 0, on: true, value: 127 },
+        { time: 3.5, on: false, value: 0 }
+      ])
+    })
   })
 })

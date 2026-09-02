@@ -21,15 +21,37 @@ export interface Note {
   endTime: number;
 }
 
+/**
+ * A damper (sustain) pedal transition, CC 64.
+ *
+ * The Jamcorder records these: 235 of the 236 synced files carry CC 64
+ * events. The decode keeps them so playback can model the pedal -- a key's
+ * release is deferred while the pedal is down -- and feature extraction and
+ * duration consumers ignore them.
+ */
+export interface SustainPedalEvent {
+  /** Seconds from the start of the file. */
+  time: number;
+  /** true = pedal pressed (value >= 64), false = pedal released. */
+  on: boolean;
+  /** Raw CC64 value, 0-127. */
+  value: number;
+}
+
 export interface NoteSequence {
   notes: Note[];
   /** End of the last sounding note, in seconds. */
   totalTime: number;
+  /** Damper pedal (CC 64) transitions, time-ordered. Empty when none. */
+  sustainEvents: SustainPedalEvent[];
 }
 
 /** All Sound Off and All Notes Off. Both silence everything on their channel. */
 const CC_ALL_SOUND_OFF = 120;
 const CC_ALL_NOTES_OFF = 123;
+
+/** Damper (sustain) pedal. Values >= 64 hold the pedal down. */
+const CC_DAMPER = 64;
 
 /**
  * Longest note we will credit to an All Notes Off, in seconds.
@@ -74,11 +96,12 @@ export function parseNoteSequence(rawBytes: Uint8Array): NoteSequence {
   try {
     midi = parseMidi(rawBytes);
   } catch {
-    return { notes: [], totalTime: 0 };
+    return { notes: [], totalTime: 0, sustainEvents: [] };
   }
 
   const tempoMap = buildTempoMap(midi);
   const notes: Note[] = [];
+  const sustainEvents: SustainPedalEvent[] = [];
   let totalTime = 0;
 
   const addNote = (
@@ -144,6 +167,15 @@ export function parseNoteSequence(rawBytes: Uint8Array): NoteSequence {
           for (const note of pending) addNote(key % 128, note.velocity, note.tick, tick, true);
           pending.length = 0;
         }
+        continue;
+      }
+
+      if (event.type === 'controller' && event.controllerType === CC_DAMPER) {
+        sustainEvents.push({
+          time: ticksToSeconds(tempoMap, tick),
+          on: event.value >= 64,
+          value: event.value
+        });
       }
     }
 
@@ -154,8 +186,9 @@ export function parseNoteSequence(rawBytes: Uint8Array): NoteSequence {
   }
 
   notes.sort((a, b) => (a.startTime - b.startTime) || (a.pitch - b.pitch));
+  sustainEvents.sort((a, b) => a.time - b.time);
 
-  return { notes, totalTime };
+  return { notes, totalTime, sustainEvents };
 }
 
 /** Lowest and highest pitch present, or null for an empty sequence. */
@@ -169,6 +202,46 @@ export function pitchRange(notes: Note[]): { minPitch: number; maxPitch: number 
     if (note.pitch > maxPitch) maxPitch = note.pitch;
   }
   return { minPitch, maxPitch };
+}
+
+/**
+ * Pedal state just before `time`: whether the most recent CC 64 event at or
+ * before `time` is a press.
+ */
+function pedalDownBefore(sustainEvents: SustainPedalEvent[], time: number): boolean {
+  let down = false;
+  for (const event of sustainEvents) {
+    if (event.time > time) break;
+    down = event.on;
+  }
+  return down;
+}
+
+/**
+ * Sustain events re-based into `[start, end)`.
+ *
+ * A window that starts while the pedal is already down gets a synthetic press
+ * at its own start, so a note released before the first in-window release
+ * still reads as sustained. Without that seed, segment playback would silently
+ * drop a pedal that was held across the boundary.
+ */
+function sliceSustainEvents(
+  sustainEvents: SustainPedalEvent[],
+  start: number,
+  end: number
+): SustainPedalEvent[] {
+  const clipped: SustainPedalEvent[] = [];
+  for (const event of sustainEvents) {
+    if (event.time < start) continue;
+    if (event.time >= end) break;
+    clipped.push({ ...event, time: event.time - start });
+  }
+
+  const startsAtPress = clipped[0]?.time === 0 && clipped[0].on;
+  if (pedalDownBefore(sustainEvents, start) && !startsAtPress) {
+    clipped.unshift({ time: 0, on: true, value: 127 });
+  }
+  return clipped;
 }
 
 /**
@@ -191,7 +264,7 @@ export function sliceSequence(
     }))
     .filter((note) => note.endTime > 0);
 
-  return { notes, totalTime: duration };
+  return { notes, totalTime: duration, sustainEvents: sliceSustainEvents(sequence.sustainEvents, startTime, endTime) };
 }
 
 /** Notes from `startTime` onward, re-based to zero. Used for seeking. */

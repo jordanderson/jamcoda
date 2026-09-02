@@ -10,7 +10,8 @@ const sequence: NoteSequence = {
     { pitch: 64, velocity: 80, startTime: 30, endTime: 31 },
     { pitch: 67, velocity: 80, startTime: 90, endTime: 92 }
   ],
-  totalTime: 92
+  totalTime: 92,
+  sustainEvents: []
 }
 
 const annotations = [

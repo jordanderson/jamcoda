@@ -1,4 +1,4 @@
-import type { Note, NoteSequence } from '@core/midi/noteSequence'
+import type { Note, NoteSequence, SustainPedalEvent } from '@core/midi/noteSequence'
 
 /**
  * A minimal Web Audio sampler for the acoustic grand piano.
@@ -14,8 +14,10 @@ import type { Note, NoteSequence } from '@core/midi/noteSequence'
  * Sample layout, from the soundfont's own `instrument.json`:
  *   {BASE}/p{pitch}_v{velocity}.mp3   pitch 21-108, velocity in VELOCITY_LAYERS
  *
- * Like Magenta's player, control changes (including sustain, CC64) are not
- * interpreted. Its SoundFontPlayer ignored them too, so playback is unchanged.
+ * Damper pedal (CC 64): the decoded sequence carries the pedal events, and a
+ * key released while the pedal is down keeps ringing (the sample's own decay)
+ * until the pedal lifts, at which point its release begins. Sequences with no
+ * pedal events play exactly as before.
  */
 
 const SOUNDFONT_BASE =
@@ -68,6 +70,52 @@ interface ScheduledVoice {
   gain: GainNode
 }
 
+/** A span where the damper pedal was held down. */
+export interface PedalInterval {
+  down: number
+  /** When the pedal lifted; null when it was still down at the end of the file. */
+  up: number | null
+}
+
+/**
+ * Reduce CC 64 sustain events into down/up spans. Consecutive presses extend
+ * one span; a release with no span open, or a zero-length press, is dropped.
+ */
+export function buildPedalIntervals(events: SustainPedalEvent[]): PedalInterval[] {
+  const intervals: PedalInterval[] = []
+  let open: PedalInterval | null = null
+
+  for (const event of events) {
+    if (event.on) {
+      if (!open) open = { down: event.time, up: null }
+    } else if (open) {
+      if (event.time > open.down) {
+        open.up = event.time
+        intervals.push(open)
+        open = null
+      } else {
+        open = null
+      }
+    }
+  }
+
+  if (open) intervals.push(open)
+  return intervals
+}
+
+/**
+ * The pedal span holding a note released at `endTime`, or null when the pedal
+ * was up (the key's own release stands). A key lifted on the same instant the
+ * pedal lifts is not sustained: the damper has already fallen.
+ */
+export function heldByPedal(intervals: PedalInterval[], endTime: number): PedalInterval | null {
+  for (const interval of intervals) {
+    if (interval.down > endTime) break
+    if (interval.up === null || endTime < interval.up) return interval
+  }
+  return null
+}
+
 /**
  * Loads piano samples on demand and schedules note playback.
  *
@@ -87,6 +135,10 @@ export class PianoSampler {
   /** AudioContext time that `note.startTime === 0` maps to. */
   private originTime = 0
   private schedulerTimer: ReturnType<typeof setInterval> | null = null
+  /** Damper pedal spans of the sequence being played, used to defer releases. */
+  private pedalIntervals: PedalInterval[] = []
+  /** `sequence.totalTime`, in the same seconds the notes are timed in. */
+  private sequenceTotalTime = 0
 
   /** Create the AudioContext lazily -- browsers require a user gesture. */
   private ensureContext(): AudioContext {
@@ -179,15 +231,25 @@ export class PianoSampler {
 
     const gain = context.createGain()
     gain.gain.setValueAtTime(1, startAt)
-    // Exponential-ish release once the key lifts, then a hard stop so the
+
+    // A key released under a held damper pedal keeps ringing (the sample
+    // decays on its own) until the pedal lifts; the release then starts there.
+    // Without a pedal -- or with the pedal up at release -- the release starts
+    // when the key lifts, as before.
+    const held = heldByPedal(this.pedalIntervals, note.endTime)
+    const releaseAt = held
+      ? (held.up !== null ? originTime + held.up : this.originTime + this.sequenceTotalTime)
+      : heldUntil
+
+    // Exponential-ish release once the damper falls, then a hard stop so the
     // voice is collectable.
-    gain.gain.setTargetAtTime(0, heldUntil, RELEASE_SECONDS / 3)
+    gain.gain.setTargetAtTime(0, releaseAt, RELEASE_SECONDS / 3)
 
     source.connect(gain)
     gain.connect(output)
 
     source.start(startAt)
-    source.stop(heldUntil + RELEASE_SECONDS)
+    source.stop(releaseAt + RELEASE_SECONDS)
 
     const voice: ScheduledVoice = { source, gain }
     this.voices.push(voice)
@@ -213,6 +275,8 @@ export class PianoSampler {
     this.queue = sequence.notes
     this.queueCursor = 0
     this.originTime = context.currentTime + SCHEDULE_LEAD_SECONDS
+    this.pedalIntervals = buildPedalIntervals(sequence.sustainEvents ?? [])
+    this.sequenceTotalTime = sequence.totalTime
 
     this.pumpScheduler()
     this.schedulerTimer = setInterval(() => this.pumpScheduler(), SCHEDULER_INTERVAL_MS)

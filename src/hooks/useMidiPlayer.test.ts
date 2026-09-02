@@ -10,7 +10,8 @@ import type { NoteSequence } from '@core/midi/noteSequence'
 
 const sequence: NoteSequence = {
   notes: [{ pitch: 60, velocity: 80, startTime: 0, endTime: 10 }],
-  totalTime: 60
+  totalTime: 60,
+  sustainEvents: []
 }
 
 /** Resolves the pending `preload`, held open until a test releases it. */
