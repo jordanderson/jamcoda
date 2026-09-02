@@ -19,6 +19,7 @@ function file(overrides: Partial<BrowseFile> & { id: number }): BrowseFile {
     annotatedDuration: 0,
     annotations: [],
     unreviewedPredictionCount: 0,
+    unreviewedPredictionCoverage: 0,
     date: '2026-01-01',
     ...overrides
   }

@@ -144,6 +144,14 @@ export function DetailPage({ fileId }: DetailPageProps) {
     return gapMap;
   }, [annotations, sequence?.notes]);
 
+  // Whether any gap pill is shown at all, gating the helper copy above the
+  // annotation list. Memoised: this component re-renders every frame during
+  // playback.
+  const hasGapPills = useMemo(
+    () => [...annotationGapsById.values()].some((gaps) => gaps.length > 0),
+    [annotationGapsById]
+  );
+
   const ignoredSections = useMemo(() => {
     return [...(file?.ignoredSections ?? [])]
       .filter((section) => section.end_time > section.start_time)
@@ -1126,7 +1134,9 @@ export function DetailPage({ fileId }: DetailPageProps) {
             >
               {setFileCompletion.isPending
                 ? (file.isComplete ? 'Marking Incomplete...' : 'Marking Complete...')
-                : (file.isComplete ? 'Mark Incomplete' : 'Mark Complete')}
+                : (file.isComplete
+                  ? 'Mark Incomplete'
+                  : `Mark Complete (${file.percentageAnnotated}%)`)}
             </button>
             <button
               onClick={handleRunPredictions}
@@ -1156,9 +1166,11 @@ export function DetailPage({ fileId }: DetailPageProps) {
         </div>
 
         <div className="p-6">
-          <p className="mb-4 text-xs text-gray-500">
-            Gap pills show internal pauses of {LARGE_ANNOTATION_GAP_SECONDS}s or longer. Click a gap label to jump, then use Split or Trim.
-          </p>
+          {hasGapPills && (
+            <p className="mb-4 text-xs text-gray-500">
+              Gap pills show internal pauses of {LARGE_ANNOTATION_GAP_SECONDS}s or longer. Click a gap label to jump, then use Split or Trim.
+            </p>
+          )}
           <DetailAnnotationList
             annotations={annotations}
             gapsById={annotationGapsById}

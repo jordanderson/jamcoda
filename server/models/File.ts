@@ -1,4 +1,5 @@
 import { getDb } from '@config/database';
+import { getMidiDuration } from '@utils/midiUtils';
 import type { FileRecord, CreateFileData, UpdateSyncedFileData } from '@server/types';
 
 export function create(data: CreateFileData): number {
@@ -161,6 +162,24 @@ export function setMidiDuration(id: number, midiDuration: number): boolean {
     WHERE id = ?
   `).run(safeDuration, id);
   return result.changes > 0;
+}
+
+/**
+ * The file's decoded duration, lazily backfilled and persisted when it was
+ * never parsed. Shared by the browse and detail routes so both read the same
+ * number and neither re-expresses the NULL-duration fallback.
+ */
+export function getResolvedDuration(file: FileRecord): number {
+  if (
+    typeof file.midi_duration === 'number'
+    && Number.isFinite(file.midi_duration)
+    && file.midi_duration >= 0
+  ) {
+    return file.midi_duration;
+  }
+  const calculatedDuration = getMidiDuration(file.local_path);
+  setMidiDuration(file.id, calculatedDuration);
+  return calculatedDuration;
 }
 
 export function updateSyncedFile(id: number, data: UpdateSyncedFileData): boolean {

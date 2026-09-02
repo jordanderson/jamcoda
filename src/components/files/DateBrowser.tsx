@@ -236,9 +236,19 @@ export function DateBrowser({ onFileSelect, view, onViewChange }: DateBrowserPro
                           ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
-                      title="Open prediction review queue for this file"
+                      title={`Open prediction review queue for this file${
+                        file.unreviewedPredictionCount > 0 && file.unreviewedPredictionCoverage > 0
+                          ? ` · ${file.unreviewedPredictionCoverage}% of duration covered`
+                          : ''
+                      }`}
                     >
                       {file.unreviewedPredictionCount}
+                      {file.unreviewedPredictionCount > 0 && file.unreviewedPredictionCoverage > 0 && (
+                        <>
+                          <span className="mx-1 opacity-50" aria-hidden>·</span>
+                          <span>{file.unreviewedPredictionCoverage}%</span>
+                        </>
+                      )}
                     </button>
                   </td>
                   <td className="py-3 px-4">

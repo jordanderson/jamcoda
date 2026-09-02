@@ -26,9 +26,9 @@ function row(id: number, overrides: Record<string, unknown> = {}) {
 
 const filesByDate = {
   dates: [
-    { date: '2026-02-16', files: [row(1, { unreviewedPredictionCount: 3 })] },
+    { date: '2026-02-16', files: [row(1, { unreviewedPredictionCount: 3, unreviewedPredictionCoverage: 42 })] },
     { date: '2026-02-15', files: [row(2, { isComplete: true, unreviewedPredictionCount: 0 })] },
-    { date: '2026-02-14', files: [row(3, { unreviewedPredictionCount: 11 })] }
+    { date: '2026-02-14', files: [row(3, { unreviewedPredictionCount: 11, unreviewedPredictionCoverage: 0 })] }
   ],
   emptyRecordingCount: 0
 }
@@ -95,6 +95,14 @@ describe('DateBrowser', () => {
     await screen.findByText('Jmx-A00003.mid')
     const filenames = screen.getAllByText(/^Jmx-A0000\d\.mid$/).map((node) => node.textContent)
     expect(filenames).toEqual(['Jmx-A00003.mid', 'Jmx-A00001.mid', 'Jmx-A00002.mid'])
+  })
+
+  it('shows the share of duration the pending predictions cover in the unreviewed pill', async () => {
+    renderBrowser()
+
+    const pill = await screen.findByRole('button', { name: /42%/ })
+    expect(pill).toHaveTextContent(/3\s*·\s*42%/)
+    expect(pill.getAttribute('title')).toMatch(/42% of duration covered/)
   })
 
   it('hides complete files and counts what is left when filtering', async () => {

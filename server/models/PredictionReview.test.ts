@@ -299,3 +299,75 @@ test('findFileIdsWithOnlyUnsureUnpromoted returns only untouched pending files',
   const ids = PredictionReviewModel.findFileIdsWithOnlyUnsureUnpromoted();
   assert.deepEqual(ids, [untouchedFileId]);
 });
+
+test('getUnreviewedCoveredSeconds merges overlapping ranges without double-counting', () => {
+  const fileId = createTestFile();
+  PredictionReviewModel.create({
+    fileId,
+    predictedSongName: 'Song A',
+    predictedStartTime: 0,
+    predictedEndTime: 10
+  });
+  PredictionReviewModel.create({
+    fileId,
+    predictedSongName: 'Song B',
+    predictedStartTime: 5,
+    predictedEndTime: 15
+  });
+  PredictionReviewModel.create({
+    fileId,
+    predictedSongName: 'Song C',
+    predictedStartTime: 20,
+    predictedEndTime: 25
+  });
+  PredictionReviewModel.create({
+    fileId,
+    predictedSongName: 'Song D',
+    predictedStartTime: 30,
+    predictedEndTime: 50
+  });
+
+  // [0,15] + [20,25] + [30,50] = 15 + 5 + 20 = 40.
+  assert.equal(PredictionReviewModel.getUnreviewedCoveredSeconds(fileId), 40);
+});
+
+test('getUnreviewedCoveredSeconds counts only unsure unpromoted rows', () => {
+  const fileId = createTestFile();
+  const confirmedId = PredictionReviewModel.create({
+    fileId,
+    predictedSongName: 'Song A',
+    predictedStartTime: 0,
+    predictedEndTime: 100,
+    status: 'confirmed'
+  });
+  const promotedId = PredictionReviewModel.create({
+    fileId,
+    predictedSongName: 'Song B',
+    predictedStartTime: 100,
+    predictedEndTime: 200,
+    status: 'confirmed'
+  });
+  PredictionReviewModel.promoteToAnnotation(promotedId);
+  PredictionReviewModel.create({
+    fileId,
+    predictedSongName: 'Song C',
+    predictedStartTime: 10,
+    predictedEndTime: 40
+  });
+
+  // Confirmed and promoted rows are excluded; only [10,40] counts.
+  assert.equal(PredictionReviewModel.getUnreviewedCoveredSeconds(fileId), 30);
+
+  // Turning the confirmed row pending makes it count, merging with [10,40].
+  PredictionReviewModel.update(confirmedId, { status: 'unsure' });
+  assert.equal(PredictionReviewModel.getUnreviewedCoveredSeconds(fileId), 100);
+
+  // A promoted row stays excluded even when marked unsure.
+  PredictionReviewModel.update(promotedId, { status: 'unsure' });
+  assert.equal(PredictionReviewModel.getUnreviewedCoveredSeconds(fileId), 100);
+});
+
+test('getUnreviewedCoveredSeconds returns zero for a file with no pending reviews', () => {
+  const fileId = createTestFile();
+  assert.equal(PredictionReviewModel.getUnreviewedCoveredSeconds(fileId), 0);
+});

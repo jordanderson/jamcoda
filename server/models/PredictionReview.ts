@@ -105,6 +105,59 @@ export function count(filters: ListPredictionReviewsFilters = {}): number {
   return row.count;
 }
 
+/**
+ * Total seconds covered by the union of a file's pending review ranges.
+ *
+ * Pending means the same set the browse "Unreviewed" pill counts: unpromoted
+ * rows still `unsure`. Overlapping segments are merged before summing, so two
+ * overlapping predictions do not double-count the covered duration.
+ *
+ * Ranges use `RESOLVED_*_SQL` so the resolved-value rule stays defined once,
+ * in `core/predictionReview.ts`.
+ */
+export function getUnreviewedCoveredSeconds(fileId: number): number {
+  const db = getDb();
+  const row = db.prepare(`
+    WITH ranges AS (
+      SELECT
+        ${RESOLVED_START_TIME_SQL} AS range_start,
+        ${RESOLVED_END_TIME_SQL} AS range_end
+      FROM prediction_reviews
+      WHERE file_id = ?
+        AND status = 'unsure'
+        AND promoted_annotation_id IS NULL
+    ),
+    marked AS (
+      SELECT
+        range_start,
+        range_end,
+        CASE
+          WHEN range_start <= MAX(range_end) OVER (
+            ORDER BY range_start, range_end
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+          ) THEN 0
+          ELSE 1
+        END AS starts_new_group
+      FROM ranges
+    ),
+    grouped AS (
+      SELECT
+        range_start,
+        range_end,
+        SUM(starts_new_group) OVER (ORDER BY range_start, range_end) AS grp
+      FROM marked
+    )
+    SELECT COALESCE(SUM(group_length), 0) AS covered_seconds
+    FROM (
+      SELECT
+        MAX(range_end) - MIN(range_start) AS group_length
+      FROM grouped
+      GROUP BY grp
+    )
+  `).get(fileId) as { covered_seconds: number } | undefined;
+  return row?.covered_seconds ?? 0;
+}
+
 /** Insert a single prediction review row. */
 export function create(data: CreatePredictionReviewData): number {
   const db = getDb();

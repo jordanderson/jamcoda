@@ -88,3 +88,21 @@ test('countEmptyRecordings counts only zero-duration rows, optionally by range',
   assert.equal(FileModel.countEmptyRecordings(), 3);
   assert.equal(FileModel.countEmptyRecordings('2026-02-01', '2026-02-28'), 2);
 });
+
+test('getResolvedDuration returns the stored duration without re-parsing', () => {
+  const id = createTestFile({ midiDuration: 300 });
+  const file = FileModel.findById(id);
+  assert.ok(file);
+  assert.equal(FileModel.getResolvedDuration(file), 300);
+});
+
+test('getResolvedDuration backfills and persists a duration for unparsed files', () => {
+  const id = createTestFile({ midiDuration: null });
+  const file = FileModel.findById(id);
+  assert.ok(file);
+
+  // The fake local path cannot be parsed, so it resolves to 0 and the
+  // lazy backfill persists that so the next read skips the parse attempt.
+  assert.equal(FileModel.getResolvedDuration(file), 0);
+  assert.equal(FileModel.findById(id)?.midi_duration, 0);
+});

@@ -214,6 +214,8 @@ export interface FileByDateRow {
   annotatedDuration: number;
   annotations: FileByDateAnnotationSummary[];
   unreviewedPredictionCount: number;
+  /** Whole percent of the file's duration covered by pending (unsure) predictions. */
+  unreviewedPredictionCoverage: number;
 }
 
 /** One calendar date group in the browse response. */
@@ -307,6 +309,8 @@ export interface FileDetailResponse {
   syncedAt: number;
   isComplete: boolean;
   completedAt: number | null;
+  /** Whole percent of the file's duration covered by annotations. */
+  percentageAnnotated: number;
   annotations: FileDetailAnnotation[];
   ignoredSections: IgnoredSection[];
   bookmarks: FileBookmark[];

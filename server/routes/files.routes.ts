@@ -4,7 +4,6 @@ import * as FileModel from '@models/File';
 import * as AnnotationModel from '@models/Annotation';
 import * as IgnoredSectionModel from '@models/IgnoredSection';
 import * as PredictionReviewModel from '@models/PredictionReview';
-import { getMidiDuration } from '@utils/midiUtils';
 
 const router = express.Router();
 
@@ -39,19 +38,14 @@ router.get('/by-date', async (req, res) => {
         status: 'unsure',
         includePromoted: false
       });
-      const totalDuration = (
-        typeof file.midi_duration === 'number'
-        && Number.isFinite(file.midi_duration)
-        && file.midi_duration >= 0
-      )
-        ? file.midi_duration
-        : (() => {
-          const calculatedDuration = getMidiDuration(file.local_path);
-          FileModel.setMidiDuration(file.id, calculatedDuration);
-          return calculatedDuration;
-        })();
+      const unreviewedPredictionCoveredSeconds =
+        PredictionReviewModel.getUnreviewedCoveredSeconds(file.id);
+      const totalDuration = FileModel.getResolvedDuration(file);
       const percentageAnnotated = totalDuration > 0
         ? Math.round((annotatedDuration / totalDuration) * 100)
+        : 0;
+      const unreviewedPredictionCoverage = totalDuration > 0
+        ? Math.round((unreviewedPredictionCoveredSeconds / totalDuration) * 100)
         : 0;
 
       acc[date].push({
@@ -66,7 +60,8 @@ router.get('/by-date', async (req, res) => {
         totalDuration,
         annotatedDuration,
         annotations,
-        unreviewedPredictionCount
+        unreviewedPredictionCount,
+        unreviewedPredictionCoverage
       });
 
       return acc;
@@ -126,6 +121,12 @@ router.get('/:id', async (req, res) => {
       }
     }
 
+    const annotatedDuration = AnnotationModel.getTotalAnnotatedDuration(id);
+    const totalDuration = FileModel.getResolvedDuration(file);
+    const percentageAnnotated = totalDuration > 0
+      ? Math.round((annotatedDuration / totalDuration) * 100)
+      : 0;
+
     res.json({
       id: file.id,
       filename: file.filename,
@@ -137,6 +138,7 @@ router.get('/:id', async (req, res) => {
       assetUuid: file.asset_uuid ?? undefined,
       isComplete: file.is_complete === 1,
       completedAt: file.completed_at,
+      percentageAnnotated,
       annotations,
       ignoredSections,
       bookmarks,
