@@ -7,8 +7,8 @@ import { WelcomeModal } from './components/sync/WelcomeModal'
 import { DateBrowser } from './components/files/DateBrowser'
 import { DEFAULT_BROWSE_VIEW, type BrowseView } from './components/files/browseView'
 import { DetailPage } from './components/files/DetailPage'
-import { PredictionReviewPage } from './components/reviews/PredictionReviewPage'
 import { SongsPage } from './components/songs/SongsPage'
+import { AnalyticsPage } from './components/analytics/AnalyticsPage'
 import { useSyncStatus } from './hooks/useSyncStatus'
 import { useStartSync } from './hooks/useStartSync'
 import { useFilesByDate } from './hooks/useFilesByDate'
@@ -92,7 +92,7 @@ function AppContent() {
           />
         )}
         {route.startsWith('/songs') && <SongsPage />}
-        {route.startsWith('/reviews') && <PredictionReviewPage />}
+        {route.startsWith('/analytics') && <AnalyticsPage />}
         {route.startsWith('/detail/') && (
           <DetailPage fileId={parseInt(route.split('/')[2])} />
         )}

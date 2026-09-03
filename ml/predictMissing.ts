@@ -178,7 +178,7 @@ async function main() {
       + `${skippedMissing} skipped (missing MIDI), ${errors.length} error(s).`
     );
     if (errors.length > 0) {
-      console.log('Open #/reviews to triage the new predictions.');
+      console.log('Open the file detail page to triage the new predictions.');
     }
   } finally {
     closeDatabase();

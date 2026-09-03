@@ -169,7 +169,7 @@ Useful flags:
 - `--db <path>` and `--root <path>` for non-default layouts
 
 After import, open:
-- `#/reviews?fileId=<id>`
+- `#/detail/<id>` and use the `Predictions to Review` section below the piano roll
 
 To catch up every incomplete file that has no predictions yet (e.g. right after a
 sync), run the batch form:

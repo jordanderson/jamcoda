@@ -20,8 +20,8 @@ Then:
 - `src/components/layout/Sidebar.tsx`
 - `src/components/files/DateBrowser.tsx`
 - `src/components/files/DetailPage.tsx`
-- `src/components/reviews/PredictionReviewPage.tsx`
 - `src/components/songs/SongsPage.tsx`
+- `src/components/analytics/AnalyticsPage.tsx`
 - `src/hooks/useMidiPlayer.ts`
 - `server/routes/files.routes.ts`
 - `server/routes/annotations.routes.ts`
@@ -62,8 +62,8 @@ before running `npm install` on a different version.
 Core frontend routes:
 - `#/browse`
 - `#/detail/:id`
-- `#/reviews`
 - `#/songs`
+- `#/analytics`
 
 ## Invariants To Preserve
 
@@ -212,7 +212,8 @@ After changes, run what is relevant:
 - Route-level smoke checks in UI:
   - browse loads
   - detail playback and annotation actions
-  - review queue actions (confirm/edit/invalid/merge/promote)
+  - detail prediction actions (confirm/edit/invalid/promote, trim flourish, snap bounds)
+  - analytics controls (presets, periodicity) and charts
   - songs page playback modal and rename flow
 - ML checks when touched:
   - rebuild model endpoint

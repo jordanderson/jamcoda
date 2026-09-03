@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ClipboardCheck, Library, Music, RefreshCw, Settings } from 'lucide-react'
+import { BarChart3, Library, Music, RefreshCw, Settings } from 'lucide-react'
 import { useRebuildPredictionModel, useRebuildStatus } from '../../hooks/usePredictionReviews'
 import { useToasts } from '../../hooks/useToasts'
 import { SettingsModal } from '../settings/SettingsModal'
@@ -35,9 +35,9 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   const navItems = [
-    { id: 'browse', label: 'Local Library', icon: Library, path: '/browse' },
+    { id: 'browse', label: 'Library', icon: Library, path: '/browse' },
     { id: 'songs', label: 'Songs', icon: Music, path: '/songs' },
-    { id: 'reviews', label: 'Review Predictions', icon: ClipboardCheck, path: '/reviews' },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3, path: '/analytics' },
   ]
 
   const handleNavClick = (path: string) => {

@@ -7,6 +7,23 @@ import { localFilesApi } from '@/api/localEndpoints';
 import type { SongPlayHistoryRow } from '@/api/localTypes';
 import { formatTime, formatDate } from '@/utils/format'
 
+/**
+ * Song pre-filter from the `#/songs?song=<name>` query param, so other views
+ * (e.g. Analytics) can deep-link to one song's sessions. Null means no filter.
+ */
+function getSongFilterFromHash(): string | null {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#/songs')) return null;
+  const queryStart = hash.indexOf('?');
+  if (queryStart === -1) return null;
+  const song = new URLSearchParams(hash.slice(queryStart + 1)).get('song')?.trim();
+  return song ? song : null;
+}
+
+function songsHash(songFilter: string | null): string {
+  return songFilter ? `#/songs?song=${encodeURIComponent(songFilter)}` : '#/songs';
+}
+
 export function SongsPage() {
   const { data, isLoading, error, refetch, isFetching } = useSongPlayHistory();
   const { data: uniqueSongNames = [] } = useUniqueSongNames();
@@ -43,11 +60,31 @@ export function SongsPage() {
   const [renameFrom, setRenameFrom] = useState('');
   const [renameTo, setRenameTo] = useState('');
   const [renameFeedback, setRenameFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [sortBy, setSortBy] = useState<'song' | 'date'>('date');
+  const [sortBy, setSortBy] = useState<'song' | 'date' | 'duration'>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [songFilter, setSongFilter] = useState<string | null>(getSongFilterFromHash);
+
+  // Follow `#/songs?song=` links (e.g. from Analytics) while mounted.
+  useEffect(() => {
+    const handleHashChange = () => {
+      setSongFilter(getSongFilterFromHash());
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const handleSongFilterChange = (next: string | null) => {
+    setSongFilter(next);
+    const target = songsHash(next);
+    if (window.location.hash !== target) {
+      window.location.hash = target;
+    }
+  };
 
   const rows = useMemo(() => {
-    const raw = [...(data?.songs ?? [])];
+    const raw = [...(data?.songs ?? [])].filter(
+      (row) => songFilter === null || row.song_name === songFilter
+    );
     raw.sort((a, b) => {
       if (sortBy === 'song') {
         const cmp = a.song_name.localeCompare(b.song_name, undefined, { sensitivity: 'base' });
@@ -56,24 +93,32 @@ export function SongsPage() {
         return sortDirection === 'asc' ? dateCmp : -dateCmp;
       }
 
+      if (sortBy === 'duration') {
+        const cmp = (a.end_time - a.start_time) - (b.end_time - b.start_time);
+        if (cmp !== 0) return sortDirection === 'asc' ? cmp : -cmp;
+        const dateCmp = b.date_recorded.localeCompare(a.date_recorded);
+        if (dateCmp !== 0) return dateCmp;
+        return a.song_name.localeCompare(b.song_name, undefined, { sensitivity: 'base' });
+      }
+
       const cmp = a.date_recorded.localeCompare(b.date_recorded);
       if (cmp !== 0) return sortDirection === 'asc' ? cmp : -cmp;
       const songCmp = a.song_name.localeCompare(b.song_name, undefined, { sensitivity: 'base' });
       return sortDirection === 'asc' ? songCmp : -songCmp;
     });
     return raw;
-  }, [data?.songs, sortBy, sortDirection]);
+  }, [data?.songs, songFilter, sortBy, sortDirection]);
 
-  const handleSort = (column: 'song' | 'date') => {
+  const handleSort = (column: 'song' | 'date' | 'duration') => {
     if (sortBy === column) {
       setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
       return;
     }
     setSortBy(column);
-    setSortDirection(column === 'date' ? 'desc' : 'asc');
+    setSortDirection(column === 'song' ? 'asc' : 'desc');
   };
 
-  const sortIcon = (column: 'song' | 'date') => {
+  const sortIcon = (column: 'song' | 'date' | 'duration') => {
     if (sortBy !== column) return null;
     return sortDirection === 'asc'
       ? <ArrowUp className="w-3.5 h-3.5" />
@@ -218,10 +263,26 @@ export function SongsPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Songs</h1>
           <p className="text-gray-600 mt-1">
-            All annotated song segments, ordered by most recently played date.
+            {songFilter === null
+              ? 'All annotated song segments, ordered by most recently played date.'
+              : `${rows.length} segment${rows.length === 1 ? '' : 's'} of “${songFilter}” — play takes from different sessions.`}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <span className="font-medium">Song</span>
+            <select
+              aria-label="Filter by song"
+              value={songFilter ?? ''}
+              onChange={(event) => handleSongFilterChange(event.target.value || null)}
+              className="px-3 py-2 border rounded-lg text-sm bg-white max-w-[220px]"
+            >
+              <option value="">All songs</option>
+              {uniqueSongNames.map((songName) => (
+                <option key={songName} value={songName}>{songName}</option>
+              ))}
+            </select>
+          </label>
           <button
             onClick={() => openRenamePanel()}
             className="px-3 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors"
@@ -356,14 +417,25 @@ export function SongsPage() {
                 </th>
                 <th className="px-4 py-3 font-semibold">File</th>
                 <th className="px-4 py-3 font-semibold">Segment</th>
+                <th className="px-4 py-3 font-semibold">
+                  <button
+                    onClick={() => handleSort('duration')}
+                    className="inline-flex items-center gap-1 hover:text-gray-900 transition-colors"
+                  >
+                    Duration
+                    {sortIcon('duration')}
+                  </button>
+                </th>
                 <th className="px-4 py-3 font-semibold">Play</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {rows.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-gray-500" colSpan={5}>
-                    No annotated songs yet.
+                  <td className="px-4 py-6 text-gray-500" colSpan={6}>
+                    {songFilter === null
+                      ? 'No annotated songs yet.'
+                      : `No annotated segments for “${songFilter}”.`}
                   </td>
                 </tr>
               )}
@@ -379,6 +451,9 @@ export function SongsPage() {
                     <td className="px-4 py-3 text-gray-700">{row.filename}</td>
                     <td className="px-4 py-3 text-gray-700">
                       {formatTime(row.start_time)} - {formatTime(row.end_time)}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700">
+                      {formatTime(Math.max(0, row.end_time - row.start_time))}
                     </td>
                     <td className="px-4 py-3">
                       <button

@@ -166,7 +166,7 @@ async function main() {
       ? ` (cleared ${result.clearedCount} previous unpromoted row(s) first).`
       : '.')
   );
-  console.log(`Open #/reviews?fileId=${result.fileId} to review in the UI.`);
+  console.log(`Open #/detail/${result.fileId} to review in the UI.`);
 }
 
 runMain('Predict/import failed', async () => {

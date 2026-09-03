@@ -226,19 +226,19 @@ export function DateBrowser({ onFileSelect, view, onViewChange }: DateBrowserPro
                     )}
                   </td>
                   <td className="py-3 px-4">
-                    <button
+                      <button
                       onClick={(event) => {
                         event.stopPropagation();
-                        window.location.hash = `/reviews?fileId=${file.id}`;
+                        onFileSelect(file.id);
                       }}
                       className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold transition-colors ${
                         !file.isComplete && file.unreviewedPredictionCount > 0
                           ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
-                      title={`Open prediction review queue for this file${
+                      title={`Open file detail${
                         file.unreviewedPredictionCount > 0 && file.unreviewedPredictionCoverage > 0
-                          ? ` · ${file.unreviewedPredictionCoverage}% of duration covered`
+                          ? ` · ${file.unreviewedPredictionCoverage}% of duration covered by unreviewed predictions`
                           : ''
                       }`}
                     >

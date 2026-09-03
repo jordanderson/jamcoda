@@ -933,11 +933,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
             : '';
           showToast({
             type: 'success',
-            message: `${baseMessage}${clearMessage}`,
-            action: {
-              label: 'Open review queue for this file',
-              onClick: () => { window.location.hash = `/reviews?fileId=${fileId}`; }
-            }
+            message: `${baseMessage}${clearMessage}`
           });
         },
         onError: (error) => {
@@ -1136,10 +1132,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
   // on it; the error banner is the terminal state there.
   const loadingMidi = !showError && (isDownloading || (!!midiBlob && (!isLoaded || loadedFileId !== fileId)));
   const rollReady = !loadingMidi && isLoaded && !!sequence && loadedFileId === fileId;
-  const pendingReviewCount = (reviewListResponse?.reviews ?? []).filter(
-    (review) => review.status === 'unsure'
-  ).length;
-  const pendingReviewBadge = pendingReviewCount > 99 ? '99+' : String(pendingReviewCount);
   const isPredictionActionPending = (
     updatePredictionReview.isPending || promotePredictionReview.isPending
   );
@@ -1492,7 +1484,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
       {/* Predictions to Review */}
       {unpromotedReviews.length > 0 && (
         <div className="border border-indigo-200 rounded-lg shadow-sm bg-white overflow-hidden">
-          <div className="p-6 border-b flex flex-wrap justify-between items-center bg-indigo-50/50 gap-3">
+          <div className="p-6 border-b">
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -1506,14 +1498,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
               <p className="text-sm text-gray-600 mt-1">
                 Review model predictions against the piano roll above. Click times to jump the playhead, trim flourishes, or promote.
               </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { window.location.hash = `/reviews?fileId=${fileId}`; }}
-                className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors cursor-pointer"
-              >
-                Open in Review Queue →
-              </button>
             </div>
           </div>
 
@@ -1563,15 +1547,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
             >
               <Sparkles className={`w-4 h-4 ${(runPredictionForFile.isPending && !file.isComplete) ? 'animate-pulse' : ''}`} />
               {file.isComplete ? 'File Complete' : (runPredictionForFile.isPending ? 'Running Predictions...' : 'Run Predictions')}
-            </button>
-            <button
-              onClick={() => { window.location.hash = `/reviews?fileId=${fileId}`; }}
-              className="px-4 py-2 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium inline-flex items-center gap-2"
-            >
-              Review Predictions
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
-                {pendingReviewBadge}
-              </span>
             </button>
             <button
               onClick={handleCreateAnnotation}

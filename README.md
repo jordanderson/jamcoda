@@ -33,21 +33,24 @@ Use this README for daily use and fast codebase onboarding.
   - Complete files cannot run prediction again until marked incomplete.
 
 ### 3) Review predictions
-- Open `#/reviews` or `#/reviews?fileId=<id>`.
-- The review list focuses on unpromoted rows.
-- API queue (`GET /api/prediction-reviews/queue`) prioritizes low-confidence and shorter segments.
+- Open the file (`#/detail/:id`) and use the `Predictions to Review` section
+  below the piano roll.
+- Review against the roll: click times to jump the playhead, trim flourishes,
+  snap loose bounds, or promote.
 - Actions:
   - `Confirm + Promote`
   - `Edit + Promote`
   - `Mark Invalid`
-  - `Merge Selected` (consecutive rows, same file, same song)
-  - `Promote Reviewed` (batch promote confirmed/edited)
+- Over-fragmented predictions: promote each fragment, then drag the resulting
+  annotations until they overlap — same-song overlaps auto-merge.
 - Review status values are:
   - `unsure`, `invalid`, `confirmed`, `edited`
 - `ready` is intentionally removed.
 
 ### 4) Song-level operations
 - Open `#/songs` for all annotated segments across files.
+- Filter to one song with the dropdown or `#/songs?song=<name>` (deep-linked
+  from Analytics) to play takes from different sessions.
 - Sort client-side by song or date.
 - Play a segment in a modal with pause/stop and a seekable segment bar.
 - Rename a song globally. This updates:
@@ -56,16 +59,24 @@ Use this README for daily use and fast codebase onboarding.
   - `prediction_reviews.reviewed_song_name`
 - The rename flow also triggers a model rebuild from the UI.
 
-### 5) Rebuild model globally
+### 5) Analytics
+- Open `#/analytics` for practice insights grouped by song and date.
+- Pick a range (Last 30d / 90d / 6m / All time / Custom) and a periodicity
+  (Auto / Day / Week / Month).
+- Top-songs bars, stacked practice-over-time trend, and a
+  sortable table with per-song sparklines. Click a song to highlight it.
+- Ranked by annotated time on recording dates; annotations only.
+
+### 6) Rebuild model globally
 - The sidebar has `Rebuild Model`.
 - This retrains from all current annotations and writes `data/ml/model.json`.
 
 ## Routes (Frontend)
 
 - `#/browse`: Date View (library table)
-- `#/detail/:id`: file detail, piano roll, annotation tools, run predictions
-- `#/reviews` (`?fileId=` optional): prediction review queue
-- `#/songs`: annotated song history + rename + playback modal
+- `#/detail/:id`: file detail, piano roll, annotation tools, run predictions, review predictions
+- `#/songs`: annotated song history + rename + playback modal (`?song=` prefilters)
+- `#/analytics`: top songs, practice trend, song table (range + periodicity)
 
 ## Backend API (Local Express)
 
@@ -239,8 +250,8 @@ Then:
 - `src/components/layout/Sidebar.tsx`
 - `src/components/files/DateBrowser.tsx`
 - `src/components/files/DetailPage.tsx`
-- `src/components/reviews/PredictionReviewPage.tsx`
 - `src/components/songs/SongsPage.tsx`
+- `src/components/analytics/AnalyticsPage.tsx`
 - `src/hooks/useMidiPlayer.ts`
 - `server/routes/files.routes.ts`
 - `server/routes/annotations.routes.ts`

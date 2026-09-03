@@ -2,7 +2,7 @@
  * Display formatting shared across the UI.
  *
  * `formatTime` previously existed as five identical copies (DetailPage,
- * PredictionReviewPage, SongsPage, AnnotationModal, DateBrowser) and
+ * SongsPage, AnnotationModal, DateBrowser) and
  * `formatDate` as three. One of the `formatTime` copies was re-created on
  * every render rather than hoisted to module scope.
  */

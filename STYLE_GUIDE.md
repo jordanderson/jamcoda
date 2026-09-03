@@ -242,8 +242,7 @@ const { toasts, showToast, dismissToast, clearToasts } = useToasts()
 showToast({ type: 'success', message: 'Ignored section deleted.' })
 showToast({
   type: 'success',
-  message: 'Generated 4 prediction segments for this file.',
-  action: { label: 'Open review queue', onClick: () => { window.location.hash = '/reviews' } }
+  message: 'Generated 4 prediction segments for this file.'
 })
 
 <ToastStack toasts={toasts} onDismiss={dismissToast} />

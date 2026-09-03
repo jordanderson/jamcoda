@@ -4,7 +4,7 @@ import { useMidiPlayer } from '@/hooks/useMidiPlayer'
 /**
  * Playback scoped to one time range of the loaded file.
  *
- * SongsPage and PredictionReviewPage both needed "play just this segment,
+ * SongsPage needed "play just this segment,
  * with a scrubber relative to its own start". They had independent copies:
  * `segmentCurrentTime` and `segmentElapsed` were byte-identical, while the
  * seek handlers had quietly diverged. One parked the playhead at the segment
