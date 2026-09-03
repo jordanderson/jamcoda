@@ -54,13 +54,13 @@ function makeNotes(events: Array<[pitch: number, start: number, dur: number]>): 
 }
 
 describe('feature extraction', () => {
-  it('produces 38 features including tempo and regularity', () => {
+  it('produces 37 features including regularity and velocity-weighted split chroma', () => {
     const file = makeFile();
-    // 24 split-register pitch-class + low_register_ratio + 13 texture/rhythm = 38
+    // 24 split-register pitch-class + low_register_ratio + 12 texture/rhythm = 37
     const notes = makeNotes(Array.from({ length: 40 }, (_, i) => [60 + (i % 5) * 2, i * 0.1, 0.08]));
     const samples = buildSamplesForFile(file, notes, { windowSec: 4, stepSec: 1, registerDivide: 60 });
     assert.ok(samples.length > 0);
-    assert.equal(samples[0].features.length, 38);
+    assert.equal(samples[0].features.length, 37);
   });
 
   it('separates low and high register pitch-class profiles', () => {
@@ -79,14 +79,27 @@ describe('feature extraction', () => {
     assert.equal(highSample.features[24], 0, 'all content above the divide');
   });
 
-  it('registers a faster tempo for denser onsets', () => {
+  it('weights chroma more heavily for higher velocity notes', () => {
     const file = makeFile();
-    const fastNotes = makeNotes(Array.from({ length: 80 }, (_, i) => [64, i * 0.05, 0.04]));
-    const slowNotes = makeNotes(Array.from({ length: 10 }, (_, i) => [64, i * 0.4, 0.3]));
-    const fastSample = buildSamplesForFile(file, fastNotes, { windowSec: 4, stepSec: 1, registerDivide: 60 })[0];
-    const slowSample = buildSamplesForFile(file, slowNotes, { windowSec: 4, stepSec: 1, registerDivide: 60 })[0];
-    const tempoIndex = 36; // tempo_bpm is the 37th feature (0-indexed 36)
-    assert.ok(fastSample.features[tempoIndex] > slowSample.features[tempoIndex]);
+    const notes: NoteEvent[] = [
+      { pitch: 60, velocity: 120, startSec: 0.5, endSec: 1.5 },
+      { pitch: 62, velocity: 30, startSec: 2.0, endSec: 3.0 }
+    ];
+    const sample = buildSamplesForFile(file, notes, { windowSec: 4, stepSec: 1, registerDivide: 60 })[0];
+    // pcHigh_C is index 12, pcHigh_D is index 14
+    assert.ok(sample.features[12] > sample.features[14], 'louder pitch has higher normalized chroma weight');
+  });
+
+  it('decays chroma weight for sustained tails after key release', () => {
+    const file = makeFile();
+    // Key A held 0.5s-1.5s (full key press, no tail, 1.0s duration)
+    // Key B pressed 2.0s-2.5s and sustained under pedal until 3.0s (0.5s key, 0.5s tail = 0.75s effective)
+    const notes: NoteEvent[] = [
+      { pitch: 60, velocity: 80, startSec: 0.5, endSec: 1.5, keyEndSec: 1.5 },
+      { pitch: 62, velocity: 80, startSec: 2.0, endSec: 3.0, keyEndSec: 2.5 }
+    ];
+    const sample = buildSamplesForFile(file, notes, { windowSec: 4, stepSec: 1, registerDivide: 60 })[0];
+    assert.ok(sample.features[12] > sample.features[14], 'sustained tail contributes decayed weight');
   });
 });
 
@@ -101,8 +114,8 @@ describe('prototype model training', () => {
         endTime: i + 4,
         label: i < 30 ? 'Song A' : NO_SONG_LABEL,
         features: i < 30
-          ? [0.8, 0.2, ...new Array(36).fill(0.1)]
-          : [0, ...new Array(37).fill(0)]
+          ? [0.8, 0.2, ...new Array(35).fill(0.1)]
+          : [0, ...new Array(36).fill(0)]
       });
     }
     const model = trainModelFromSamples(samples, config);
@@ -110,7 +123,7 @@ describe('prototype model training', () => {
     assert.equal(model.modelVersion, MODEL_VERSION);
     assert.ok(model.prototypes && model.prototypes.length > 0);
     assert.ok(model.kernelScale && model.kernelScale > 0);
-    assert.equal(model.featureMeans.length, 38);
+    assert.equal(model.featureMeans.length, 37);
     assert.ok(model.prototypeCounts!.every((c) => c > 0));
   });
 });
@@ -126,7 +139,7 @@ describe('hand-mask augmentation', () => {
         endTime: i + 4,
         label: i < songCount ? 'Song A' : NO_SONG_LABEL,
         // Both registers active, so every window is eligible for masking.
-        features: new Array(38).fill(0.1)
+        features: new Array(37).fill(0.1)
       });
     }
     return samples;
@@ -148,7 +161,7 @@ describe('hand-mask augmentation', () => {
       // Low-only window: high chroma (indices 12-23) is already zero. A
       // low-mask would blank it into a silence-shaped vector still labelled
       // as the song.
-      const features = new Array(38).fill(0.1);
+      const features = new Array(37).fill(0.1);
       for (let i = 12; i < 24; i++) features[i] = 0;
       features[0] = 0.5;
       features[24] = 1;
@@ -423,13 +436,13 @@ describe('loadModel', () => {
     const samples: WindowSample[] = Array.from({ length: 40 }, (_, i) => ({
       fileId: 1, fileName: '', startTime: i, endTime: i + 4,
       label: i < 20 ? 'Song A' : NO_SONG_LABEL,
-      features: i < 20 ? [0.8, 0.2, ...new Array(36).fill(0.1)] : [0, ...new Array(37).fill(0)]
+      features: i < 20 ? [0.8, 0.2, ...new Array(35).fill(0.1)] : [0, ...new Array(36).fill(0)]
     }));
     const modelPath = path.join(mkdtempSync(path.join(tmpdir(), 'jamcoda-model-')), 'model.json');
     saveModel(trainModelFromSamples(samples, config), modelPath);
 
     const loaded = loadModel(modelPath);
-    assert.equal(loaded.featureNames.length, 38);
+    assert.equal(loaded.featureNames.length, 37);
     assert.equal(loaded.modelVersion, MODEL_VERSION);
     // The model stores the resolved config, so a change to a default does
     // not change the behaviour of this model.

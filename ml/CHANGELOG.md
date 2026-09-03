@@ -18,6 +18,77 @@ How to read the numbers:
 
 ---
 
+## 2026-09-02 — v2.7: acoustic sustain-pedal decay modeling (accepted)
+
+### Context
+
+After releasing v2.6, false-negative collapses to silence (`Song -> __none__`) remained the primary failure mode. A user insight identified the root physical mechanism:
+When pianists play with the damper pedal (CC 64), keys are frequently released 0.2s–0.8s before the next beat to shift hands. When decoding MIDI strictly by physical key-release events, the feature extractor found 0 active notes during these hand shifts: `silence_ratio` spiked to 1.0, pitch-class durations dropped to 0, and the nearest prototype collapsed to `__none__`. In reality, the strings were vibrating and the chord was still ringing acoustically (and in the app's audio playback).
+
+A previous v2.5 experiment that added CC 64 metadata features (e.g. `sustain_ratio`) directly to the feature vector failed because pedaling varies across takes, adding noise to prototype distances. Modeling the *acoustic vibration of the strings* solves the root problem directly.
+
+### What changed
+
+- **Shared pedal interval modeling (`core/midi/noteSequence.ts`):** Canonical `buildPedalIntervals` and `heldByPedal` moved to `core`, unifying playback (`pianoSampler.ts`) and feature extraction (`songSegmentation.ts`).
+- **Acoustic sustain extension with register caps (`extractNotesFromMidi`):** Notes released under a held damper pedal extend until the pedal lifts or natural acoustic decay ends the ring (0.7s cap for bass/mid; 0.6s cap above C5 due to faster treble string decay).
+- **Decayed ringing tail weight (`extractWindowFeatures`):** The key-down portion receives full velocity weight ($\sqrt{v / 127}$); the sustained ringing tail receives a 0.5x decayed weight to prevent harmonic bleeding across chord changes while keeping the window acoustically alive.
+- `MODEL_VERSION` bumped to `v2.7`.
+
+### Results
+
+73 annotated files, evaluated via full Leave-One-File-Out cross-validation on annotated windows.
+
+| metric | v2.4 baseline | v2.6 | v2.7 champion | delta vs baseline |
+| --- | --- | --- | --- | --- |
+| window accuracy | 70.41% | 78.80% | **80.01%** (eval) / **80.99%** (sweep) | **+9.6 to +10.6 pt** |
+| segment recall | 71.03% | 79.47% | **80.60%** (eval) / **81.58%** (sweep) | **+9.6 to +10.6 pt** |
+| segment precision | 53.49% | 53.90% | **53.60%** (eval) / **54.08%** (sweep) | **+0.1 to +0.6 pt** |
+| segment F1 | 61.03% | 64.24% | **64.40%** (eval) / **65.04%** (sweep) | **+3.4 to +4.0 pt** |
+| emitted segments | 734 | 588 | **551** | **-183** (-25%) |
+| false silences (`Bethena -> none`) | 1,668 | 804 | **734** | **-934** (-56%) |
+| false silences (`Ashokan -> none`) | 1,117 | 819 | **653** | **-464** (-42%) |
+| false silences (`Winter Wonderland -> none`) | 785 | 541 | **350** | **-435** (-55%) |
+
+---
+
+## 2026-09-02 — v2.6: compressive velocity-weighted chroma, tempo ablation, rebalanced prototype budgeting (accepted)
+
+### Context
+
+Diagnostic analysis of v2.4 LOO errors revealed that **92.7% of all classification errors** were collapses to silence (`Song -> __none__`), while cross-song confusion was minimal. Two structural factors drove this:
+1. `__none__` prototype dominance: with `maxNonePrototypes=120`, nearest-prototype distance gave silence an artificial geometric advantage over songs with only 10–30 prototypes.
+2. In piano practice, melodic phrases and chords are played with firm velocity (70–110), while pedal resonance and mechanical noise ring at lower velocities (20–50). Flat chroma duration accumulation treated all sounding notes equally.
+3. Practice speeds are non-stationary: students practice difficult pieces slowly, with rubato, or haltingly. The `tempo_bpm` feature penalized true song matches when played at differing practice speeds.
+
+### What changed
+
+- **Compressive velocity-weighted chroma:** In `extractWindowFeatures`, pitch-class accumulation is weighted by `sqrt(velocity / 127)`. Melodic and accented notes dominate the low/high chroma profiles while preserving soft harmonic context.
+- **Ablation of `tempo_bpm`:** Removed `tempo_bpm` from the feature set (38 -> 37 features). Practice speed variation no longer distorts nearest-prototype distance.
+- **Rebalanced prototype budgeting:** Default `maxNonePrototypes` reduced from 120 to 60; default `prototypeBudget` increased from 1200 to 2000. Songs receive ample prototypes to capture diverse musical sections without being swallowed by silence.
+- **Phrase gap merging:** Default `mergeGapSec` increased from 3s to 5s to bridge typical micro-pauses between practice phrases.
+- `MODEL_VERSION` bumped to `v2.6`. Full report saved in `ml/experiments-2026-09-02.md`.
+
+### Results
+
+All numbers are 73 annotated files, evaluated via full Leave-One-File-Out cross-validation on annotated windows.
+
+| metric | v2.4 baseline | v2.6 champion | delta |
+| --- | --- | --- | --- |
+| window accuracy | 70.41% | **78.80%** | **+8.39 pt** |
+| segment recall | 71.03% | **79.47%** | **+8.44 pt** |
+| segment precision | 53.49% | **53.90%** | **+0.41 pt** |
+| segment F1 | 61.03% | **64.24%** | **+3.21 pt** |
+| emitted segments | 734 | **588** | **-146** (-20%) |
+| false negatives (`__none__`) | 15,016 | **10,371** | **-4,645** (-31%) |
+| cross-song confusions | 2,997 | **2,528** | **-469** (-16%) |
+
+### Notes
+
+- Single-file songs: 11 songs only appear in 1 file across the database (2,012s of annotation). In LOO, their recall is mathematically bounded at 0% because the held-out fold has 0 training examples. For songs in >= 2 files, recall approaches ~82%.
+- A 5.0-second window variant was also tested and achieved 81.76% window accuracy and 82.19% recall (F1 64.00%). The 4.0-second default was retained for sharper temporal boundaries.
+
+---
+
 ## 2026-09-02 — v2.5 experiment: damper-pedal features (rejected)
 
 ### Context

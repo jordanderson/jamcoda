@@ -1,4 +1,10 @@
-import type { Note, NoteSequence, SustainPedalEvent } from '@core/midi/noteSequence'
+import {
+  type Note,
+  type NoteSequence,
+  type PedalInterval,
+  buildPedalIntervals,
+  heldByPedal
+} from '@core/midi/noteSequence'
 
 /**
  * A minimal Web Audio sampler for the acoustic grand piano.
@@ -70,51 +76,12 @@ interface ScheduledVoice {
   gain: GainNode
 }
 
-/** A span where the damper pedal was held down. */
-export interface PedalInterval {
-  down: number
-  /** When the pedal lifted; null when it was still down at the end of the file. */
-  up: number | null
+export {
+  type PedalInterval,
+  buildPedalIntervals,
+  heldByPedal
 }
 
-/**
- * Reduce CC 64 sustain events into down/up spans. Consecutive presses extend
- * one span; a release with no span open, or a zero-length press, is dropped.
- */
-export function buildPedalIntervals(events: SustainPedalEvent[]): PedalInterval[] {
-  const intervals: PedalInterval[] = []
-  let open: PedalInterval | null = null
-
-  for (const event of events) {
-    if (event.on) {
-      if (!open) open = { down: event.time, up: null }
-    } else if (open) {
-      if (event.time > open.down) {
-        open.up = event.time
-        intervals.push(open)
-        open = null
-      } else {
-        open = null
-      }
-    }
-  }
-
-  if (open) intervals.push(open)
-  return intervals
-}
-
-/**
- * The pedal span holding a note released at `endTime`, or null when the pedal
- * was up (the key's own release stands). A key lifted on the same instant the
- * pedal lifts is not sustained: the damper has already fallen.
- */
-export function heldByPedal(intervals: PedalInterval[], endTime: number): PedalInterval | null {
-  for (const interval of intervals) {
-    if (interval.down > endTime) break
-    if (interval.up === null || endTime < interval.up) return interval
-  }
-  return null
-}
 
 /**
  * Loads piano samples on demand and schedules note playback.

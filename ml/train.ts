@@ -48,8 +48,8 @@ Options:
   --step <seconds>       Window step in seconds (default: 1)
   --k <int>              K nearest neighbors (legacy v1 models only; default: 7)
   --none-ratio <float>   Max none:song window ratio kept in training (default: 1.5)
-  --prototype-budget <int>     Total condensed prototype budget (default: 1200)
-  --max-none-prototypes <int>  Prototype cap for the __none__ class (default: 120)
+  --prototype-budget <int>     Total condensed prototype budget (default: 2000)
+  --max-none-prototypes <int>  Prototype cap for the __none__ class (default: 60)
   --scaling <zscore|minmax|none>  Feature normalization (default: minmax)
   --register-divide <int>        MIDI note separating low/high register chroma (default: 60, middle C)
   --hand-mask-augment <float>    Fraction of song windows given a hand-masked copy (default: 0, off; measured to reduce LOO accuracy)
@@ -82,8 +82,8 @@ async function main() {
     stepSec: parseNum(readArg('--step'), 1),
     k: parseInt_(readArg('--k'), 7),
     maxNoneToSongRatio: Math.max(0, parseNum(readArg('--none-ratio'), 1.5)),
-    prototypeBudget: Math.max(1, parseInt_(readArg('--prototype-budget'), 1200)),
-    maxNonePrototypes: Math.max(1, parseInt_(readArg('--max-none-prototypes'), 120)),
+    prototypeBudget: Math.max(1, parseInt_(readArg('--prototype-budget'), 2000)),
+    maxNonePrototypes: Math.max(1, parseInt_(readArg('--max-none-prototypes'), 60)),
     featureScaling: parseScaling(readArg('--scaling')),
     registerDivide: Math.max(1, parseInt_(readArg('--register-divide'), 60)),
     handMaskAugmentFraction: clamp(parseNum(readArg('--hand-mask-augment'), 0), 0, 1),

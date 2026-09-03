@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { parseNoteSequence } from '@core/midi/noteSequence';
+import { parseNoteSequence, buildPedalIntervals, heldByPedal } from '@core/midi/noteSequence';
 import { clamp, ensureDirForFile, roundTo } from '@core/cli/args';
 
 export const NO_SONG_LABEL = '__none__';
@@ -13,26 +13,30 @@ export const NO_SONG_LABEL = '__none__';
  * to name its report files, so runs stay referable without manual renaming.
  * Keep `ml/CHANGELOG.md` in sync with each bump.
  */
-export const MODEL_VERSION = 'v2.4';
+export const MODEL_VERSION = 'v2.7';
 
 /**
- * Version 2 features (v2.4 split chroma):
+ * Version 2 features (v2.7 acoustic sustain-pedal decay + velocity-weighted split chroma):
  *
- * Pitch classes are split by register instead of the v2.0 flat chroma. Each
- * note's duration lands in `pcLow_*` (pitch < `registerDivide`, default middle
- * C = 60) or `pcHigh_*` (pitch >= `registerDivide`), and each register's
- * profile is normalized independently to sum 1. This is the "which hand is
- * playing" signal: a right-hand-only practice window keeps the same
- * high-register chroma as the full song and reads as all-zero low chroma.
- * `low_register_ratio` preserves the low/high energy balance that independent
- * normalization hides. The remaining features are carried over from v2.0:
+ * Notes released under a held damper pedal (CC 64) ring out acoustically
+ * up to 0.7s (0.6s above C5) with a 0.5x decayed tail weight, preventing false
+ * collapses to silence when hands lift to shift position.
  *
+ * Pitch classes are split by register (low/high at registerDivide) and
+ * weighted by sqrt(velocity / 127) to emphasize intentional melodic voices
+ * over pedal resonance and mechanical noise. Each register's profile is
+ * normalized independently to sum 1.
+ * low_register_ratio preserves the low/high energy balance.
+ *
+ * Texture and spread features:
  *   velocity_std / duration_std / polyphony_std   articulation and texture spread
  *   silence_ratio                                 how much of the window is dead air
  *   pitch_span                                    register width of the phrase
- *   tempo_bpm                                     median inter-onset interval tempo
  *   regularity                                    peak autocorrelation of onset
  *                                                 density (rhythmic pulse strength)
+ *
+ * (tempo_bpm was ablated in v2.6: practice sessions have variable tempo
+ * between slow practice and full speed, which added false-negative noise).
  */
 const FEATURE_NAMES = [
   'pcLow_C', 'pcLow_C#', 'pcLow_D', 'pcLow_D#', 'pcLow_E', 'pcLow_F',
@@ -51,7 +55,6 @@ const FEATURE_NAMES = [
   'polyphony_std',
   'silence_ratio',
   'pitch_span',
-  'tempo_bpm',
   'regularity'
 ] as const;
 
@@ -86,6 +89,8 @@ export interface NoteEvent {
   velocity: number;
   startSec: number;
   endSec: number;
+  /** Physical key release time before sustain-pedal extension. */
+  keyEndSec?: number;
 }
 
 export interface WindowSample {
@@ -103,9 +108,9 @@ export interface TrainConfig {
   /** Kept for v1 compatibility; v2 prediction is prototype-based. */
   k: number;
   maxNoneToSongRatio: number;
-  /** Total prototype budget across all labels (default 1200). */
+  /** Total prototype budget across all labels (default 2000). */
   prototypeBudget?: number;
-  /** Hard cap on how many prototypes the __none__ class may keep (default 120). */
+  /** Hard cap on how many prototypes the __none__ class may keep (default 60). */
   maxNonePrototypes?: number;
   /** exp(-d/sigma) kernel scale; 0 means derive from training data (default 0). */
   kernelScale?: number;
@@ -298,8 +303,8 @@ export function resolveTrainConfig(config: TrainConfig): Required<
 > & TrainConfig {
   return {
     ...config,
-    prototypeBudget: config.prototypeBudget ?? 1200,
-    maxNonePrototypes: config.maxNonePrototypes ?? 120,
+    prototypeBudget: config.prototypeBudget ?? 2000,
+    maxNonePrototypes: config.maxNonePrototypes ?? 60,
     featureScaling: config.featureScaling ?? 'minmax',
     registerDivide: config.registerDivide ?? 60,
     handMaskAugmentFraction: config.handMaskAugmentFraction ?? 0,
@@ -386,15 +391,28 @@ export function loadAnnotatedMidiFiles(dbPath: string, rootDir: string): Annotat
 
 export function extractNotesFromMidi(midiPath: string): NoteEvent[] {
   const sequence = parseNoteSequence(new Uint8Array(readFileSync(midiPath)));
+  const intervals = buildPedalIntervals(sequence.sustainEvents ?? []);
 
-  // `core` yields absolute start/end times. The feature extractor works in
-  // `startSec`/`endSec`, so adapt here rather than in the shared module.
-  return sequence.notes.map((note) => ({
-    pitch: note.pitch,
-    velocity: note.velocity,
-    startSec: note.startTime,
-    endSec: note.endTime
-  }));
+  // `core` yields absolute start/end times. Notes released under a held
+  // damper pedal (CC 64) ring out acoustically: strings continue vibrating
+  // until the pedal lifts or natural decay ends the ring (0.7s cap, 0.6s above C5).
+  return sequence.notes.map((note) => {
+    let endSec = note.endTime;
+    const held = heldByPedal(intervals, note.endTime);
+    if (held) {
+      const pitchMax = note.pitch > 72 ? 0.6 : 0.7;
+      const pedalRelease = held.up !== null ? held.up : note.endTime + pitchMax;
+      const naturalLimit = note.endTime + pitchMax;
+      endSec = Math.min(pedalRelease, naturalLimit);
+    }
+    return {
+      pitch: note.pitch,
+      velocity: note.velocity,
+      startSec: note.startTime,
+      endSec: Math.max(endSec, note.endTime),
+      keyEndSec: note.endTime
+    };
+  });
 }
 
 function buildWindowStarts(maxTime: number, windowSec: number, stepSec: number): number[] {
@@ -471,8 +489,6 @@ function extractWindowFeatures(
   let activeDuration = 0;
   let minPitch = 127;
   let maxPitch = 0;
-  let prevOnsetSec = -1;
-  const interOnsetIntervals: number[] = [];
 
   for (let i = cursor; i < notes.length; i++) {
     const note = notes[i];
@@ -483,10 +499,19 @@ function extractWindowFeatures(
     const overlap = overlapEnd - overlapStart;
     if (overlap > 0) {
       const pitchClass = note.pitch % CHROMA_SIZE;
+      const keyEnd = note.keyEndSec ?? note.endSec;
+      const keyOverlapEnd = Math.min(keyEnd, overlapEnd);
+      const keyOverlap = Math.max(0, keyOverlapEnd - overlapStart);
+      const tailOverlap = overlap - keyOverlap;
+
+      const baseVelWeight = Math.sqrt(note.velocity / 127);
+      // Key-press portion receives full velocity weight; sustained ringing tail decays by 0.5x
+      const weightedOverlap = (keyOverlap * baseVelWeight) + (tailOverlap * baseVelWeight * 0.5);
+
       if (note.pitch < registerDivide) {
-        lowPitchClassDurations[pitchClass] += overlap;
+        lowPitchClassDurations[pitchClass] += weightedOverlap;
       } else {
-        highPitchClassDurations[pitchClass] += overlap;
+        highPitchClassDurations[pitchClass] += weightedOverlap;
       }
       activeDuration += overlap;
 
@@ -516,11 +541,6 @@ function extractWindowFeatures(
       onsetDurationSqSum += duration * duration;
       if (note.pitch < minPitch) minPitch = note.pitch;
       if (note.pitch > maxPitch) maxPitch = note.pitch;
-      if (prevOnsetSec >= 0) {
-        const gap = note.startSec - prevOnsetSec;
-        if (gap > 0.05 && gap <= 2.5) interOnsetIntervals.push(gap);
-      }
-      prevOnsetSec = note.startSec;
       const regIdx = Math.min(
         regBins - 1,
         Math.floor((note.startSec - windowStart) / REGULARITY_BIN_SEC)
@@ -578,13 +598,6 @@ function extractWindowFeatures(
 
   const pitchSpan = onsetCount > 0 ? (maxPitch - minPitch) / 127 : 0;
 
-  let tempoBpm = 0;
-  if (interOnsetIntervals.length >= 2) {
-    const sorted = [...interOnsetIntervals].sort((a, b) => a - b);
-    const medianIoi = sorted[Math.floor(sorted.length / 2)];
-    if (medianIoi > 0) tempoBpm = clamp(60 / medianIoi, 20, 240) / 240;
-  }
-
   const regularity = onsetRegularity(regDensity);
 
   return {
@@ -603,7 +616,6 @@ function extractWindowFeatures(
       polyphonyStd,
       silenceRatio,
       pitchSpan,
-      tempoBpm,
       regularity
     ],
     nextCursorHint: cursor

@@ -130,7 +130,7 @@ Options:
   --smoothing <int>              Smoothing windows (default: 5)
   --min-segment-sec <n>          Segment evaluation minimum duration (default: 8)
   --min-segment-confidence <n>   Segment evaluation confidence threshold (default: 0.3)
-  --merge-gap-sec <n>            Segment evaluation merge gap (default: 3)
+  --merge-gap-sec <n>            Segment evaluation merge gap (default: 5)
   --include-none                 Also evaluate __none__ windows
   --quiet                        Reduce per-file logging
   --help                         Show this help
@@ -289,7 +289,7 @@ async function main() {
     smoothingWindows: Math.max(1, Math.floor(parseNum(readArg('--smoothing'), 5))),
     minSegmentSec: Math.max(0, parseNum(readArg('--min-segment-sec'), 8)),
     minSegmentConfidence: clamp(parseNum(readArg('--min-segment-confidence'), 0.3), 0, 1),
-    mergeGapSec: Math.max(0, parseNum(readArg('--merge-gap-sec'), 3))
+    mergeGapSec: Math.max(0, parseNum(readArg('--merge-gap-sec'), 5))
   };
 
   const model = loadModel(modelPath);

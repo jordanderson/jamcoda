@@ -42,7 +42,7 @@ Options:
   --smoothing <int>           Number of windows for majority smoothing (default: 5)
   --min-segment-sec <n>       Minimum segment duration in seconds (default: 8)
   --min-segment-confidence <n> Minimum average segment confidence (default: 0.3)
-  --merge-gap-sec <n>         Merge adjacent same-song segments within this gap (default: 3)
+  --merge-gap-sec <n>         Merge adjacent same-song segments within this gap (default: 5)
   --help                      Show this help
 `);
 }
@@ -69,7 +69,7 @@ async function main() {
     smoothingWindows: parseInt_(readArg('--smoothing'), 5),
     minSegmentSec: Math.max(0, parseNum(readArg('--min-segment-sec'), 8)),
     minSegmentConfidence: clamp(parseNum(readArg('--min-segment-confidence'), 0.3), 0, 1),
-    mergeGapSec: Math.max(0, parseNum(readArg('--merge-gap-sec'), 3))
+    mergeGapSec: Math.max(0, parseNum(readArg('--merge-gap-sec'), 5))
   };
 
   const model = loadModel(modelPath);

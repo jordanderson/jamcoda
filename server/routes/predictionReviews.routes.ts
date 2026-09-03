@@ -26,7 +26,7 @@ const DEFAULT_PREDICT_CONFIG: PredictConfig = {
   smoothingWindows: 5,
   minSegmentSec: 8,
   minSegmentConfidence: 0.3,
-  mergeGapSec: 3
+  mergeGapSec: 5
 };
 
 function toNumber(value: unknown): number {
@@ -447,8 +447,8 @@ router.post('/rebuild-model', async (req: Request, res: Response) => {
       stepSec: parseOptionalNumber(req.body.stepSec) ?? 1,
       k: Math.max(1, Math.floor(parseOptionalNumber(req.body.k) ?? 7)),
       maxNoneToSongRatio: Math.max(0, parseOptionalNumber(req.body.maxNoneToSongRatio) ?? 1.5),
-      prototypeBudget: Math.max(1, Math.floor(parseOptionalNumber(req.body.prototypeBudget) ?? 1200)),
-      maxNonePrototypes: Math.max(1, Math.floor(parseOptionalNumber(req.body.maxNonePrototypes) ?? 120)),
+      prototypeBudget: Math.max(1, Math.floor(parseOptionalNumber(req.body.prototypeBudget) ?? 2000)),
+      maxNonePrototypes: Math.max(1, Math.floor(parseOptionalNumber(req.body.maxNonePrototypes) ?? 60)),
       featureScaling: parseOptionalScaling(req.body.featureScaling),
       registerDivide: Math.max(1, Math.floor(parseOptionalNumber(req.body.registerDivide) ?? 60)),
       handMaskAugmentFraction: clamp(parseOptionalNumber(req.body.handMaskAugmentFraction) ?? 0, 0, 1),

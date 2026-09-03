@@ -204,6 +204,52 @@ export function pitchRange(notes: Note[]): { minPitch: number; maxPitch: number 
   return { minPitch, maxPitch };
 }
 
+/** A span where the damper pedal was held down. */
+export interface PedalInterval {
+  down: number;
+  /** When the pedal lifted; null when it was still down at the end of the file. */
+  up: number | null;
+}
+
+/**
+ * Reduce CC 64 sustain events into down/up spans. Consecutive presses extend
+ * one span; a release with no span open, or a zero-length press, is dropped.
+ */
+export function buildPedalIntervals(events: SustainPedalEvent[]): PedalInterval[] {
+  const intervals: PedalInterval[] = [];
+  let open: PedalInterval | null = null;
+
+  for (const event of events) {
+    if (event.on) {
+      if (!open) open = { down: event.time, up: null };
+    } else if (open) {
+      if (event.time > open.down) {
+        open.up = event.time;
+        intervals.push(open);
+        open = null;
+      } else {
+        open = null;
+      }
+    }
+  }
+
+  if (open) intervals.push(open);
+  return intervals;
+}
+
+/**
+ * The pedal span holding a note released at `endTime`, or null when the pedal
+ * was up (the key's own release stands). A key lifted on the same instant the
+ * pedal lifts is not sustained: the damper has already fallen.
+ */
+export function heldByPedal(intervals: PedalInterval[], endTime: number): PedalInterval | null {
+  for (const interval of intervals) {
+    if (interval.down > endTime) break;
+    if (interval.up === null || endTime < interval.up) return interval;
+  }
+  return null;
+}
+
 /**
  * Pedal state just before `time`: whether the most recent CC 64 event at or
  * before `time` is a press.

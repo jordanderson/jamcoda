@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { writeMidi, type MidiData, type MidiEvent } from 'midi-file'
-import { parseNoteSequence, sliceSequence, sequenceFrom } from './noteSequence'
+import { parseNoteSequence, sliceSequence, sequenceFrom, buildPedalIntervals, heldByPedal } from './noteSequence'
 
 /**
  * Fixtures are synthesised here rather than read from `data/midi/`: the tests
@@ -252,6 +252,31 @@ describe('parseNoteSequence', () => {
         { time: 0, on: true, value: 127 },
         { time: 3.5, on: false, value: 0 }
       ])
+    })
+  })
+
+  describe('buildPedalIntervals and heldByPedal', () => {
+    it('constructs intervals from press and release events', () => {
+      const intervals = buildPedalIntervals([
+        { time: 1.0, on: true, value: 127 },
+        { time: 2.5, on: false, value: 0 },
+        { time: 3.0, on: true, value: 127 }
+      ])
+      expect(intervals).toEqual([
+        { down: 1.0, up: 2.5 },
+        { down: 3.0, up: null }
+      ])
+    })
+
+    it('identifies whether a note released at endTime is held by pedal', () => {
+      const intervals = [
+        { down: 1.0, up: 2.5 },
+        { down: 3.0, up: null }
+      ]
+      expect(heldByPedal(intervals, 1.5)).toEqual({ down: 1.0, up: 2.5 })
+      expect(heldByPedal(intervals, 2.5)).toBeNull()
+      expect(heldByPedal(intervals, 2.8)).toBeNull()
+      expect(heldByPedal(intervals, 4.0)).toEqual({ down: 3.0, up: null })
     })
   })
 })

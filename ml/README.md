@@ -15,9 +15,10 @@ Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v
 
 - extracts windowed MIDI features (split-register pitch-class profiles —
   chroma separated into low and high register at `registerDivide`, default
-  middle C — plus onset density, pitch/velocity/duration/polyphony stats,
-  register balance, tempo, rhythmic regularity, silence ratio and register
-  span)
+  middle C, with notes extended acoustically under CC 64 damper pedal up to 0.7s
+  with 0.5x decayed tail weight and weighted by sqrt(velocity/127) for melodic prominence — plus
+  onset density, pitch/velocity/duration/polyphony stats, register balance,
+  rhythmic regularity, silence ratio and register span)
 - condenses training windows into per-label prototypes (a few hundred total) instead of retaining every window, so retraining and prediction are fast and the model file stays small
 - scores each window by its nearest prototype per song (minmax-scaled
   features). Prototype budgets scale with sqrt(support), so a song with more
@@ -80,8 +81,8 @@ npm run ml:train -- \
   --step 1 \
   --k 7 \
   --none-ratio 1.5 \
-  --prototype-budget 1200 \
-  --max-none-prototypes 120 \
+  --prototype-budget 2000 \
+  --max-none-prototypes 60 \
   --scaling minmax \
   --score-mode min \
   --decoder anchor \
@@ -242,7 +243,7 @@ Run endpoint defaults:
 - `smoothingWindows = 5` *(ignored by the `anchor` and `viterbi` decoders)*
 - `minSegmentSec = 8`
 - `minSegmentConfidence = 0.3`
-- `mergeGapSec = 3`
+- `mergeGapSec = 5`
 - `clearUnpromoted = true`
 
 `minSegmentConfidence` is calibrated to the anchor-link confidence scale, which
