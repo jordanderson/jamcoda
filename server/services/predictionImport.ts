@@ -12,6 +12,7 @@ import {
 } from '@core/timeRanges';
 import type { JmxBookmark, JmxSkip } from '@server/types';
 import {
+  extractNotesFromMidi,
   loadModel,
   predictWindows,
   windowsToSegments,
@@ -148,12 +149,13 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
   const midiPath = resolveMidiPath(file.local_path, rootDir);
 
   const model = loadModel(modelPath);
+  const notes = extractNotesFromMidi(midiPath);
   const windows = predictWindows(model, midiPath, config);
   const rawSegments = windowsToSegments(windows, {
     minSegmentSec: config.minSegmentSec,
     minSegmentConfidence: config.minSegmentConfidence,
     mergeGapSec: config.mergeGapSec
-  });
+  }, notes);
 
   const annotatedRanges: TimeRange[] = AnnotationModel.listRangesByFileId(fileId);
   const ignoredRanges: TimeRange[] = IgnoredSectionModel.listRangesByFileId(fileId);

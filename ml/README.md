@@ -166,11 +166,11 @@ This evaluates model window predictions against your current annotation truth an
 It does not write prediction rows to the DB.
 
 ```bash
-npm run ml:eval -- --mode loo
+npm run ml:eval
 ```
 
 Useful flags:
-- `--mode loo` runs leave-one-file-out evaluation (recommended for generalization)
+- `--mode <loo|insample>` (default: `loo`, recommended for generalization)
 - `--include-none` evaluates unlabeled (`__none__`) windows too
 - `--min-window-confidence`, `--smoothing`, `--min-segment-sec`,
   `--min-segment-confidence`, and `--merge-gap-sec` to compare threshold variants

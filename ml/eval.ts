@@ -125,7 +125,7 @@ Options:
   --root <path>                  Workspace root for resolving MIDI paths (default: .)
   --out <path>                   JSON output path (default: a stamped name like
                                  data/ml/eval-loo-v2.5-20260902-143000.json)
-  --mode <insample|loo>          Eval mode (default: insample)
+  --mode <insample|loo>          Eval mode (default: loo)
   --min-window-confidence <n>    Window confidence threshold (default: 0.45)
   --smoothing <int>              Smoothing windows (default: 5)
   --min-segment-sec <n>          Segment evaluation minimum duration (default: 8)
@@ -162,7 +162,7 @@ function defaultReportPath(mode: EvalMode, modelVersion: string): string {
 type EvalMode = 'insample' | 'loo';
 
 function parseMode(value: string | undefined): EvalMode {
-  if (!value) return 'insample';
+  if (!value) return 'loo';
   const normalized = value.trim().toLowerCase();
   if (normalized === 'insample' || normalized === 'loo') {
     return normalized;
@@ -308,6 +308,7 @@ async function main() {
   }
   const totalAnnotations = files.reduce((sum, file) => sum + file.annotations.length, 0);
   const windowsByFile = new Map<number, ReturnType<typeof buildSamplesForFile>>();
+  const notesByFile = new Map<number, ReturnType<typeof extractNotesFromMidi>>();
   let totalTruthWindows = 0;
 
   console.log('Extracting window features from MIDI files...');
@@ -315,6 +316,7 @@ async function main() {
     const file = files[fileIndex];
     const featureStartMs = Date.now();
     const notes = extractNotesFromMidi(file.midiPath);
+    notesByFile.set(file.fileId, notes);
     const truthWindows = buildSamplesForFile(
       file,
       notes,
@@ -444,11 +446,12 @@ async function main() {
       }
     }
 
+    const fileNotes = notesByFile.get(file.fileId);
     const segments = windowsToSegments(predictedWindows, {
       minSegmentSec: predictConfig.minSegmentSec,
       minSegmentConfidence: predictConfig.minSegmentConfidence,
       mergeGapSec: predictConfig.mergeGapSec
-    });
+    }, fileNotes);
 
     const fileSegmentRow = evaluateFileSegments(file, segments);
     if (fileSegmentRow) {

@@ -18,6 +18,8 @@ interface AnnotationModalProps {
   initialAction?: 'annotation' | 'ignored';
   /** File id used to fetch model-ranked song suggestions in create mode. */
   fileId?: number | null;
+  /** Optional callback to snap start/end to nearest played notes. */
+  onSnapTimes?: (start: number, end: number) => { startTime: number; endTime: number };
 }
 
 export function AnnotationModal({
@@ -33,7 +35,8 @@ export function AnnotationModal({
   allowTimeEdit = false,
   enableIgnoredSectionOption = false,
   initialAction = 'annotation',
-  fileId = null
+  fileId = null,
+  onSnapTimes
 }: AnnotationModalProps) {
   const [inputValue, setInputValue] = useState(initialSongName);
   const [ignoredReason, setIgnoredReason] = useState('');
@@ -91,7 +94,7 @@ export function AnnotationModal({
 
     const songName = inputValue.trim();
     if (songName) {
-      if (allowTimeEdit) {
+      if (allowTimeEdit || editStartTime !== startTime || editEndTime !== endTime) {
         onSubmit(songName, editStartTime, editEndTime);
       } else {
         onSubmit(songName);
@@ -103,7 +106,11 @@ export function AnnotationModal({
     setInputValue(songName);
     // Submit immediately when selecting from autocomplete (only when not editing times).
     if (!allowTimeEdit && actionType === 'annotation') {
-      onSubmit(songName);
+      if (editStartTime !== startTime || editEndTime !== endTime) {
+        onSubmit(songName, editStartTime, editEndTime);
+      } else {
+        onSubmit(songName);
+      }
     }
   };
 
@@ -145,9 +152,26 @@ export function AnnotationModal({
             {mode === 'edit' ? 'Edit Annotation' : 'Create Annotation'}
           </h2>
           {!allowTimeEdit && (
-            <p className="text-sm text-gray-600 mb-4">
-              Region: {formatTime(startTime)} - {formatTime(endTime)} ({(endTime - startTime).toFixed(1)}s)
-            </p>
+            <div className="mb-4 flex items-center justify-between text-sm text-gray-600">
+              <p>
+                Region: {formatTime(editStartTime)} - {formatTime(editEndTime)} ({(editEndTime - editStartTime).toFixed(1)}s)
+              </p>
+              {onSnapTimes && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const snapped = onSnapTimes(editStartTime, editEndTime);
+                    setEditStartTime(snapped.startTime);
+                    setEditEndTime(snapped.endTime);
+                  }}
+                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1 hover:underline cursor-pointer"
+                  title="Snap selection to nearest played notes"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Snap to Notes
+                </button>
+              )}
+            </div>
           )}
 
           <form onSubmit={handleSubmit}>
@@ -177,9 +201,26 @@ export function AnnotationModal({
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9198E5] focus:border-transparent"
                   />
                 </div>
-                <p className="col-span-2 text-sm text-gray-600">
-                  Region: {formatTime(editStartTime)} - {formatTime(editEndTime)} ({(editEndTime - editStartTime).toFixed(1)}s)
-                </p>
+                <div className="col-span-2 flex items-center justify-between">
+                  <p className="text-sm text-gray-600">
+                    Region: {formatTime(editStartTime)} - {formatTime(editEndTime)} ({(editEndTime - editStartTime).toFixed(1)}s)
+                  </p>
+                  {onSnapTimes && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const snapped = onSnapTimes(editStartTime, editEndTime);
+                        setEditStartTime(snapped.startTime);
+                        setEditEndTime(snapped.endTime);
+                      }}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1 hover:underline cursor-pointer"
+                      title="Snap to nearest played notes"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Snap to Notes
+                    </button>
+                  )}
+                </div>
             </div>
           )}
 

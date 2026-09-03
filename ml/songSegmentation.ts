@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseNoteSequence, buildPedalIntervals, heldByPedal } from '@core/midi/noteSequence';
 import { clamp, ensureDirForFile, roundTo } from '@core/cli/args';
+import { snapSegmentBoundaries, type BoundaryNote } from '@core/boundaries';
 
 export const NO_SONG_LABEL = '__none__';
 
@@ -13,10 +14,10 @@ export const NO_SONG_LABEL = '__none__';
  * to name its report files, so runs stay referable without manual renaming.
  * Keep `ml/CHANGELOG.md` in sync with each bump.
  */
-export const MODEL_VERSION = 'v2.7';
+export const MODEL_VERSION = 'v2.8';
 
 /**
- * Version 2 features (v2.7 acoustic sustain-pedal decay + velocity-weighted split chroma):
+ * Version 2 features (v2.8 boundary snapping & cadence/flourish trimming, v2.7 acoustic sustain decay):
  *
  * Notes released under a held damper pedal (CC 64) ring out acoustically
  * up to 0.7s (0.6s above C5) with a 0.5x decayed tail weight, preventing false
@@ -1758,7 +1759,8 @@ function inferStepSec(windows: WindowPrediction[]): number {
 
 export function windowsToSegments(
   windows: WindowPrediction[],
-  options: Pick<PredictConfig, 'minSegmentSec' | 'minSegmentConfidence' | 'mergeGapSec'>
+  options: Pick<PredictConfig, 'minSegmentSec' | 'minSegmentConfidence' | 'mergeGapSec'>,
+  notes?: NoteEvent[] | BoundaryNote[]
 ): SongSegment[] {
   const provisional: SongSegment[] = [];
   if (windows.length === 0) return provisional;
@@ -1839,7 +1841,29 @@ export function windowsToSegments(
     }
   }
 
-  return merged
+  // Refine boundaries against physical note onsets and acoustic releases,
+  // trimming extraneous ending flourishes (arpeggios) if notes are provided.
+  let candidates = merged;
+  if (notes && notes.length > 0) {
+    candidates = candidates
+      .map((segment) => {
+        const snapped = snapSegmentBoundaries(segment.startTime, segment.endTime, notes, {
+          trimFlourish: true
+        });
+        const startTime = roundTo(snapped.startTime);
+        const endTime = roundTo(snapped.endTime);
+        const durationSec = roundTo(endTime - startTime);
+        return {
+          ...segment,
+          startTime,
+          endTime,
+          durationSec
+        };
+      })
+      .filter((segment) => segment.durationSec >= options.minSegmentSec);
+  }
+
+  return candidates
     .map((segment) => ({
       ...segment,
       startTime: roundTo(segment.startTime),

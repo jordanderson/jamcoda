@@ -8,6 +8,7 @@ import {
   Play,
   RefreshCw,
   SkipForward,
+  Sparkles,
   Square,
   Upload
 } from 'lucide-react';
@@ -23,6 +24,13 @@ import { useUniqueSongNames } from '@/hooks/useAnnotations';
 import { useLocalFileDownload } from '@/hooks/useLocalFileDownload';
 import { useSegmentPlayer, toSegmentBounds } from '@/hooks/useSegmentPlayer';
 import { resolveReviewFields } from '@core/predictionReview';
+import { parseNoteSequence, buildPedalIntervals, heldByPedal } from '@core/midi/noteSequence';
+import {
+  detectCadenceAndFlourish,
+  snapSegmentBoundaries,
+  type CadenceFlourishInfo,
+  type BoundaryNote
+} from '@core/boundaries';
 import { AnnotationModal } from '@/components/annotations/AnnotationModal';
 import type { PredictionReview, PredictionReviewStatus } from '@/api/localTypes';
 import { formatTime, formatDate } from '@/utils/format'
@@ -235,6 +243,58 @@ export function PredictionReviewPage() {
 
   // Load/decoding failures surface as `playerError`. Segment transport
   // failures come from the segment hook.
+  const [activeNotes, setActiveNotes] = useState<BoundaryNote[]>([]);
+
+  useEffect(() => {
+    if (!midiBlob) {
+      setActiveNotes([]);
+      return;
+    }
+    let canceled = false;
+    midiBlob.arrayBuffer().then((buf) => {
+      if (canceled) return;
+      try {
+        const seq = parseNoteSequence(new Uint8Array(buf));
+        const intervals = seq.sustainEvents && seq.sustainEvents.length > 0
+          ? buildPedalIntervals(seq.sustainEvents)
+          : [];
+        const notes: BoundaryNote[] = seq.notes.map((n) => {
+          let acousticEnd = n.endTime;
+          if (intervals.length > 0) {
+            const held = heldByPedal(intervals, n.endTime);
+            if (held) {
+              const pitchMax = n.pitch > 72 ? 0.6 : 0.7;
+              const pedalRelease = held.up !== null ? held.up : n.endTime + pitchMax;
+              acousticEnd = Math.min(pedalRelease, n.endTime + pitchMax);
+            }
+          }
+          return {
+            pitch: n.pitch,
+            velocity: n.velocity,
+            startTime: n.startTime,
+            endTime: n.endTime,
+            acousticEndSec: acousticEnd
+          };
+        });
+        setActiveNotes(notes);
+      } catch (err) {
+        setActiveNotes([]);
+      }
+    });
+    return () => {
+      canceled = true;
+    };
+  }, [midiBlob]);
+
+  const activeFlourish = useMemo<CadenceFlourishInfo | null>(() => {
+    if (!activeReview || activeNotes.length === 0) return null;
+    return detectCadenceAndFlourish(
+      getDisplayStart(activeReview),
+      getDisplayEnd(activeReview),
+      activeNotes
+    );
+  }, [activeReview, activeNotes]);
+
   const playbackError = playerError ?? segmentPlaybackError;
 
   const isPendingAction = (
@@ -378,6 +438,39 @@ export function PredictionReviewPage() {
     }
   };
 
+  const handleTrimAndConfirm = async () => {
+    if (!activeReview || !activeFlourish) return;
+    setFeedback(null);
+    try {
+      await updateReview.mutateAsync({
+        id: activeReview.id,
+        data: {
+          status: 'edited',
+          reviewedSongName: getDisplaySongName(activeReview),
+          reviewedStartTime: getDisplayStart(activeReview),
+          reviewedEndTime: activeFlourish.trimmedEndTime
+        }
+      });
+      await promoteReview.mutateAsync(activeReview.id);
+      setFeedback({
+        type: 'success',
+        message: `Trimmed flourish and promoted "${getDisplaySongName(activeReview)}" to annotations.`
+      });
+      goToNextReview();
+    } catch (error) {
+      setFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to trim and promote prediction.'
+      });
+    }
+  };
+
+  const handleSnapTimes = (start: number, end: number) => {
+    if (activeNotes.length === 0) return { startTime: start, endTime: end };
+    const snapped = snapSegmentBoundaries(start, end, activeNotes, { trimFlourish: true });
+    return { startTime: snapped.startTime, endTime: snapped.endTime };
+  };
+
   const handleMarkInvalid = async () => {
     if (!activeReview) return;
     setFeedback(null);
@@ -508,6 +601,7 @@ export function PredictionReviewPage() {
         initialSongName={editModalData?.initialSongName}
         mode="edit"
         allowTimeEdit
+        onSnapTimes={handleSnapTimes}
       />
 
       <div className="flex flex-col gap-2">
@@ -736,6 +830,26 @@ export function PredictionReviewPage() {
                   </div>
                 </div>
               </div>
+
+              {activeFlourish && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xs text-purple-950 max-w-xl">
+                    <span className="font-semibold text-purple-900">Trailing flourish detected:</span> Cadence chord ends at{' '}
+                    <span className="font-semibold text-purple-900">{formatTime(activeFlourish.trimmedEndTime)}</span> ({activeFlourish.trimmedEndTime.toFixed(2)}s).
+                    Extraneous arpeggio run extends by +{(getDisplayEnd(activeReview) - activeFlourish.trimmedEndTime).toFixed(1)}s
+                    ({activeFlourish.flourishNoteCount} notes across {activeFlourish.flourishPitchSpan} semitones).
+                  </div>
+                  <button
+                    onClick={handleTrimAndConfirm}
+                    disabled={isPendingAction}
+                    className="px-3.5 py-2 bg-purple-700 hover:bg-purple-800 disabled:bg-purple-300 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-sm"
+                    title="Trim flourish and immediately promote"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Trim Flourish & Confirm
+                  </button>
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-2">
                 <button

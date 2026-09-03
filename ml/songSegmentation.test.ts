@@ -256,6 +256,43 @@ describe('windowsToSegments', () => {
     assert.equal(segments[0].endTime, 13);
     assert.equal(segments[1].songName, 'Song B');
   });
+
+  it('snaps boundaries to note onsets and trims extraneous flourishes when notes are provided', () => {
+    const windows = [
+      { startTime: 0, endTime: 4, label: 'Song A', confidence: 0.8 },
+      { startTime: 4, endTime: 8, label: 'Song A', confidence: 0.8 },
+      { startTime: 8, endTime: 12, label: 'Song A', confidence: 0.8 },
+      { startTime: 12, endTime: 16, label: 'Song A', confidence: 0.8 }
+    ];
+    // First note begins at 1.2s (dead air before). Cadence chord at 10.0s-12.0s. Flourish at 12.2s-14.5s.
+    const notes = [
+      { pitch: 60, velocity: 80, startSec: 1.2, endSec: 2.0 },
+      { pitch: 64, velocity: 80, startSec: 2.0, endSec: 3.0 },
+      // Cadence chord
+      { pitch: 48, velocity: 90, startSec: 10.0, endSec: 12.0 },
+      { pitch: 55, velocity: 90, startSec: 10.0, endSec: 12.0 },
+      { pitch: 60, velocity: 90, startSec: 10.0, endSec: 12.0 },
+      // Rapid flourish notes sweeping octaves
+      { pitch: 50, velocity: 60, startSec: 12.2, endSec: 12.3 },
+      { pitch: 57, velocity: 60, startSec: 12.4, endSec: 12.5 },
+      { pitch: 62, velocity: 60, startSec: 12.6, endSec: 12.7 },
+      { pitch: 69, velocity: 60, startSec: 12.8, endSec: 12.9 },
+      { pitch: 74, velocity: 60, startSec: 13.0, endSec: 13.1 },
+      { pitch: 81, velocity: 60, startSec: 13.2, endSec: 13.3 },
+      { pitch: 86, velocity: 60, startSec: 13.4, endSec: 13.5 }
+    ];
+
+    const segments = windowsToSegments(windows, {
+      minSegmentSec: 5,
+      minSegmentConfidence: 0.3,
+      mergeGapSec: 3
+    }, notes);
+
+    assert.equal(segments.length, 1);
+    assert.equal(segments[0].songName, 'Song A');
+    assert.equal(segments[0].startTime, 1.2); // Snapped from 0 to 1.2s
+    assert.equal(segments[0].endTime, 12.0); // Trimmed from 16.0 to 12.0s
+  });
 });
 describe('segment boundaries', () => {
   // A window label applies at the window centre. A run of windows must

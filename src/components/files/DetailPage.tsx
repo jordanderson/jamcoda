@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, Square, Plus, AlertCircle, Navigation, Flag, Sparkles, X } from 'lucide-react';
+import { Play, Pause, Square, Plus, AlertCircle, Navigation, Flag, Sparkles, X, Check, Edit3 } from 'lucide-react';
 import { useFileDetail, useSetFileCompletion } from '@/hooks/useFileDetail';
 import { useLocalFileDownload } from '@/hooks/useLocalFileDownload';
 import { useMidiPlayer } from '@/hooks/useMidiPlayer';
@@ -31,6 +31,13 @@ import { useToasts } from '@/hooks/useToasts';
 import type { PredictionReview } from '@/api/localTypes';
 import { formatTime, formatTimeHms } from '@/utils/format'
 import { resolveReviewFields } from '@core/predictionReview';
+import { buildPedalIntervals, heldByPedal } from '@core/midi/noteSequence';
+import {
+  detectCadenceAndFlourish,
+  snapSegmentBoundaries,
+  type CadenceFlourishInfo,
+  type BoundaryNote
+} from '@core/boundaries';
 import {
   getGapAction,
   getLargeAnnotationGaps,
@@ -40,6 +47,7 @@ import {
 import { DetailAnnotationList } from './DetailAnnotationList';
 import { DetailDeviceMarkers, type DeviceMarker } from './DetailDeviceMarkers';
 import { DetailIgnoredSections } from './DetailIgnoredSections';
+import { DetailPredictionList } from './DetailPredictionList';
 
 interface DetailPageProps {
   fileId: number;
@@ -106,6 +114,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
   const [annotationModalData, setAnnotationModalData] = useState<AnnotationModalState | null>(null);
   const [snapToPlayback, setSnapToPlayback] = useState(true);
   const [selectedPredictionReviewId, setSelectedPredictionReviewId] = useState<number | null>(null);
+  const [editingPredictionReviewId, setEditingPredictionReviewId] = useState<number | null>(null);
   const [hoveredRollTime, setHoveredRollTime] = useState<number | null>(null);
   const [splittingGapKey, setSplittingGapKey] = useState<string | null>(null);
   const [loadedFileId, setLoadedFileId] = useState<number | null>(null);
@@ -145,12 +154,61 @@ export function DetailPage({ fileId }: DetailPageProps) {
     return gapMap;
   }, [annotations, sequence?.notes, sequence?.sustainEvents]);
 
+  const acousticNotes = useMemo((): BoundaryNote[] => {
+    if (!sequence?.notes) return [];
+    const intervals = sequence.sustainEvents && sequence.sustainEvents.length > 0
+      ? buildPedalIntervals(sequence.sustainEvents)
+      : [];
+
+    return sequence.notes.map((n) => {
+      let acousticEnd = n.endTime;
+      if (intervals.length > 0) {
+        const held = heldByPedal(intervals, n.endTime);
+        if (held) {
+          const pitchMax = n.pitch > 72 ? 0.6 : 0.7;
+          const pedalRelease = held.up !== null ? held.up : n.endTime + pitchMax;
+          acousticEnd = Math.min(pedalRelease, n.endTime + pitchMax);
+        }
+      }
+      return {
+        pitch: n.pitch,
+        velocity: n.velocity,
+        startTime: n.startTime,
+        endTime: n.endTime,
+        acousticEndSec: acousticEnd
+      };
+    });
+  }, [sequence?.notes, sequence?.sustainEvents]);
+
+  const annotationFlourishesById = useMemo(() => {
+    const flourishMap = new Map<number, CadenceFlourishInfo>();
+    if (acousticNotes.length === 0) return flourishMap;
+
+    for (const annotation of annotations) {
+      const flourish = detectCadenceAndFlourish(
+        annotation.start_time,
+        annotation.end_time,
+        acousticNotes
+      );
+      if (flourish) {
+        flourishMap.set(annotation.id, flourish);
+      }
+    }
+
+    return flourishMap;
+  }, [annotations, acousticNotes]);
+
   // Whether any gap pill is shown at all, gating the helper copy above the
   // annotation list. Memoised: this component re-renders every frame during
   // playback.
   const hasGapPills = useMemo(
     () => [...annotationGapsById.values()].some((gaps) => gaps.length > 0),
     [annotationGapsById]
+  );
+
+  const hasFlourishPills = useMemo(
+    () => annotationFlourishesById.size > 0,
+    [annotationFlourishesById]
   );
 
   const ignoredSections = useMemo(() => {
@@ -184,6 +242,54 @@ export function DetailPage({ fileId }: DetailPageProps) {
       (review) => review.id === selectedPredictionReviewId
     ) ?? null;
   }, [reviewListResponse?.reviews, selectedPredictionReviewId]);
+
+  const unpromotedReviews = useMemo(() => {
+    return (reviewListResponse?.reviews ?? [])
+      .filter((review) => review.status !== 'invalid' && review.promoted_annotation_id === null)
+      .sort((a, b) => getPredictionDisplayStart(a) - getPredictionDisplayStart(b) || a.id - b.id);
+  }, [reviewListResponse?.reviews]);
+
+  const predictionFlourishesById = useMemo(() => {
+    const map = new Map<number, CadenceFlourishInfo>();
+    if (acousticNotes.length === 0 || !reviewListResponse?.reviews) return map;
+
+    for (const review of reviewListResponse.reviews) {
+      if (review.status === 'invalid' || review.promoted_annotation_id !== null) continue;
+      const start = getPredictionDisplayStart(review);
+      const end = getPredictionDisplayEnd(review);
+      const flourish = detectCadenceAndFlourish(start, end, acousticNotes);
+      if (flourish) {
+        map.set(review.id, flourish);
+      }
+    }
+    return map;
+  }, [acousticNotes, reviewListResponse?.reviews]);
+
+  const predictionSnappedBoundsById = useMemo(() => {
+    const map = new Map<number, { startTime: number; endTime: number }>();
+    if (acousticNotes.length === 0 || !reviewListResponse?.reviews) return map;
+
+    for (const review of reviewListResponse.reviews) {
+      if (review.status === 'invalid' || review.promoted_annotation_id !== null) continue;
+      const start = getPredictionDisplayStart(review);
+      const end = getPredictionDisplayEnd(review);
+      const snapped = snapSegmentBoundaries(start, end, acousticNotes, { trimFlourish: false });
+      if (Math.abs(snapped.startTime - start) > 0.05 || Math.abs(snapped.endTime - end) > 0.05) {
+        map.set(review.id, snapped);
+      }
+    }
+    return map;
+  }, [acousticNotes, reviewListResponse?.reviews]);
+
+  const selectedPredictionFlourish = useMemo(() => {
+    if (!selectedPredictionReview) return null;
+    return predictionFlourishesById.get(selectedPredictionReview.id) ?? null;
+  }, [predictionFlourishesById, selectedPredictionReview]);
+
+  const selectedPredictionSnappedBounds = useMemo(() => {
+    if (!selectedPredictionReview) return null;
+    return predictionSnappedBoundsById.get(selectedPredictionReview.id) ?? null;
+  }, [predictionSnappedBoundsById, selectedPredictionReview]);
 
   /** The sequence's own end, used as a clamp for overlay times when valid. */
   const timelineEndLimit = useMemo(() => {
@@ -584,18 +690,47 @@ export function DetailPage({ fileId }: DetailPageProps) {
         }
       });
     } else {
+      const finalStart = startTime ?? annotationModalData.startTime;
+      const finalEnd = endTime ?? annotationModalData.endTime;
       createAnnotation.mutate({
         fileId,
         songName,
-        startTime: annotationModalData.startTime,
-        endTime: annotationModalData.endTime
+        startTime: finalStart,
+        endTime: finalEnd
+      }, {
+        onSuccess: async () => {
+          if (editingPredictionReviewId) {
+            try {
+              await updatePredictionReview.mutateAsync({
+                id: editingPredictionReviewId,
+                data: {
+                  status: 'edited',
+                  reviewedSongName: songName,
+                  reviewedStartTime: finalStart,
+                  reviewedEndTime: finalEnd
+                }
+              });
+              await promotePredictionReview.mutateAsync(editingPredictionReviewId);
+            } catch {
+              // Annotation already safely created
+            }
+            setEditingPredictionReviewId(null);
+          }
+        }
       });
     }
     setAnnotationModalData(null);
-  }, [annotationModalData, createAnnotation.mutate, fileId, updateAnnotation.mutate]);
+  }, [annotationModalData, createAnnotation.mutate, editingPredictionReviewId, fileId, promotePredictionReview.mutateAsync, updateAnnotation.mutate, updatePredictionReview.mutateAsync]);
+
+  const handleSnapTimes = useCallback((start: number, end: number) => {
+    if (acousticNotes.length === 0) return { startTime: start, endTime: end };
+    const snapped = snapSegmentBoundaries(start, end, acousticNotes, { trimFlourish: true });
+    return { startTime: snapped.startTime, endTime: snapped.endTime };
+  }, [acousticNotes]);
 
   const handleAnnotationCancel = useCallback(() => {
     setAnnotationModalData(null);
+    setEditingPredictionReviewId(null);
   }, []);
 
   const handleEditAnnotation = useCallback((annotation: RollAnnotation) => {
@@ -714,6 +849,64 @@ export function DetailPage({ fileId }: DetailPageProps) {
     }
   }, [updateAnnotation.mutateAsync, showToast]);
 
+  const handleTrimFlourish = useCallback(async (
+    annotation: RollAnnotation,
+    trimmedEnd: number
+  ) => {
+    try {
+      await updateAnnotation.mutateAsync({
+        id: annotation.id,
+        data: { endTime: trimmedEnd }
+      });
+      showToast({
+        type: 'success',
+        message: `Trimmed flourish for "${annotation.song_name}" to ${formatTime(trimmedEnd)}.`
+      });
+    } catch (error) {
+      showToast({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to trim flourish.'
+      });
+    }
+  }, [updateAnnotation.mutateAsync, showToast]);
+
+  const handleSnapBounds = useCallback(async (
+    annotation: RollAnnotation
+  ) => {
+    if (acousticNotes.length === 0) return;
+    const snapped = snapSegmentBoundaries(
+      annotation.start_time,
+      annotation.end_time,
+      acousticNotes,
+      { trimFlourish: false }
+    );
+    if (
+      Math.abs(snapped.startTime - annotation.start_time) < 0.02
+      && Math.abs(snapped.endTime - annotation.end_time) < 0.02
+    ) {
+      showToast({
+        type: 'success',
+        message: 'Annotation is already aligned with played notes.'
+      });
+      return;
+    }
+    try {
+      await updateAnnotation.mutateAsync({
+        id: annotation.id,
+        data: { startTime: snapped.startTime, endTime: snapped.endTime }
+      });
+      showToast({
+        type: 'success',
+        message: `Snapped bounds to ${formatTime(snapped.startTime)} - ${formatTime(snapped.endTime)}.`
+      });
+    } catch (error) {
+      showToast({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to snap bounds.'
+      });
+    }
+  }, [acousticNotes, updateAnnotation.mutateAsync, showToast]);
+
   // ---------------------------------------------------------------------------
   // Prediction and completion actions
   // ---------------------------------------------------------------------------
@@ -765,45 +958,120 @@ export function DetailPage({ fileId }: DetailPageProps) {
     setSelectedPredictionReviewId(null);
   }, []);
 
-  const handleQuickConfirmAndPromote = async () => {
-    if (!selectedPredictionReview) return;
-
+  const handleConfirmAndPromoteReview = useCallback(async (review: PredictionReview) => {
     try {
       await updatePredictionReview.mutateAsync({
-        id: selectedPredictionReview.id,
+        id: review.id,
         data: { status: 'confirmed' }
       });
-      await promotePredictionReview.mutateAsync(selectedPredictionReview.id);
+      await promotePredictionReview.mutateAsync(review.id);
       showToast({
         type: 'success',
-        message: 'Prediction confirmed and promoted to annotations.'
+        message: `Promoted "${getPredictionDisplaySongName(review)}" to annotations.`
       });
-      setSelectedPredictionReviewId(null);
+      if (selectedPredictionReviewId === review.id) {
+        setSelectedPredictionReviewId(null);
+      }
     } catch (error) {
       showToast({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to confirm and promote prediction.'
+        message: error instanceof Error ? error.message : 'Failed to promote prediction.'
       });
     }
-  };
+  }, [promotePredictionReview.mutateAsync, selectedPredictionReviewId, showToast, updatePredictionReview.mutateAsync]);
 
-  const handleQuickMarkInvalid = async () => {
-    if (!selectedPredictionReview) return;
+  const handleTrimFlourishAndPromoteReview = useCallback(async (
+    review: PredictionReview,
+    trimmedEnd: number
+  ) => {
+    try {
+      const { songName, startTime } = resolveReviewFields(review);
+      await updatePredictionReview.mutateAsync({
+        id: review.id,
+        data: {
+          status: 'edited',
+          reviewedSongName: songName,
+          reviewedStartTime: startTime,
+          reviewedEndTime: trimmedEnd
+        }
+      });
+      await promotePredictionReview.mutateAsync(review.id);
+      showToast({
+        type: 'success',
+        message: `Trimmed flourish and promoted "${songName}" to annotations.`
+      });
+      if (selectedPredictionReviewId === review.id) {
+        setSelectedPredictionReviewId(null);
+      }
+    } catch (error) {
+      showToast({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to trim and promote prediction.'
+      });
+    }
+  }, [promotePredictionReview.mutateAsync, selectedPredictionReviewId, showToast, updatePredictionReview.mutateAsync]);
 
+  const handleSnapBoundsAndPromoteReview = useCallback(async (
+    review: PredictionReview,
+    snappedStart: number,
+    snappedEnd: number
+  ) => {
+    try {
+      const { songName } = resolveReviewFields(review);
+      await updatePredictionReview.mutateAsync({
+        id: review.id,
+        data: {
+          status: 'edited',
+          reviewedSongName: songName,
+          reviewedStartTime: snappedStart,
+          reviewedEndTime: snappedEnd
+        }
+      });
+      await promotePredictionReview.mutateAsync(review.id);
+      showToast({
+        type: 'success',
+        message: `Snapped bounds and promoted "${songName}" to annotations.`
+      });
+      if (selectedPredictionReviewId === review.id) {
+        setSelectedPredictionReviewId(null);
+      }
+    } catch (error) {
+      showToast({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to snap and promote prediction.'
+      });
+    }
+  }, [promotePredictionReview.mutateAsync, selectedPredictionReviewId, showToast, updatePredictionReview.mutateAsync]);
+
+  const handleEditAndPromoteReview = useCallback((review: PredictionReview) => {
+    const { songName, startTime, endTime } = resolveReviewFields(review);
+    setAnnotationModalData({
+      startTime,
+      endTime,
+      initialSongName: songName,
+      mode: 'create'
+    });
+    setEditingPredictionReviewId(review.id);
+    setSelectedPredictionReviewId(null);
+  }, []);
+
+  const handleMarkInvalidReview = useCallback(async (review: PredictionReview) => {
     try {
       await updatePredictionReview.mutateAsync({
-        id: selectedPredictionReview.id,
+        id: review.id,
         data: { status: 'invalid' }
       });
       showToast({ type: 'success', message: 'Prediction marked invalid.' });
-      setSelectedPredictionReviewId(null);
+      if (selectedPredictionReviewId === review.id) {
+        setSelectedPredictionReviewId(null);
+      }
     } catch (error) {
       showToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to mark prediction invalid.'
       });
     }
-  };
+  }, [selectedPredictionReviewId, showToast, updatePredictionReview.mutateAsync]);
 
   const handleToggleFileCompletion = () => {
     if (!file) return;
@@ -892,6 +1160,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
         allowTimeEdit={annotationModalData?.mode === 'edit'}
         enableIgnoredSectionOption={annotationModalData?.mode !== 'edit'}
         initialAction={annotationModalData?.initialAction ?? 'annotation'}
+        onSnapTimes={handleSnapTimes}
       />
 
       {selectedPredictionReview && (
@@ -900,41 +1169,144 @@ export function DetailPage({ fileId }: DetailPageProps) {
           onClick={handleClosePredictionActionModal}
         >
           <div
-            className="w-full max-w-lg rounded-lg bg-white shadow-xl"
+            className="w-full max-w-2xl rounded-lg bg-white shadow-xl overflow-hidden"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="border-b px-5 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">Quick Prediction Review</h2>
-              <p className="mt-1 text-sm text-gray-600">
-                {getPredictionDisplaySongName(selectedPredictionReview)} · {' '}
-                {formatTime(getPredictionDisplayStart(selectedPredictionReview))} - {formatTime(getPredictionDisplayEnd(selectedPredictionReview))}
-                {selectedPredictionReview.predicted_confidence !== null
-                  ? ` · ${Math.round(selectedPredictionReview.predicted_confidence * 100)}% confidence`
-                  : ''}
+            <div className="border-b px-6 py-4 bg-gray-50">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-gray-900">Review Prediction</h2>
+                {selectedPredictionReview.predicted_confidence !== null && (
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-semibold">
+                    {Math.round(selectedPredictionReview.predicted_confidence * 100)}% conf
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-base font-semibold text-gray-900">
+                {getPredictionDisplaySongName(selectedPredictionReview)}
               </p>
+              <div className="mt-1 text-xs text-gray-600 flex items-center gap-2">
+                <span>
+                  {formatTime(getPredictionDisplayStart(selectedPredictionReview))} - {formatTime(getPredictionDisplayEnd(selectedPredictionReview))}
+                </span>
+                <span>•</span>
+                <span>
+                  {(getPredictionDisplayEnd(selectedPredictionReview) - getPredictionDisplayStart(selectedPredictionReview)).toFixed(1)}s duration
+                </span>
+              </div>
             </div>
-            <div className="flex flex-wrap justify-end gap-2 px-5 py-4">
-              <button
-                onClick={handleClosePredictionActionModal}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                disabled={isPredictionActionPending}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => { void handleQuickMarkInvalid(); }}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed"
-                disabled={isPredictionActionPending}
-              >
-                {isPredictionActionPending ? 'Working...' : 'Mark Invalid'}
-              </button>
-              <button
-                onClick={() => { void handleQuickConfirmAndPromote(); }}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed"
-                disabled={isPredictionActionPending}
-              >
-                {isPredictionActionPending ? 'Working...' : 'Confirm & Promote'}
-              </button>
+
+            <div className="p-6 space-y-3">
+              {/* Quick Jump onto Piano Roll */}
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-gray-500 font-medium">Jump on roll:</span>
+                <button
+                  type="button"
+                  onClick={() => handleSeek(getPredictionDisplayStart(selectedPredictionReview))}
+                  className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 font-medium transition-colors cursor-pointer"
+                >
+                  Start ({formatTime(getPredictionDisplayStart(selectedPredictionReview))})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSeek(getPredictionDisplayEnd(selectedPredictionReview))}
+                  className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 font-medium transition-colors cursor-pointer"
+                >
+                  End ({formatTime(getPredictionDisplayEnd(selectedPredictionReview))})
+                </button>
+              </div>
+
+              {/* Flourish Detection & 1-click Trim */}
+              {selectedPredictionFlourish && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3.5 space-y-2">
+                  <div className="text-xs text-purple-950">
+                    <span className="font-semibold text-purple-900">Trailing flourish detected:</span> Cadence chord ends at{' '}
+                    <span className="font-semibold text-purple-900">{formatTime(selectedPredictionFlourish.trimmedEndTime)}</span> ({selectedPredictionFlourish.trimmedEndTime.toFixed(2)}s).
+                    Extraneous arpeggio run extends by +{(getPredictionDisplayEnd(selectedPredictionReview) - selectedPredictionFlourish.trimmedEndTime).toFixed(1)}s
+                    ({selectedPredictionFlourish.flourishNoteCount} notes across {selectedPredictionFlourish.flourishPitchSpan} semitones).
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleSeek(selectedPredictionFlourish.trimmedEndTime)}
+                      className="text-xs text-purple-800 hover:underline font-medium cursor-pointer"
+                    >
+                      Jump to cadence chord
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTrimFlourishAndPromoteReview(selectedPredictionReview, selectedPredictionFlourish.trimmedEndTime)}
+                      disabled={isPredictionActionPending}
+                      className="rounded bg-purple-700 hover:bg-purple-800 disabled:bg-purple-300 text-white px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Trim Flourish & Promote
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Loose Bounds Detection & 1-click Snap */}
+              {!selectedPredictionFlourish && selectedPredictionSnappedBounds && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xs text-amber-950">
+                    <span className="font-semibold text-amber-900">Loose bounds:</span> First note onset at{' '}
+                    <span className="font-semibold text-amber-900">{formatTime(selectedPredictionSnappedBounds.startTime)}</span> ({selectedPredictionSnappedBounds.startTime.toFixed(2)}s),
+                    acoustic release at{' '}
+                    <span className="font-semibold text-amber-900">{formatTime(selectedPredictionSnappedBounds.endTime)}</span> ({selectedPredictionSnappedBounds.endTime.toFixed(2)}s).
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSnapBoundsAndPromoteReview(selectedPredictionReview, selectedPredictionSnappedBounds.startTime, selectedPredictionSnappedBounds.endTime)}
+                    disabled={isPredictionActionPending}
+                    className="rounded bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-sm"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Snap & Promote
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t bg-gray-50">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleClosePredictionActionModal}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                  disabled={isPredictionActionPending}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void handleMarkInvalidReview(selectedPredictionReview); }}
+                  className="rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  disabled={isPredictionActionPending}
+                >
+                  {isPredictionActionPending ? 'Working...' : 'Mark Invalid'}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleEditAndPromoteReview(selectedPredictionReview)}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                  disabled={isPredictionActionPending}
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Edit & Promote
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void handleConfirmAndPromoteReview(selectedPredictionReview); }}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                  disabled={isPredictionActionPending}
+                >
+                  <Check className="w-4 h-4" />
+                  {isPredictionActionPending ? 'Working...' : 'Confirm & Promote'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1117,6 +1489,51 @@ export function DetailPage({ fileId }: DetailPageProps) {
         </div>
       )}
 
+      {/* Predictions to Review */}
+      {unpromotedReviews.length > 0 && (
+        <div className="border border-indigo-200 rounded-lg shadow-sm bg-white overflow-hidden">
+          <div className="p-6 border-b flex flex-wrap justify-between items-center bg-indigo-50/50 gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-indigo-600" />
+                  Predictions to Review ({unpromotedReviews.length})
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
+                  Piano Roll Guide
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Review model predictions against the piano roll above. Click times to jump the playhead, trim flourishes, or promote.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { window.location.hash = `/reviews?fileId=${fileId}`; }}
+                className="px-3 py-1.5 text-xs font-medium text-indigo-700 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors cursor-pointer"
+              >
+                Open in Review Queue →
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <DetailPredictionList
+              predictions={unpromotedReviews}
+              flourishesById={predictionFlourishesById}
+              snappedBoundsById={predictionSnappedBoundsById}
+              isPending={isPredictionActionPending}
+              onSeek={handleSeek}
+              onConfirmAndPromote={handleConfirmAndPromoteReview}
+              onTrimFlourishAndPromote={handleTrimFlourishAndPromoteReview}
+              onSnapBoundsAndPromote={handleSnapBoundsAndPromoteReview}
+              onEditAndPromote={handleEditAndPromoteReview}
+              onMarkInvalid={handleMarkInvalidReview}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Annotations */}
       <div className="border rounded-lg shadow-sm bg-white">
         <div className="p-6 border-b flex justify-between items-center">
@@ -1167,20 +1584,25 @@ export function DetailPage({ fileId }: DetailPageProps) {
         </div>
 
         <div className="p-6">
-          {hasGapPills && (
+          {(hasGapPills || hasFlourishPills) && (
             <p className="mb-4 text-xs text-gray-500">
-              Gap pills show internal pauses of {LARGE_ANNOTATION_GAP_SECONDS}s or longer. Click a gap label to jump, then use Split or Trim.
+              {hasGapPills && `Gap pills show pauses of ${LARGE_ANNOTATION_GAP_SECONDS}s or longer. `}
+              {hasFlourishPills && 'Flourish pills detect trailing arpeggios after cadence chords. '}
+              Click a pill to jump, then use Trim or Snap to refine bounds.
             </p>
           )}
           <DetailAnnotationList
             annotations={annotations}
             gapsById={annotationGapsById}
+            flourishesById={annotationFlourishesById}
             splittingGapKey={splittingGapKey}
             onSeek={handleSeek}
             onEdit={handleEditAnnotation}
             onDelete={handleDeleteAnnotation}
             onSplitGap={handleSplitAnnotationGap}
             onTrimGap={handleTrimAnnotationGap}
+            onTrimFlourish={handleTrimFlourish}
+            onSnapBounds={handleSnapBounds}
           />
 
           <div className="mt-8 border-t pt-6">

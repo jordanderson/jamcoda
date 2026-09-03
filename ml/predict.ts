@@ -2,6 +2,7 @@ import path from 'node:path';
 import { clamp, ensureDirForFile, hasFlag, parseInt_, parseNum, readArg, runMain } from '@core/cli/args';
 import {
   decoderIgnoredOptions,
+  extractNotesFromMidi,
   loadModel,
   predictWindows,
   windowsToSegments,
@@ -80,12 +81,13 @@ async function main() {
       + ' Use --anchor-margin and --min-anchor-run instead.'
     );
   }
+  const notes = extractNotesFromMidi(midiPath);
   const windows = predictWindows(model, midiPath, config);
   const segments = windowsToSegments(windows, {
     minSegmentSec: config.minSegmentSec,
     minSegmentConfidence: config.minSegmentConfidence,
     mergeGapSec: config.mergeGapSec
-  });
+  }, notes);
 
   if (segments.length === 0) {
     console.log('No confident song segments detected with current thresholds.');

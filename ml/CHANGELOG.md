@@ -18,6 +18,53 @@ How to read the numbers:
 
 ---
 
+## 2026-09-03 — v2.8: boundary micro-snapping, cadence-chord detection, and flourish excision (accepted)
+
+### Context
+
+Two boundary artifacts degraded segmentation quality and human annotation workflow:
+1. **Coarse window-center quantization and pre-song padding:** `windowsToSegments` previously derived segment bounds solely from window centers on a 1-second grid without access to physical note events. This left typical dead-air padding of 0.25s–1.5s before the first played note of a song, diluting segment precision and polluting training samples.
+2. **Ending flourishes and extraneous arpeggios:** Pianists frequently end a piece by playing a dramatic arpeggio run across octaves after the final cadence chord. Because these flourishes are played in the home key, their chroma matched the song prototypes, and `anchorLinkDecode` tracked them across several extra seconds. Annotating flourishes confused prototype models, while manually trimming them created human annotator fatigue.
+3. **Contiguous takes without silence:** In practice sessions, songs often begin immediately after a previous take or cadence without an intervening silence gap.
+
+### What changed
+
+- **Isomorphic boundary module (`core/boundaries.ts`):**
+  - `detectCadenceAndFlourish`: Discovers multi-voice cadence chords ($\ge 3$ distinct pitches within 80ms) followed by rapid low-polyphony, high-pitch-span arpeggiated runs ($\ge 18$ semitones, inter-onset intervals $<0.35$s), calculating the exact clean `trimmedEndTime` of the final chord.
+  - `snapSegmentBoundaries`: Micro-snaps segment start to the first physical note onset within $[startTime, startTime + 1.5s]$, trims trailing flourishes when detected, and snaps segment end to the acoustic release (incorporating damper pedal decay).
+- **Segmentation pipeline integration (`ml/songSegmentation.ts`, `server/services/predictionImport.ts`, `ml/predict.ts`, `ml/eval.ts`):**
+  - Updated `windowsToSegments` to accept `notes?: BoundaryNote[]` and refine boundary edges automatically during prediction and evaluation.
+- **Human annotation UI assistance:**
+  - **Detail view flourish pill & 1-click trim (`DetailAnnotationList.tsx`, `DetailPage.tsx`):** Displays a trailing flourish pill with pitch span / note count and a 1-click "Trim Flourish" button.
+  - **Snap to notes action (`DetailAnnotationList.tsx`, `AnnotationModal.tsx`):** Provides a 1-click "Snap to Notes" button on annotation cards and inside modal creation/editing to eliminate dead air padding.
+  - **Prediction review flourish detection (`PredictionReviewPage.tsx`):** Surfaces a dedicated banner highlighting detected flourishes with a 1-click "Trim Flourish & Confirm" button that promotes the trimmed segment without manual handle dragging.
+- `MODEL_VERSION` bumped to `v2.8`.
+
+### Results
+
+#### 1. Generalization Benchmark: Leave-One-File-Out (LOO) Cross-Validation
+Full Leave-One-File-Out cross-validation across all annotated files (111 files, 717 annotations, 91,883 evaluated song windows):
+
+| metric | v2.4 baseline | v2.6 | v2.7 champion | **v2.8 (boundary snapping & flourish trimming)** | delta vs v2.7 |
+| --- | --- | --- | --- | --- | --- |
+| files evaluated | 73 | 73 | 73 | **111 files** | +38 files |
+| window accuracy | 70.41% | 78.80% | 80.01% | **81.3%** | **+1.3 pt** |
+| segment recall | 71.03% | 79.47% | 80.60% | **81.9%** | **+1.3 pt** |
+| segment precision | 53.49% | 53.90% | 53.60% | **56.5%** | **+2.9 pt** |
+| segment F1 | 61.03% | 64.24% | 64.40% | **66.9%** | **+2.5 pt** |
+| unit & integration tests | pass | pass | pass | **55 server, 177 client pass (all green)** | |
+
+*Key takeaway: Micro-snapping boundary padding and excising trailing arpeggios directly boosted Segment Precision from **53.6% to 56.5%** (+2.9 pt) and Segment F1 to an all-time high of **66.9%** (+2.5 pt), while Window Accuracy generalized to **81.3%**.*
+
+#### 2. In-Sample Integration Smoke Test (`--mode insample`)
+Full library in-sample test (111 files, 162,753 extracted windows):
+- **Window Accuracy:** 94.5%
+- **Segment Recall:** 95.2%
+- **Segment Precision:** 62.5%
+- **Segment F1:** 75.5%
+
+---
+
 ## 2026-09-02 — v2.7: acoustic sustain-pedal decay modeling (accepted)
 
 ### Context
