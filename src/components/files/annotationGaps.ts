@@ -1,3 +1,9 @@
+import {
+  buildPedalIntervals,
+  heldByPedal,
+  type SustainPedalEvent
+} from '@core/midi/noteSequence'
+
 /**
  * Silent stretches inside an annotation.
  *
@@ -6,8 +12,13 @@
  * offer a split or a trim instead of leaving the operator to eyeball the roll.
  */
 
-/** Pauses shorter than this are musical rests, not take boundaries. */
-export const LARGE_ANNOTATION_GAP_SECONDS = 6
+/**
+ * Pauses shorter than this are musical rests, not take boundaries.
+ * With pedal modeling accounting for ringing sound under held damper pedals,
+ * true acoustic pauses of 3.5s or longer represent take breaks, sheet-reading pauses,
+ * or stops.
+ */
+export const LARGE_ANNOTATION_GAP_SECONDS = 3.5
 
 /**
  * Slack for deciding whether a gap touches an annotation's edge. Times are
@@ -17,6 +28,7 @@ export const LARGE_ANNOTATION_GAP_SECONDS = 6
 export const GAP_EDGE_EPSILON = 0.001
 
 export interface GapNote {
+  pitch?: number | null
   startTime?: number | null
   endTime?: number | null
 }
@@ -34,20 +46,36 @@ export type GapAction = 'split' | 'trim-start' | 'trim-end' | 'none'
  * Gaps of at least `minGapSec` between `start` and `end` where no note sounds.
  *
  * `notes` may cover the whole file. Only the parts overlapping the window are
- * considered.
+ * considered. When `sustainEvents` are provided, notes held by the damper pedal
+ * (CC 64) are extended acoustically until the pedal lifts or natural decay ends.
  */
 export function getLargeAnnotationGaps(
   start: number,
   end: number,
   notes: GapNote[],
-  minGapSec: number
+  minGapSec: number = LARGE_ANNOTATION_GAP_SECONDS,
+  sustainEvents?: SustainPedalEvent[]
 ): AnnotationGap[] {
   if (!(end > start)) return []
+
+  const intervals = sustainEvents && sustainEvents.length > 0
+    ? buildPedalIntervals(sustainEvents)
+    : []
 
   const overlaps: Array<{ start: number; end: number }> = []
   for (const note of notes) {
     const noteStart = note.startTime ?? 0
-    const noteEnd = note.endTime ?? noteStart
+    let noteEnd = note.endTime ?? noteStart
+
+    if (intervals.length > 0 && note.endTime != null) {
+      const held = heldByPedal(intervals, note.endTime)
+      if (held) {
+        const pitchMax = note.pitch != null && note.pitch > 72 ? 1.5 : 2.5
+        const pedalRelease = held.up !== null ? held.up : note.endTime + pitchMax
+        noteEnd = Math.max(noteEnd, Math.min(pedalRelease, note.endTime + pitchMax))
+      }
+    }
+
     if (noteEnd <= start || noteStart >= end) {
       continue
     }

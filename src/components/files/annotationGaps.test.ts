@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getGapAction, getLargeAnnotationGaps } from './annotationGaps'
+import { getGapAction, getLargeAnnotationGaps, LARGE_ANNOTATION_GAP_SECONDS } from './annotationGaps'
 
 const note = (startTime: number, endTime: number) => ({ startTime, endTime })
 
@@ -60,6 +60,41 @@ describe('getLargeAnnotationGaps', () => {
     expect(gaps).toEqual([
       { startTime: 0, endTime: 10, durationSec: 10 },
       { startTime: 10, endTime: 20, durationSec: 10 }
+    ])
+  })
+
+  it('uses 3.5s as default threshold and respects sustain pedal events', () => {
+    // Keys pressed 0-5s, then key released at 5.0s, but pedal holds until 7.0s.
+    // Next key struck at 9.0s.
+    // Key gap: 5.0s to 9.0s (4.0s gap).
+    // Without pedal: 4.0s gap >= 3.5s, would be flagged!
+    const keyNotes = [note(0, 5), note(9, 15)]
+    const withoutPedal = getLargeAnnotationGaps(0, 15, keyNotes)
+    expect(withoutPedal).toEqual([
+      { startTime: 5, endTime: 9, durationSec: 4 }
+    ])
+
+    // With pedal down at 4.0s and released at 7.0s:
+    // Acoustic gap is 7.0s to 9.0s (2.0s), which is < 3.5s -> no gap!
+    const sustainEvents = [
+      { time: 4.0, on: true, value: 127 },
+      { time: 7.0, on: false, value: 0 }
+    ]
+    const withPedal = getLargeAnnotationGaps(0, 15, keyNotes, LARGE_ANNOTATION_GAP_SECONDS, sustainEvents)
+    expect(withPedal).toEqual([])
+  })
+
+  it('detects true acoustic gaps >= 3.5s even when pedal is present', () => {
+    // Key released at 5.0s, pedal lifts at 6.0s. Next key at 10.0s.
+    // Acoustic gap: 6.0s to 10.0s (4.0s gap >= 3.5s)
+    const keyNotes = [note(0, 5), note(10, 15)]
+    const sustainEvents = [
+      { time: 4.0, on: true, value: 127 },
+      { time: 6.0, on: false, value: 0 }
+    ]
+    const gaps = getLargeAnnotationGaps(0, 15, keyNotes, LARGE_ANNOTATION_GAP_SECONDS, sustainEvents)
+    expect(gaps).toEqual([
+      { startTime: 6, endTime: 10, durationSec: 4 }
     ])
   })
 })

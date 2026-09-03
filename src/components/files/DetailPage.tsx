@@ -136,13 +136,14 @@ export function DetailPage({ fileId }: DetailPageProps) {
           annotation.start_time,
           annotation.end_time,
           sequence.notes,
-          LARGE_ANNOTATION_GAP_SECONDS
+          LARGE_ANNOTATION_GAP_SECONDS,
+          sequence.sustainEvents
         )
       );
     }
 
     return gapMap;
-  }, [annotations, sequence?.notes]);
+  }, [annotations, sequence?.notes, sequence?.sustainEvents]);
 
   // Whether any gap pill is shown at all, gating the helper copy above the
   // annotation list. Memoised: this component re-renders every frame during
