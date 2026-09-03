@@ -72,7 +72,10 @@ Full method and the rejected ideas: [`experiments-2026-09-03-addendum.md`](./exp
   prototypes to 24. Nothing about the *relative* allocation changed, but every
   label now has enough prototypes to describe itself. Cost is linear —
   prediction scores each window against every prototype, and the model file
-  grows from 2.0 MB to 8.3 MB.
+  grows from 2.0 MB to 7.7 MB. 8000 is the knee, not just where the sweep
+  stopped: re-measured on the accepted configuration, 12000 / 16000 / 24000 give
+  F1 88.15 / 88.30 / 88.12 against 8000's 88.15, flat within ±0.15 while costing
+  up to 4.6x the scoring time.
 - **`noneFromCompleteFilesOnly` added, default off** — a new flag for a
   hypothesis that did not survive its control. See "Rejected" below.
 - **Silence-blocked anchor linking (`linkMaxSilenceRatio`, default 0.7).** The

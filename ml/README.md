@@ -23,7 +23,9 @@ Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v
   window, so retraining and prediction stay fast and the model file stays small.
   The budget matters more than it looks: leave-one-out segment F1 on complete
   files runs 81.9% / 85.7% / 86.8% / 87.3% at budgets of 1000 / 2000 / 4000 /
-  8000. It is the largest single lever measured so far
+  8000 — the largest single lever measured so far. It flattens there: 12000,
+  16000 and 24000 all land within ±0.15 of 8000 while costing up to 4.6x the
+  scoring time, so 8000 is the knee rather than a stopping point
 - draws `__none__` training windows from every annotated file. Restricting them
   to files marked complete (`--trusted-none`) is a sound idea that measures as a
   win only when the prototype budget is too small — see the v2.10 entry in

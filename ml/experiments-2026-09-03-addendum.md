@@ -173,11 +173,33 @@ a library less than half the current size. At window 5, z-scored:
 | budget | acc | recall | precision | F1 |
 | --- | --- | --- | --- | --- |
 | 1000 | 78.55 | 79.28 | 84.76 | 81.93 |
-| 2000 (the default) | 85.17 | 85.87 | 85.52 | 85.69 |
+| 2000 (the old default) | 85.17 | 85.87 | 85.52 | 85.69 |
 | 4000 | 87.65 | 87.98 | 85.66 | 86.81 |
 | 8000 | 88.39 | 88.57 | 86.13 | **87.33** |
 
 Precision rises along with recall, so this is not a coverage-for-accuracy trade.
+
+**The tail, measured on the accepted v2.10 configuration** (window 6, silence
+rule on), to check that 8000 is not simply where the earlier sweep stopped:
+
+| budget | acc | recall | precision | F1 | prototypes | fold time |
+| --- | --- | --- | --- | --- | --- | --- |
+| **8000** (the default) | 89.29 | 89.48 | 86.86 | **88.15** | 7,092 | 161s |
+| 12000 | 90.30 | 90.50 | 85.92 | 88.15 | 10,608 | 284s |
+| 16000 | 90.47 | 90.56 | 86.16 | 88.30 | 14,114 | 386s |
+| 24000 | 90.37 | 90.46 | 85.90 | 88.12 | 21,006 | 740s |
+
+**8000 is the knee.** Below it the increments are +3.76, +1.12, +0.52; above it
+the curve is flat, wobbling within ±0.15 while recall keeps creeping up and
+precision drifts down to cancel it. 16000 buys +0.15 F1 for double the
+prototypes and 2.4x the scoring time, and 24000 is slightly *worse* than the
+default. Wall time grows faster than the prototype count (cache pressure), so
+the cost side is worse than the linear estimate. Question closed: leave it at
+8000.
+
+Higher budgets do shift the operating point rather than doing nothing — 16000
+is +1.1 recall and −0.7 precision against 8000 — so the knob is worth
+remembering if the review workflow ever wants recall over precision.
 It also relieves the under-annotated-song defect from the side the three failed
 corrections in the v2.3 entry did not try: at budget 2000 the smallest song got
 4 prototypes, at 8000 it gets 24. Nothing about the *relative* allocation
