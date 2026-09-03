@@ -49,7 +49,21 @@ interface SongSegmentEvalRow {
   f1: number;
 }
 
+/**
+ * Segment overlap between predictions and annotations, in seconds.
+ *
+ * Precision is only meaningful where the annotations are complete. In a file
+ * the user has not finished annotating, most of the audio carries no
+ * annotation at all, so a correct prediction there is counted as a false
+ * positive: measured over the current library, precision is 85% on complete
+ * files and 38% on incomplete ones, for the same model. Aggregating the two
+ * yields a number that moves with annotation coverage rather than with the
+ * model, and that barely responds to real model changes. Compare variants on
+ * `segmentComplete`.
+ */
 interface SegmentEvalSummary {
+  /** Files that contributed to this summary. */
+  files: number;
   annotationSec: number;
   matchedSec: number;
   annotationRecall: number;
@@ -98,6 +112,13 @@ interface EvalReport {
     modelK: number;
   };
   segment: SegmentEvalSummary;
+  /**
+   * The same segment metrics restricted to files marked complete, and to the
+   * files that are not. Read `segmentComplete` as the honest number: see the
+   * note on `SegmentEvalSummary`.
+   */
+  segmentComplete: SegmentEvalSummary;
+  segmentIncomplete: SegmentEvalSummary;
   byFile: FileEvalRow[];
   byFileSegment: FileSegmentEvalRow[];
   bySong: SongEvalRow[];
@@ -195,16 +216,43 @@ function rangeOverlap(
   return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart));
 }
 
-const segmentSummary: SegmentEvalSummary = {
-  annotationSec: 0,
-  matchedSec: 0,
-  annotationRecall: 0,
-  predictedSec: 0,
-  matchedPredictedSec: 0,
-  segmentPrecision: 0,
-  segmentF1: 0,
-  segmentCount: 0
-};
+function emptySegmentSummary(): SegmentEvalSummary {
+  return {
+    files: 0,
+    annotationSec: 0,
+    matchedSec: 0,
+    annotationRecall: 0,
+    predictedSec: 0,
+    matchedPredictedSec: 0,
+    segmentPrecision: 0,
+    segmentF1: 0,
+    segmentCount: 0
+  };
+}
+
+const segmentSummary = emptySegmentSummary();
+const segmentCompleteSummary = emptySegmentSummary();
+const segmentIncompleteSummary = emptySegmentSummary();
+
+function accumulateSegmentSummary(target: SegmentEvalSummary, row: FileSegmentEvalRow) {
+  target.files++;
+  target.annotationSec += row.annotationSec;
+  target.matchedSec += row.matchedSec;
+  target.predictedSec += row.predictedSec;
+  target.matchedPredictedSec += row.predictedMatchedSec;
+  target.segmentCount += row.segmentCount;
+}
+
+function finalizeSegmentSummary(target: SegmentEvalSummary) {
+  target.annotationRecall = target.annotationSec > 0 ? target.matchedSec / target.annotationSec : 0;
+  target.segmentPrecision = target.predictedSec > 0
+    ? target.matchedPredictedSec / target.predictedSec
+    : 0;
+  const denominator = target.annotationRecall + target.segmentPrecision;
+  target.segmentF1 = denominator > 0
+    ? (2 * target.annotationRecall * target.segmentPrecision) / denominator
+    : 0;
+}
 
 const byFileSegment: FileSegmentEvalRow[] = [];
 const bySongSegment = new Map<string, SongSegmentEvalRow>();
@@ -456,11 +504,11 @@ async function main() {
     const fileSegmentRow = evaluateFileSegments(file, segments);
     if (fileSegmentRow) {
       byFileSegment.push(fileSegmentRow);
-      segmentSummary.annotationSec += fileSegmentRow.annotationSec;
-      segmentSummary.matchedSec += fileSegmentRow.matchedSec;
-      segmentSummary.predictedSec += fileSegmentRow.predictedSec;
-      segmentSummary.matchedPredictedSec += fileSegmentRow.predictedMatchedSec;
-      segmentSummary.segmentCount += fileSegmentRow.segmentCount;
+      accumulateSegmentSummary(segmentSummary, fileSegmentRow);
+      accumulateSegmentSummary(
+        file.isComplete ? segmentCompleteSummary : segmentIncompleteSummary,
+        fileSegmentRow
+      );
     }
 
     if (fileEvaluated > 0) {
@@ -535,16 +583,9 @@ async function main() {
     .sort((a, b) => a.recall - b.recall || b.support - a.support)
     .slice(0, 10);
 
-  segmentSummary.annotationRecall = segmentSummary.annotationSec > 0
-    ? segmentSummary.matchedSec / segmentSummary.annotationSec
-    : 0;
-  segmentSummary.segmentPrecision = segmentSummary.predictedSec > 0
-    ? segmentSummary.matchedPredictedSec / segmentSummary.predictedSec
-    : 0;
-  segmentSummary.segmentF1 = segmentSummary.annotationRecall + segmentSummary.segmentPrecision > 0
-    ? (2 * segmentSummary.annotationRecall * segmentSummary.segmentPrecision)
-      / (segmentSummary.annotationRecall + segmentSummary.segmentPrecision)
-    : 0;
+  finalizeSegmentSummary(segmentSummary);
+  finalizeSegmentSummary(segmentCompleteSummary);
+  finalizeSegmentSummary(segmentIncompleteSummary);
 
   const bySongSegmentRows: SongSegmentEvalRow[] = [...bySongSegment.entries()]
     .map(([, row]) => {
@@ -580,6 +621,8 @@ async function main() {
       modelK: model.config.k
     },
     segment: segmentSummary,
+    segmentComplete: segmentCompleteSummary,
+    segmentIncomplete: segmentIncompleteSummary,
     byFile: byFile.sort((a, b) => a.fileId - b.fileId),
     byFileSegment: byFileSegment.sort((a, b) => a.fileId - b.fileId),
     bySong,
@@ -598,14 +641,24 @@ async function main() {
     + ` accuracy=${pct(report.windowAccuracy)}`
     + ` missingPredWindows=${formatCount(report.missingPredictionWindows)}`
   );
+  const segmentLine = (label: string, summary: SegmentEvalSummary) => (
+    `  ${label}`
+    + ` recall=${pct(summary.annotationRecall)}`
+    + ` precision=${pct(summary.segmentPrecision)}`
+    + ` f1=${pct(summary.segmentF1)}`
+    + ` (${formatCount(summary.files)} files,`
+    + ` ${formatCount(summary.annotationSec)}s annotated,`
+    + ` ${formatCount(summary.predictedSec)}s predicted,`
+    + ` ${formatCount(summary.segmentCount)} segments)`
+  );
+  console.log('  segments vs annotations:');
+  console.log(segmentLine('complete files  ', report.segmentComplete));
+  console.log(segmentLine('incomplete files', report.segmentIncomplete));
+  console.log(segmentLine('all files       ', report.segment));
   console.log(
-    '  segments vs annotations:'
-    + ` recall=${pct(report.segment.annotationRecall)}`
-    + ` precision=${pct(report.segment.segmentPrecision)}`
-    + ` f1=${pct(report.segment.segmentF1)}`
-    + ` (${formatCount(report.segment.annotationSec)}s annotated,`
-    + ` ${formatCount(report.segment.predictedSec)}s predicted,`
-    + ` ${formatCount(report.segment.segmentCount)} segments)`
+    '  Compare model variants on the complete-files row. An incomplete file has'
+    + ' unannotated time the user has not reviewed, so a correct prediction there'
+    + ' still counts against precision.'
   );
 
   const worstSegmentFiles = [...byFileSegment]

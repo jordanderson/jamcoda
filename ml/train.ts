@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { clamp, hasFlag, parseInt_, parseNum, pct, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import {
+  TRAIN_CONFIG_DEFAULTS,
   evaluateLeaveOneOut,
   loadAnnotatedMidiFiles,
   saveModel,
@@ -8,8 +9,30 @@ import {
   type TrainConfig
 } from './songSegmentation.js';
 
+/**
+ * Read an optional numeric flag. Absent means `undefined`, so
+ * `resolveTrainConfig` supplies the default — restating defaults here is how
+ * the CLI, the rebuild-model route and the fit itself came to disagree.
+ */
+function optionalNum(flag: string, floor?: number): number | undefined {
+  const raw = readArg(flag);
+  if (raw === undefined) return undefined;
+  const value = parseNum(raw, Number.NaN);
+  if (Number.isNaN(value)) throw new Error(`Invalid ${flag} value "${raw}".`);
+  return floor === undefined ? value : Math.max(floor, value);
+}
+
+function optionalInt(flag: string, floor?: number): number | undefined {
+  const value = optionalNum(flag, floor);
+  return value === undefined ? undefined : Math.floor(value);
+}
+
+function clampOptional(value: number | undefined, min: number, max: number) {
+  return value === undefined ? undefined : clamp(value, min, max);
+}
+
 function parseScaling(value: string | undefined): TrainConfig['featureScaling'] {
-  if (!value) return 'minmax';
+  if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
   if (normalized === 'zscore' || normalized === 'minmax' || normalized === 'none') {
     return normalized;
@@ -18,14 +41,14 @@ function parseScaling(value: string | undefined): TrainConfig['featureScaling'] 
 }
 
 function parseScoreMode(value: string | undefined): TrainConfig['scoreMode'] {
-  if (!value) return 'min';
+  if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
   if (normalized === 'min' || normalized === 'avg') return normalized;
   throw new Error(`Invalid --score-mode value "${value}". Use min or avg.`);
 }
 
 function parseDecoder(value: string | undefined): TrainConfig['decoder'] {
-  if (!value) return 'anchor';
+  if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
   if (normalized === 'anchor' || normalized === 'viterbi' || normalized === 'smooth') {
     return normalized;
@@ -44,13 +67,13 @@ Options:
   --db <path>            SQLite DB path (default: data/jamcoda.db)
   --root <path>          Workspace root for resolving local MIDI paths (default: .)
   --out <path>           Output model path (default: data/ml/model.json)
-  --window <seconds>     Window size in seconds (default: 4)
+  --window <seconds>     Window size in seconds (default: 6)
   --step <seconds>       Window step in seconds (default: 1)
   --k <int>              K nearest neighbors (legacy v1 models only; default: 7)
   --none-ratio <float>   Max none:song window ratio kept in training (default: 1.5)
-  --prototype-budget <int>     Total condensed prototype budget (default: 2000)
+  --prototype-budget <int>     Total condensed prototype budget (default: 8000)
   --max-none-prototypes <int>  Prototype cap for the __none__ class (default: 60)
-  --scaling <zscore|minmax|none>  Feature normalization (default: minmax)
+  --scaling <zscore|minmax|none>  Feature normalization (default: zscore)
   --register-divide <int>        MIDI note separating low/high register chroma (default: 60, middle C)
   --hand-mask-augment <float>    Fraction of song windows given a hand-masked copy (default: 0, off; measured to reduce LOO accuracy)
   --score-mode <min|avg>         Per-label score aggregation (default: min)
@@ -61,6 +84,11 @@ Options:
   --fill-min-margin <float>    Minimum margin for a window to be linked (default: 0)
   --fill-topk <int>            Linking affinity top-K (-1 disables; default: -1)
   --link-confidence <n>        Minimum confidence for a linked window (default: 0.5)
+  --link-max-silence <float>   A window at or above this silence_ratio cannot be
+                               linked into an anchor run (default: 0.7; 1 disables)
+  --trusted-none         Train __none__ only on files marked complete, instead of
+                         on every annotated file (default: off — it helps only at
+                         a small --prototype-budget; see ml/CHANGELOG.md v2.10)
   --skip-eval            Skip leave-one-file-out evaluation
   --help                 Show this help
 `);
@@ -78,23 +106,25 @@ async function main() {
   const skipEval = hasFlag('--skip-eval');
 
   const config: TrainConfig = {
-    windowSec: parseNum(readArg('--window'), 4),
-    stepSec: parseNum(readArg('--step'), 1),
-    k: parseInt_(readArg('--k'), 7),
-    maxNoneToSongRatio: Math.max(0, parseNum(readArg('--none-ratio'), 1.5)),
-    prototypeBudget: Math.max(1, parseInt_(readArg('--prototype-budget'), 2000)),
-    maxNonePrototypes: Math.max(1, parseInt_(readArg('--max-none-prototypes'), 60)),
+    windowSec: parseNum(readArg('--window'), TRAIN_CONFIG_DEFAULTS.windowSec),
+    stepSec: parseNum(readArg('--step'), TRAIN_CONFIG_DEFAULTS.stepSec),
+    k: parseInt_(readArg('--k'), TRAIN_CONFIG_DEFAULTS.k),
+    maxNoneToSongRatio: Math.max(0, parseNum(readArg('--none-ratio'), TRAIN_CONFIG_DEFAULTS.maxNoneToSongRatio)),
+    prototypeBudget: optionalInt('--prototype-budget', 1),
+    maxNonePrototypes: optionalInt('--max-none-prototypes', 1),
     featureScaling: parseScaling(readArg('--scaling')),
-    registerDivide: Math.max(1, parseInt_(readArg('--register-divide'), 60)),
-    handMaskAugmentFraction: clamp(parseNum(readArg('--hand-mask-augment'), 0), 0, 1),
+    registerDivide: optionalInt('--register-divide', 1),
+    handMaskAugmentFraction: clampOptional(optionalNum('--hand-mask-augment'), 0, 1),
     scoreMode: parseScoreMode(readArg('--score-mode')),
-    scoreNeighbors: parseInt_(readArg('--score-neighbors'), 1),
+    scoreNeighbors: optionalInt('--score-neighbors', 1),
     decoder: parseDecoder(readArg('--decoder')),
-    anchorMargin: Math.max(0, parseNum(readArg('--anchor-margin'), 0.15)),
-    minAnchorRun: Math.max(1, parseInt_(readArg('--min-anchor-run'), 3)),
-    fillMinMargin: Math.max(0, parseNum(readArg('--fill-min-margin'), 0)),
-    fillTopK: parseInt_(readArg('--fill-topk'), -1, -1),
-    linkConfidence: clamp(parseNum(readArg('--link-confidence'), 0.5), 0, 1)
+    anchorMargin: optionalNum('--anchor-margin', 0),
+    minAnchorRun: optionalInt('--min-anchor-run', 1),
+    fillMinMargin: optionalNum('--fill-min-margin', 0),
+    fillTopK: optionalInt('--fill-topk'),
+    linkConfidence: clampOptional(optionalNum('--link-confidence'), 0, 1),
+    linkMaxSilenceRatio: clampOptional(optionalNum('--link-max-silence'), 0, 1),
+    noneFromCompleteFilesOnly: hasFlag('--trusted-none') ? true : undefined
   };
 
   if (config.windowSec <= 0 || config.stepSec <= 0) {
@@ -115,6 +145,14 @@ async function main() {
 
   console.log(`Saved model to ${outPath}`);
   console.log(`Samples kept: ${model.trainingSummary.totalSamples} (${model.trainingSummary.positiveSamples} song, ${model.trainingSummary.noneSamples} none)`);
+  const droppedNone = model.trainingSummary.noneSamplesDroppedAsUntrusted ?? 0;
+  if (droppedNone > 0) {
+    const completeFiles = files.filter((file) => file.isComplete).length;
+    console.log(
+      `__none__ drawn from the ${completeFiles} of ${files.length} files marked complete;`
+      + ` ${droppedNone} windows from incomplete files withheld (--trusted-none).`
+    );
+  }
   console.log(`Labels: ${model.labels.join(', ')}`);
 
   if (!skipEval) {

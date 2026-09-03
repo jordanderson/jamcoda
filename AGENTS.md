@@ -85,6 +85,21 @@ Core frontend routes:
 - The prediction pipeline has one implementation,
   `server/services/predictionImport.ts`. The API route and `ml:predict-import`
   both call it; neither reimplements exclusion, inserts, or schema.
+- **Model variants are compared on the complete-files row of the eval report,
+  never on the aggregate.** `ml:eval` prints segment recall/precision/F1 three
+  ways: over files marked complete, over the files that are not, and over
+  everything. Precision only means something where the annotations are
+  finished — an incomplete file has unannotated time that a *correct* prediction
+  is scored against, and the same model measures 85% precision on complete files
+  and 38% on incomplete ones. The aggregate therefore tracks annotation coverage
+  rather than the model, and moves less than a point across changes that move
+  the honest number by three. See `ml/experiments-2026-09-03-addendum.md`.
+- **`__none__` training windows come only from files marked complete**
+  (`TrainConfig.noneFromCompleteFilesOnly`, on by default). An unannotated
+  window asserts "no song" only where the user declared the file finished;
+  elsewhere it is an unreviewed gap, and training on it taught the model that
+  real performances are silence. Marking a file complete therefore has model
+  value, not just bookkeeping value.
 - The model-staleness badge is read-only: `GET /api/prediction-reviews/rebuild-status`
   compares annotation `updated_at` against the saved model's `createdAt` and the
   current unique song names against the model's labels. It never trains, and it

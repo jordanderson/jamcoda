@@ -19,9 +19,16 @@ Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v
   with 0.5x decayed tail weight and weighted by sqrt(velocity/127) for melodic prominence — plus
   onset density, pitch/velocity/duration/polyphony stats, register balance,
   rhythmic regularity, silence ratio and register span)
-- condenses training windows into per-label prototypes (a few hundred total) instead of retaining every window, so retraining and prediction are fast and the model file stays small
-- scores each window by its nearest prototype per song (minmax-scaled
-  features). Prototype budgets scale with sqrt(support), so a song with more
+- condenses training windows into per-label prototypes instead of retaining every
+  window, so retraining and prediction stay fast and the model file stays small.
+  The budget matters more than it looks: leave-one-out segment F1 on complete
+  files runs 81.9% / 85.7% / 86.8% / 87.3% at budgets of 1000 / 2000 / 4000 /
+  8000. It is the largest single lever measured so far
+- draws `__none__` training windows from every annotated file. Restricting them
+  to files marked complete (`--trusted-none`) is a sound idea that measures as a
+  win only when the prototype budget is too small — see the v2.10 entry in
+  [`CHANGELOG.md`](CHANGELOG.md) before enabling it
+- scores each window by its nearest prototype per song (z-scored features). Prototype budgets scale with sqrt(support), so a song with more
   annotation keeps more prototypes.
   **Known defect:** a nearest-prototype distance decreases as a song gains
   prototypes, so well-annotated songs win comparisons they must lose. Three
@@ -30,7 +37,13 @@ Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v
   songs below the average budget. Annotate those songs more.
 - decodes windows into contiguous song spans with an **anchor-and-link** two-pass decoder:
   1. finds *anchor* runs — windows whose top song beats the runner-up by a clear margin (the recognizable phrases of a song)
-  2. links those anchors together across intervening low-confidence windows (vamping, left-hand-only passages), stopping at a strong anchor of a different song or at genuine silence
+  2. links those anchors together across intervening low-confidence windows
+     (vamping, left-hand-only passages), stopping at a strong anchor of a
+     different song, at genuine silence, or at a window whose `silence_ratio`
+     reaches `linkMaxSilenceRatio`. That last rule exists because dead air
+     always has a low margin, and a low margin is exactly what makes a window
+     fillable, so without it one recognisable phrase could claim the silence
+     after it and carry on into whatever followed
 - converts window runs into segments. Boundaries come from window **centres**,
   because a window label applies at its centre. Training uses the same rule.
 - filters and merges the segments with confidence and duration limits
@@ -77,18 +90,19 @@ npm run ml:train -- \
   --db data/jamcoda.db \
   --root . \
   --out data/ml/model.json \
-  --window 4 \
+  --window 6 \
   --step 1 \
   --k 7 \
   --none-ratio 1.5 \
-  --prototype-budget 2000 \
+  --prototype-budget 8000 \
   --max-none-prototypes 60 \
-  --scaling minmax \
+  --scaling zscore \
   --score-mode min \
   --decoder anchor \
   --anchor-margin 0.15 \
   --min-anchor-run 3 \
-  --fill-topk -1
+  --fill-topk -1 \
+  --link-max-silence 0.7
 ```
 
 Notes:
@@ -102,7 +116,14 @@ Notes:
   experimentation.
 - `--none-ratio` controls negative sampling volume.
 - `--prototype-budget` caps the total condensed prototypes across all songs;
-  `--max-none-prototypes` caps the `__none__` share of that budget.
+  `--max-none-prototypes` caps the `__none__` share of that budget. Raising the
+  total budget is the cheapest accuracy win available and the default was too
+  low for the current library; prediction cost scales linearly with it.
+- `--trusted-none` restricts `__none__` training windows to files marked
+  complete. Off by default: measured as a regression at the default prototype
+  budget. See the model summary above.
+- `--link-max-silence` sets the `silence_ratio` at which a window stops being
+  linkable into an anchor run (default 0.7; 1 disables the rule).
 - `--scaling` is the per-feature normalization (`minmax`, `zscore`, or `none`).
 - `--score-neighbors` is the number of nearest prototypes to average per label
   (default 1, the single nearest). The fit clamps this value to the smallest
@@ -185,11 +206,43 @@ timestamp, so runs stay referable without copying or renaming:
 `ml/songSegmentation.ts`); old models without it fall back to `v<architecture
 version>`.
 
-The report now includes a **segment-level** comparison against your annotations:
+The report includes a **segment-level** comparison against your annotations:
 how much of each annotated span is covered by a same-song predicted segment
 (annotation recall), and how much of each predicted segment actually overlaps a
-same-song annotation (segment precision), plus an F1 across both. This is the
-closest single number to "predictions vs annotations".
+same-song annotation (segment precision), plus an F1 across both.
+
+### Read the complete-files row, not the aggregate
+
+Segment precision is reported three ways: over files marked complete, over the
+files that are not, and over everything. **Compare model variants on the
+complete-files row.**
+
+Precision only means anything where the annotations are finished. In a file you
+have not finished annotating, most of the audio carries no annotation, so a
+*correct* prediction there is scored as a false positive. Measured over the
+current library, one and the same model scores:
+
+| population | files | audio annotated | recall | precision | F1 |
+| --- | --- | --- | --- | --- | --- |
+| complete | 71 | 87.7% | 85.9% | **85.5%** | 85.7% |
+| incomplete | 40 | 37.2% | 87.2% | **38.0%** | 53.0% |
+| all | 111 | 57.0% | 86.4% | 57.0% | 68.7% |
+
+Recall is within 1.4 pt across the two populations — the classification problem
+is equally hard in both — while precision differs by 47 points. The review queue
+agrees with the complete-files number and not the aggregate: of the predictions
+that have a human verdict, 85.5% by duration were confirmed or edited rather
+than marked invalid.
+
+The practical consequence is that the aggregate row barely responds to real
+changes. Across window lengths 4s to 8s it moves less than a point and
+non-monotonically, while the complete-files row moves 3.3 points. Precision lost
+on incomplete files cancels recall gained. See
+[`experiments-2026-09-03-addendum.md`](./experiments-2026-09-03-addendum.md).
+
+Marking a file complete therefore does two things: it puts the file into the
+honest evaluation population, and it makes the file's unannotated time usable as
+`__none__` training material.
 
 ## UI-Driven ML Actions
 

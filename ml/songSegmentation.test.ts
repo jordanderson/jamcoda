@@ -40,7 +40,8 @@ function makeFile(): AnnotatedMidiFile {
     fileId: 1,
     filename: 'synthetic.mid',
     midiPath: '',
-    annotations: []
+    annotations: [],
+    isComplete: false
   };
 }
 
@@ -110,6 +111,7 @@ describe('prototype model training', () => {
       samples.push({
         fileId: i < 30 ? 1 : 2,
         fileName: '',
+        fileIsComplete: true,
         startTime: i,
         endTime: i + 4,
         label: i < 30 ? 'Song A' : NO_SONG_LABEL,
@@ -135,6 +137,7 @@ describe('hand-mask augmentation', () => {
       samples.push({
         fileId: 1,
         fileName: '',
+        fileIsComplete: true,
         startTime: i,
         endTime: i + 4,
         label: i < songCount ? 'Song A' : NO_SONG_LABEL,
@@ -200,7 +203,9 @@ describe('anchor-link decoder', () => {
     const samples: WindowSample[] = [];
     const push = (fileId: number, label: string, feats: number[], count: number) => {
       for (let i = 0; i < count; i++) {
-        samples.push({ fileId, fileName: '', startTime: i, endTime: i + 4, label, features: feats });
+        samples.push({
+          fileId, fileName: '', fileIsComplete: true, startTime: i, endTime: i + 4, label, features: feats
+        });
       }
     };
     const songA = [0.7, 0.1, ...new Array(36).fill(0.15)];
@@ -233,6 +238,111 @@ describe('anchor-link decoder', () => {
     const tail = predicted.filter((p) => p.startTime >= 25);
     assert.ok(tail.length > 0);
     assert.ok(tail.every((p) => p.label === NO_SONG_LABEL));
+  });
+});
+
+describe('trusted __none__ sampling', () => {
+  /** 20 song windows and 20 silence windows per file. */
+  function samplesFor(fileId: number, fileIsComplete: boolean): WindowSample[] {
+    return Array.from({ length: 40 }, (_, i) => ({
+      fileId,
+      fileName: '',
+      fileIsComplete,
+      startTime: i,
+      endTime: i + 4,
+      label: i < 20 ? 'Song A' : NO_SONG_LABEL,
+      features: i < 20
+        ? [0.8, 0.2, ...new Array(35).fill(0.1)]
+        : new Array(37).fill(0)
+    }));
+  }
+
+  it('withholds __none__ windows from files that are not complete when asked', () => {
+    const samples = [...samplesFor(1, true), ...samplesFor(2, false)];
+    const model = trainModelFromSamples(samples, { ...config, noneFromCompleteFilesOnly: true });
+    // The 20 __none__ windows of the incomplete file 2 are not evidence of
+    // silence: that file simply has not been annotated there yet.
+    assert.equal(model.trainingSummary.noneSamplesDroppedAsUntrusted, 20);
+    assert.ok(model.labels.includes(NO_SONG_LABEL));
+  });
+
+  it('keeps every __none__ window by default', () => {
+    const samples = [...samplesFor(1, true), ...samplesFor(2, false)];
+    const model = trainModelFromSamples(samples, config);
+    assert.equal(model.trainingSummary.noneSamplesDroppedAsUntrusted, 0);
+  });
+
+  it('falls back to every __none__ window when no file is complete', () => {
+    const samples = samplesFor(1, false);
+    const model = trainModelFromSamples(samples, { ...config, noneFromCompleteFilesOnly: true });
+    // A library with nothing marked complete still has to train.
+    assert.equal(model.trainingSummary.noneSamplesDroppedAsUntrusted, 0);
+    assert.ok(model.labels.includes(NO_SONG_LABEL));
+  });
+});
+
+describe('silence-blocked anchor linking', () => {
+  const SILENCE_RATIO = 34;
+
+  /** A 37-feature window: one dominant pitch class plus a silence ratio. */
+  function feat(low: number, high: number, silenceRatio: number): number[] {
+    const features = new Array(37).fill(0.05);
+    features[0] = low;
+    features[1] = high;
+    features[SILENCE_RATIO] = silenceRatio;
+    return features;
+  }
+
+  const songA = feat(0.7, 0.1, 0);
+  const songB = feat(0.1, 0.7, 0);
+  const quiet = feat(0.02, 0.02, 0);
+  // Chroma exactly between the two songs, so the decoder sees a low margin and
+  // would normally link it — but almost nothing is sounding.
+  const ambiguousAndSilent = feat(0.4, 0.4, 0.9);
+
+  function modelWith(linkMaxSilenceRatio: number) {
+    const samples: WindowSample[] = [];
+    // silence_ratio alternates within every label, so it carries no label
+    // information and the margins below are decided by chroma alone. Only the
+    // decoder's link rule reads it.
+    const push = (label: string, features: number[], count: number) => {
+      for (let i = 0; i < count; i++) {
+        const features2 = [...features];
+        features2[SILENCE_RATIO] = i % 2 === 0 ? 0 : 0.9;
+        samples.push({
+          fileId: 1, fileName: '', fileIsComplete: true,
+          startTime: i, endTime: i + 4, label, features: features2
+        });
+      }
+    };
+    push('Song A', songA, 40);
+    push('Song B', songB, 40);
+    push(NO_SONG_LABEL, quiet, 40);
+    return trainModelFromSamples(samples, { ...config, linkMaxSilenceRatio });
+  }
+
+  /** Four Song A anchors, a silent ambiguous gap, then four more anchors. */
+  const windows = [
+    ...Array.from({ length: 4 }, (_, i) => ({ startTime: i, endTime: i + 4, features: songA })),
+    ...Array.from({ length: 4 }, (_, i) => ({
+      startTime: 4 + i, endTime: 8 + i, features: ambiguousAndSilent
+    })),
+    ...Array.from({ length: 4 }, (_, i) => ({ startTime: 8 + i, endTime: 12 + i, features: songA }))
+  ];
+  const predictOptions = { minWindowConfidence: 0.45, smoothingWindows: 5 };
+  const gapLabels = (model: ReturnType<typeof trainModelFromSamples>) => (
+    predictWindowsFromSamples(model, windows, predictOptions)
+      .filter((prediction) => prediction.startTime >= 4 && prediction.startTime < 8)
+      .map((prediction) => prediction.label)
+  );
+
+  it('links an ambiguous gap into the song when the rule is disabled', () => {
+    assert.ok(gapLabels(modelWith(2)).every((label) => label === 'Song A'));
+  });
+
+  it('refuses to link through a window that is mostly silence', () => {
+    // Dead air is not ambiguous evidence that the song continues.
+    assert.ok(gapLabels(modelWith(0.7)).every((label) => label === NO_SONG_LABEL));
   });
 });
 
@@ -361,7 +471,7 @@ describe('per-label scoring fairness', () => {
     const push = (label: string, n: number) => {
       for (let i = 0; i < n; i++) {
         samples.push({
-          fileId: 1, fileName: '', startTime: i, endTime: i + 4, label,
+          fileId: 1, fileName: '', fileIsComplete: true, startTime: i, endTime: i + 4, label,
           features: [0.5, 0.3, ...new Array(36).fill(0.2)]
         });
       }
@@ -386,7 +496,9 @@ describe('per-label scoring fairness', () => {
     const samples: WindowSample[] = [];
     const push = (label: string, n: number) => {
       for (let i = 0; i < n; i++) {
-        samples.push({ fileId: 1, fileName: '', startTime: i, endTime: i + 4, label, features: jitter() });
+        samples.push({
+          fileId: 1, fileName: '', fileIsComplete: true, startTime: i, endTime: i + 4, label, features: jitter()
+        });
       }
     };
     push('Song Frequent', 400);
@@ -471,7 +583,7 @@ describe('loadModel', () => {
 
   it('round-trips a freshly fitted model', () => {
     const samples: WindowSample[] = Array.from({ length: 40 }, (_, i) => ({
-      fileId: 1, fileName: '', startTime: i, endTime: i + 4,
+      fileId: 1, fileName: '', fileIsComplete: true, startTime: i, endTime: i + 4,
       label: i < 20 ? 'Song A' : NO_SONG_LABEL,
       features: i < 20 ? [0.8, 0.2, ...new Array(35).fill(0.1)] : [0, ...new Array(36).fill(0)]
     }));

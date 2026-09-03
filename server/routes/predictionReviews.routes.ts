@@ -15,6 +15,7 @@ import {
   loadAnnotatedMidiFiles,
   saveModel,
   trainModel,
+  TRAIN_CONFIG_DEFAULTS,
   type PredictConfig,
   type TrainConfig
 } from '../../ml/songSegmentation';
@@ -442,24 +443,39 @@ router.post('/rebuild-model', async (req: Request, res: Response) => {
       ? modelPathArg
       : path.resolve(projectRoot, modelPathArg);
 
+    // Anything the request does not set is left undefined so that
+    // `resolveTrainConfig` supplies it. Repeating the defaults here is how this
+    // route drifted from `ml:train` and trained a different model than the CLI.
+    const optionalNumber = (value: unknown, minimum: number, round = false) => {
+      const parsed = parseOptionalNumber(value);
+      if (parsed === undefined) return undefined;
+      return round ? Math.max(minimum, Math.floor(parsed)) : Math.max(minimum, parsed);
+    };
+    const optionalClamped = (value: unknown, minimum: number, maximum: number) => {
+      const parsed = parseOptionalNumber(value);
+      return parsed === undefined ? undefined : clamp(parsed, minimum, maximum);
+    };
     const config: TrainConfig = {
-      windowSec: parseOptionalNumber(req.body.windowSec) ?? 4,
-      stepSec: parseOptionalNumber(req.body.stepSec) ?? 1,
-      k: Math.max(1, Math.floor(parseOptionalNumber(req.body.k) ?? 7)),
-      maxNoneToSongRatio: Math.max(0, parseOptionalNumber(req.body.maxNoneToSongRatio) ?? 1.5),
-      prototypeBudget: Math.max(1, Math.floor(parseOptionalNumber(req.body.prototypeBudget) ?? 2000)),
-      maxNonePrototypes: Math.max(1, Math.floor(parseOptionalNumber(req.body.maxNonePrototypes) ?? 60)),
+      windowSec: parseOptionalNumber(req.body.windowSec) ?? TRAIN_CONFIG_DEFAULTS.windowSec,
+      stepSec: parseOptionalNumber(req.body.stepSec) ?? TRAIN_CONFIG_DEFAULTS.stepSec,
+      k: optionalNumber(req.body.k, 1, true) ?? TRAIN_CONFIG_DEFAULTS.k,
+      maxNoneToSongRatio: optionalNumber(req.body.maxNoneToSongRatio, 0)
+        ?? TRAIN_CONFIG_DEFAULTS.maxNoneToSongRatio,
+      prototypeBudget: optionalNumber(req.body.prototypeBudget, 1, true),
+      maxNonePrototypes: optionalNumber(req.body.maxNonePrototypes, 1, true),
       featureScaling: parseOptionalScaling(req.body.featureScaling),
-      registerDivide: Math.max(1, Math.floor(parseOptionalNumber(req.body.registerDivide) ?? 60)),
-      handMaskAugmentFraction: clamp(parseOptionalNumber(req.body.handMaskAugmentFraction) ?? 0, 0, 1),
+      registerDivide: optionalNumber(req.body.registerDivide, 1, true),
+      handMaskAugmentFraction: optionalClamped(req.body.handMaskAugmentFraction, 0, 1),
       scoreMode: parseOptionalScoreMode(req.body.scoreMode),
-      scoreNeighbors: Math.max(1, Math.floor(parseOptionalNumber(req.body.scoreNeighbors) ?? 1)),
+      scoreNeighbors: optionalNumber(req.body.scoreNeighbors, 1, true),
       decoder: parseOptionalDecoder(req.body.decoder),
-      anchorMargin: Math.max(0, parseOptionalNumber(req.body.anchorMargin) ?? 0.15),
-      minAnchorRun: Math.max(1, Math.floor(parseOptionalNumber(req.body.minAnchorRun) ?? 3)),
-      fillMinMargin: Math.max(0, parseOptionalNumber(req.body.fillMinMargin) ?? 0),
-      fillTopK: parseOptionalNumber(req.body.fillTopK) ?? -1,
-      linkConfidence: clamp(parseOptionalNumber(req.body.linkConfidence) ?? 0.5, 0, 1)
+      anchorMargin: optionalNumber(req.body.anchorMargin, 0),
+      minAnchorRun: optionalNumber(req.body.minAnchorRun, 1, true),
+      fillMinMargin: optionalNumber(req.body.fillMinMargin, 0),
+      fillTopK: parseOptionalNumber(req.body.fillTopK),
+      linkConfidence: optionalClamped(req.body.linkConfidence, 0, 1),
+      linkMaxSilenceRatio: optionalClamped(req.body.linkMaxSilenceRatio, 0, 1),
+      noneFromCompleteFilesOnly: parseOptionalBoolean(req.body.noneFromCompleteFilesOnly)
     };
     const includeEvaluation = parseOptionalBoolean(req.body.includeEvaluation) ?? false;
     const reRunUnsure = parseOptionalBoolean(req.body.reRunUnsure) ?? false;

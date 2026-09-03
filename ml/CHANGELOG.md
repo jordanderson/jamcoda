@@ -18,6 +18,160 @@ How to read the numbers:
 
 ---
 
+## 2026-09-03 — v2.10: honest evaluation scope, prototype budget, silence-blocked linking (accepted)
+
+### Context
+
+Most of this release comes out of one finding: **segment precision was never
+measuring the model.** It was measuring how much of the library has been
+annotated.
+
+Split a single leave-one-out run by whether a file is marked complete:
+
+| population | files | audio annotated | recall | precision | F1 |
+| --- | --- | --- | --- | --- | --- |
+| complete files | 71 | 87.7% | 85.87% | **85.52%** | **85.69%** |
+| incomplete files | 40 | 37.2% | 87.24% | **38.04%** | 52.98% |
+| all files (what earlier entries report) | 111 | 57.0% | 86.41% | 56.99% | 68.68% |
+
+Same model, same fold, same code. Recall differs by 1.4 pt, so the
+classification problem is equally hard in both populations. Precision differs by
+**47 points**, because 63% of the audio in an incomplete file carries no
+annotation and a correct prediction there scores as a false positive.
+
+The review queue settles which number is real. 337 predictions carry a human
+verdict, all of them on incomplete files (marking a file complete clears its
+review rows). By duration, **85.5% were confirmed or edited rather than marked
+invalid** — the complete-files number, not 38%. Two further checks agree: of all
+predicted seconds only **2.9%** land inside an annotation naming a *different*
+song, and of the predicted time that falls outside any annotation, 79.5% is
+isolated runs with a **median length of 91s** — the length of a take, not of a
+decoder error.
+
+The practical damage is that the aggregate metric is nearly blind. Across window
+lengths 4s to 8s it moves between 67.7% and 68.7%, under a point and
+non-monotone, which reads as noise; the complete-files metric moves 83.1% to
+86.4% over the same sweep. Precision lost on incomplete files was cancelling
+recall gained, and several sweeps were read as flat when they were not.
+
+Full method and the rejected ideas: [`experiments-2026-09-03-addendum.md`](./experiments-2026-09-03-addendum.md).
+
+### What changed
+
+- **`ml:eval` reports segment metrics three ways** — complete files, incomplete
+  files, and everything — and names the complete-files row as the one to compare
+  variants on. `loadAnnotatedMidiFiles` now carries `isComplete`; the report JSON
+  gains `segmentComplete` and `segmentIncomplete`, each with its own file count.
+- **`prototypeBudget` default raised 2000 -> 8000.** The largest single lever
+  measured, and it had not been swept since v2.6 raised it to 2000 for a library
+  less than half the current size. On complete files, segment F1 runs 81.9% /
+  85.7% / 86.8% / 87.3% at budgets of 1000 / 2000 / 4000 / 8000, with precision
+  rising alongside recall — not a coverage-for-accuracy trade. It also relieves
+  the long-standing under-annotated-song defect from a side the three failed
+  corrections in the v2.3 entry did not try: the smallest song goes from 4
+  prototypes to 24. Nothing about the *relative* allocation changed, but every
+  label now has enough prototypes to describe itself. Cost is linear —
+  prediction scores each window against every prototype, and the model file
+  grows from 2.0 MB to 8.3 MB.
+- **`noneFromCompleteFilesOnly` added, default off** — a new flag for a
+  hypothesis that did not survive its control. See "Rejected" below.
+- **Silence-blocked anchor linking (`linkMaxSilenceRatio`, default 0.7).** The
+  anchor decoder fills any window whose evidence is weak, and dead air always has
+  weak evidence, so one recognisable phrase could claim the silence after it and
+  carry on into whatever followed. Silence is not ambiguous evidence that the
+  song continues. A model saved before this release has no value for the field
+  and keeps the old behaviour.
+- **Window length 5s -> 6s**, re-tuned on top of the larger budget rather than
+  carried over from the sweep that predates it.
+- **One set of training defaults.** `POST /api/prediction-reviews/rebuild-model`
+  restated its own defaults and had already drifted (window 4 against the CLI's
+  5). Both entry points now read `TRAIN_CONFIG_DEFAULTS` and leave everything
+  else to `resolveTrainConfig`.
+- **Fixed: the fit read defaults off the caller's partial config.**
+  `allocatePrototypeBudgets` fell back to `prototypeBudget ?? 1200` while
+  `resolveTrainConfig` used 2000, and the model saved the *resolved* config —
+  so a caller that omitted the field got a model whose saved config described a
+  build that never happened. `fitModelFromSamples` now resolves once and builds
+  from the resolved values, and the functions that read those fields take a
+  `ResolvedTrainConfig` so the defaults cannot be restated at a use site.
+- `MODEL_VERSION` bumped to `v2.10`.
+
+### Results
+
+Leave-one-file-out, 111 files, 718 annotations. **Complete-files scope.**
+
+| step | acc | recall | precision | F1 |
+| --- | --- | --- | --- | --- |
+| v2.8 committed (win 4, minmax, budget 2000) | 79.10 | 79.60 | 86.89 | 83.08 |
+| + z-score scaling | 82.38 | 82.86 | 86.18 | 84.49 |
+| + window 5s (the in-flight v2.9) | 85.17 | 85.87 | 85.52 | 85.69 |
+| + window 6s | 85.91 | 86.35 | 84.77 | 85.55 |
+| + prototype budget 8000 | 89.32 | 89.48 | 86.38 | 87.90 |
+| + silence-blocked linking (**v2.10**) | 89.29 | 89.48 | 86.86 | **88.15** |
+
+The v2.9 half of that is worth recording separately, because it was ablated:
+z-score alone at window 4 is +1.41 F1, while window 5 alone under min-max is
+−0.03 (accuracy +4.4 pt, precision −2.8). Window length only pays off once the
+features are z-scored — min-max maps each feature onto [0,1] from the training
+extremes, so one outlier window compresses the useful range of that feature.
+
+### Rejected in the same sweep
+
+- **Trusted `__none__` sampling** — the idea that motivated half this
+  investigation, and it does not hold up. Training labels every unannotated
+  window of an annotated file `__none__`: a statement the user made in a
+  complete file, an assumption in an incomplete one, and section above shows
+  that assumption is wrong ~85% of the time. About **62,000 windows of real
+  performances of songs the model already knows were being taught as silence** —
+  the exact shape of the dominant error the last three releases chased. Dropping
+  them measured **+0.83 F1 at `prototypeBudget` 2000** and **−0.67 at 8000**.
+
+  The confound: withholding those windows lowers `__none__`'s `sqrt(support)`,
+  which raises every song's share of a fixed budget. Trained both ways at budget
+  8000, the `__none__` prototype count is identical (60 — `maxNonePrototypes`
+  binds either way) while song prototypes rise 7,035 -> 7,650, **+8.7%**. Most
+  of the apparent win was that share, worth more when songs are starved of
+  prototypes than the negative class is. Once songs have enough, what remains is
+  the loss: `__none__` has to cover everything that is not an annotated song,
+  and the unannotated time in incomplete files is a large part of that variety.
+
+  Kept behind `noneFromCompleteFilesOnly` / `--trusted-none`, default off, so it
+  can be re-measured if the annotated library's shape changes. **A change that
+  redistributes a fixed budget must be measured against a budget sweep**; this
+  one read as a clean simultaneous win on accuracy, recall and precision until
+  it was.
+- **Score-sequence smoothing** (widths 3–25). Raises window accuracy
+  (85.17 -> 89.11 at width 5) but blurs boundaries faster than it gains: F1
+  85.35 / 84.45 / 81.02 / 74.90 / 69.22. A slower, worse version of lengthening
+  the window.
+- **Feature-group weighting.** Halving the six performance-style features is
+  within noise (85.74 vs 85.69); ablating them costs 1.2 pt. Unlike `tempo_bpm`
+  in v2.6, practice-state features are not a noise source here.
+- **Relaxed anchor margin** (0.10, 0.12): 82.73 / 85.27. Reproduces the earlier
+  conclusion on the honest metric. 0.15 stands.
+- **`minAnchorRun`** 2 / 4 / 6: 85.16 / 84.96 / 80.41. 3 stands. 6 reaches
+  90.04% precision at 72.65% recall if a precision-first mode is ever wanted.
+- **`minSegmentSec`** 12 / 16: 85.49 / 85.06. Human-rejected predictions do
+  average 33s against 87s for accepted ones, but raising the floor discards
+  correct short segments at the same rate.
+- **`maxNonePrototypes`** 120 / 240: 84.96 / 83.46. 60 stands.
+
+### Where the remaining error is
+
+About 10.5% of annotated time is still missed on complete files, and part of
+that is structural rather than a model defect.
+
+1.9% of annotated time cannot be recovered under leave-one-out at all: ten songs
+have every annotation inside a single file, so the fold that tests them trains
+without them (Sleigh Ride 762s, Beethoven's 5th 286s, and eight more). 20 of 63
+songs appear in two files or fewer, and per-song recall tracks that closely. The
+highest-value next move is annotation, not architecture — a second file for each
+single-file song, and more coverage of the low-recall sparse pieces that
+`trainingSummary.underAnnotatedLabels` already lists.
+
+Marking a file complete is also what moves it into the honest evaluation
+population: 40 of 111 annotated files are still outside it.
+
 ## 2026-09-03 — v2.8: boundary micro-snapping, cadence-chord detection, and flourish excision (accepted)
 
 ### Context
@@ -62,6 +216,9 @@ Full library in-sample test (111 files, 162,753 extracted windows):
 - **Segment Recall:** 95.2%
 - **Segment Precision:** 62.5%
 - **Segment F1:** 75.5%
+
+#### 3. Architectural Experiments
+Detailed experimentation logs exploring window duration sweeps ($2.5\text{s} \to 6.0\text{s}$), multi-scale dual-window concatenation, and note-density-modulated confidence thresholding are documented in [`ml/experiments-2026-09-03.md`](./experiments-2026-09-03.md).
 
 ---
 

@@ -14,10 +14,12 @@ export const NO_SONG_LABEL = '__none__';
  * to name its report files, so runs stay referable without manual renaming.
  * Keep `ml/CHANGELOG.md` in sync with each bump.
  */
-export const MODEL_VERSION = 'v2.8';
+export const MODEL_VERSION = 'v2.10';
 
 /**
- * Version 2 features (v2.8 boundary snapping & cadence/flourish trimming, v2.7 acoustic sustain decay):
+ * Version 2 features (v2.8 boundary snapping & cadence/flourish trimming, v2.7 acoustic sustain decay).
+ * v2.9 z-scores them; v2.10 leaves the set unchanged and alters only training
+ * data selection, the prototype budget and the decoder's link rule:
  *
  * Notes released under a held damper pedal (CC 64) ring out acoustically
  * up to 0.7s (0.6s above C5) with a 0.5x decayed tail weight, preventing false
@@ -66,6 +68,8 @@ const LOW_CHROMA_START = FEATURE_NAMES.indexOf('pcLow_C');
 const HIGH_CHROMA_START = FEATURE_NAMES.indexOf('pcHigh_C');
 /** Index of `low_register_ratio`. */
 const LOW_REGISTER_RATIO_INDEX = FEATURE_NAMES.indexOf('low_register_ratio');
+/** Index of `silence_ratio`, read by the decoder's link rule. */
+const SILENCE_RATIO_INDEX = FEATURE_NAMES.indexOf('silence_ratio');
 
 /** Sub-window bin used for polyphony spread and silence-ratio estimates. */
 const POLYPHONY_BIN_SEC = 0.25;
@@ -83,6 +87,14 @@ export interface AnnotatedMidiFile {
   filename: string;
   midiPath: string;
   annotations: AnnotationInterval[];
+  /**
+   * The file is marked complete, so its unannotated time is deliberately
+   * unlabeled rather than merely unreviewed. Evaluation needs the distinction:
+   * predicted time landing in a complete file's gap is a false positive, while
+   * the same prediction in an incomplete file may be material the user has not
+   * reached yet. See `ml/eval.ts`.
+   */
+  isComplete: boolean;
 }
 
 export interface NoteEvent {
@@ -101,6 +113,11 @@ export interface WindowSample {
   endTime: number;
   label: string;
   features: number[];
+  /**
+   * The window's file is marked complete. Only then does a `__none__` label on
+   * an unannotated window assert anything: see `noneFromCompleteFilesOnly`.
+   */
+  fileIsComplete: boolean;
 }
 
 export interface TrainConfig {
@@ -121,8 +138,43 @@ export interface TrainConfig {
   viterbiChangePenalty?: number;
   /** Softmax temperature for per-window emission scores (default 1.0). */
   temperature?: number;
-  /** Feature normalization: 'zscore' (v1 behaviour), 'minmax' (default), 'none'. */
+  /** Feature normalization: 'zscore' (default), 'minmax', 'none'. */
   featureScaling?: 'zscore' | 'minmax' | 'none';
+  /**
+   * Draw `__none__` training windows only from files marked complete
+   * (**default false** — measured to help only at an undersized prototype
+   * budget; see the v2.10 entry in `ml/CHANGELOG.md` before turning it on).
+   *
+   * The premise is sound: training labels every unannotated window of an
+   * annotated file `__none__`, which is a statement the user made in a complete
+   * file but an assumption in an incomplete one, where 63% of the audio has no
+   * annotation yet and the review queue shows the user accepts predictions over
+   * that time 85% of the time by duration.
+   *
+   * It measured as a clear win at `prototypeBudget` 2000 (+0.83 segment F1) and
+   * as a regression at 8000 (-0.67). Most of the apparent gain was a side
+   * effect: withholding ~62k windows lowers `__none__`'s `sqrt(support)` and so
+   * raises every song's share of a fixed budget by ~9%, which is worth more
+   * when songs are starved of prototypes than the negative class is worth. Once
+   * songs have enough prototypes, what remains is the loss: `__none__` has to
+   * cover everything that is not an annotated song, and the unannotated time in
+   * incomplete files is a large part of that variety.
+   *
+   * Falls back to every `__none__` window when no file is complete, so a fresh
+   * library still trains.
+   */
+  noneFromCompleteFilesOnly?: boolean;
+  /**
+   * A window whose `silence_ratio` reaches this value may not be linked into
+   * an anchor run (default 0.7; 1 or more disables).
+   *
+   * Anchor linking fills any window whose evidence is weak, and a window of
+   * dead air always has weak evidence, so one recognisable phrase could claim
+   * the silence after it and then carry on into whatever followed. Silence is
+   * not ambiguous evidence that the song continues; it is evidence that
+   * nothing is being played.
+   */
+  linkMaxSilenceRatio?: number;
   /**
    * MIDI note pitch that separates the low (left-hand) register from the high
    * (right-hand) register in the split pitch-class features. Middle C is 60.
@@ -202,6 +254,11 @@ export interface SongSegmentModel {
     /** Hand-masked one-hand copies of song windows added during training. */
     augmentedSamples?: number;
     noneSamples: number;
+    /**
+     * `__none__` windows withheld because their file is not marked complete.
+     * See `TrainConfig.noneFromCompleteFilesOnly`.
+     */
+    noneSamplesDroppedAsUntrusted?: number;
     labelCounts: Record<string, number>;
     /** The average per-label prototype budget. */
     prototypesPerLabel?: number;
@@ -280,6 +337,7 @@ interface AnnotationSqlRow {
   end_time: number;
   local_path: string;
   filename: string;
+  is_complete: number;
 }
 
 function toNum(value: unknown): number {
@@ -292,21 +350,45 @@ function toNum(value: unknown): number {
  * use. Defaults are applied here. A saved model records these values, so a
  * change to a default does not change the behaviour of an existing model.
  */
-export function resolveTrainConfig(config: TrainConfig): Required<
+/**
+ * Defaults for the four fields `TrainConfig` requires. Every optional field's
+ * default lives in `resolveTrainConfig`. Both entry points that build a config
+ * from user input — `ml/train.ts` and the `rebuild-model` route — read these,
+ * so the CLI and the sidebar button cannot train different models.
+ */
+export const TRAIN_CONFIG_DEFAULTS = {
+  windowSec: 6,
+  stepSec: 1,
+  k: 7,
+  maxNoneToSongRatio: 1.5
+} as const;
+
+/**
+ * A `TrainConfig` with every optional field filled in. Anything that builds the
+ * model takes this rather than the caller's partial config, so a default has
+ * exactly one definition (`resolveTrainConfig`) and cannot be restated — and
+ * disagreed with — at a use site.
+ */
+export type ResolvedTrainConfig = Required<
   Pick<
     TrainConfig,
     'prototypeBudget' | 'maxNonePrototypes' | 'featureScaling' | 'scoreMode'
     | 'scoreNeighbors' | 'decoder' | 'anchorMargin' | 'minAnchorRun'
     | 'fillMinMargin' | 'fillTopK' | 'linkConfidence' | 'temperature'
     | 'viterbiChangePenalty' | 'kernelScale' | 'registerDivide'
-    | 'handMaskAugmentFraction'
+    | 'handMaskAugmentFraction' | 'noneFromCompleteFilesOnly'
+    | 'linkMaxSilenceRatio'
   >
-> & TrainConfig {
+> & TrainConfig;
+
+export function resolveTrainConfig(config: TrainConfig): ResolvedTrainConfig {
   return {
     ...config,
-    prototypeBudget: config.prototypeBudget ?? 2000,
+    prototypeBudget: config.prototypeBudget ?? 8000,
     maxNonePrototypes: config.maxNonePrototypes ?? 60,
-    featureScaling: config.featureScaling ?? 'minmax',
+    featureScaling: config.featureScaling ?? 'zscore',
+    noneFromCompleteFilesOnly: config.noneFromCompleteFilesOnly ?? false,
+    linkMaxSilenceRatio: config.linkMaxSilenceRatio ?? 0.7,
     registerDivide: config.registerDivide ?? 60,
     handMaskAugmentFraction: config.handMaskAugmentFraction ?? 0,
     scoreMode: config.scoreMode ?? 'min',
@@ -353,7 +435,8 @@ export function loadAnnotatedMidiFiles(dbPath: string, rootDir: string): Annotat
         a.start_time,
         a.end_time,
         f.local_path,
-        f.filename
+        f.filename,
+        f.is_complete
       FROM annotations a
       JOIN files f ON f.id = a.file_id
       ORDER BY a.file_id ASC, a.start_time ASC
@@ -374,7 +457,8 @@ export function loadAnnotatedMidiFiles(dbPath: string, rootDir: string): Annotat
         fileId,
         filename: row.filename,
         midiPath,
-        annotations: []
+        annotations: [],
+        isComplete: toNum(row.is_complete) === 1
       });
     }
 
@@ -680,7 +764,8 @@ export function buildSamplesForFile(
       startTime,
       endTime: startTime + config.windowSec,
       label: labelInfo.label,
-      features
+      features,
+      fileIsComplete: file.isComplete
     });
   }
 
@@ -793,11 +878,11 @@ function squaredDistance(a: number[], b: number[]): number {
  */
 function allocatePrototypeBudgets(
   support: Map<number, number>,
-  config: TrainConfig,
+  config: ResolvedTrainConfig,
   noneLabelIndex: number
 ): Map<number, number> {
-  const maxTotal = Math.max(1, config.prototypeBudget ?? 1200);
-  const maxNone = Math.max(1, config.maxNonePrototypes ?? 120);
+  const maxTotal = Math.max(1, config.prototypeBudget);
+  const maxNone = Math.max(1, config.maxNonePrototypes);
 
   let sumSqrt = 0;
   const sqrts = new Map<number, number>();
@@ -849,7 +934,7 @@ function estimateKernelScale(
 
 function buildPrototypesFromGroups(
   normalizedGroups: Map<number, number[][]>,
-  config: TrainConfig,
+  config: ResolvedTrainConfig,
   noneLabelIndex: number
 ): {
   prototypes: Array<{ features: number[]; labelIndex: number }>;
@@ -868,7 +953,7 @@ function buildPrototypesFromGroups(
   const songLabelCount = Math.max(1, support.size - (support.has(noneLabelIndex) ? 1 : 0));
   const perLabelBudget = Math.max(
     1,
-    Math.floor(Math.max(1, config.prototypeBudget ?? 1200) / songLabelCount)
+    Math.floor(Math.max(1, config.prototypeBudget) / songLabelCount)
   );
   const prototypes: Array<{ features: number[]; labelIndex: number }> = [];
   const prototypeCounts = new Array<number>(labelCount).fill(0);
@@ -888,7 +973,7 @@ function buildPrototypesFromGroups(
     (min, count) => (count > 0 && count < min ? count : min),
     Number.POSITIVE_INFINITY
   );
-  const requested = Math.max(1, Math.floor(config.scoreNeighbors ?? 1));
+  const requested = Math.max(1, Math.floor(config.scoreNeighbors));
   const scoreNeighbors = Number.isFinite(smallestCount)
     ? Math.max(1, Math.min(requested, smallestCount))
     : 1;
@@ -970,10 +1055,21 @@ function fitModelFromSamples(
     throw new Error('No training samples produced. Add annotations first.');
   }
 
+  // Resolve once, then build from the resolved values only. The model saves
+  // this same object, so reading a default off the caller's partial config
+  // would let the saved config describe a model that was not built that way.
+  const resolved = resolveTrainConfig(config);
+
   const positive = samples.filter((sample) => sample.label !== NO_SONG_LABEL);
-  const negative = samples.filter((sample) => sample.label === NO_SONG_LABEL);
-  const augmented = augmentHandMask(positive, config.handMaskAugmentFraction ?? 0);
-  const maxNone = Math.max(1, Math.floor(positive.length * config.maxNoneToSongRatio));
+  const allNegative = samples.filter((sample) => sample.label === NO_SONG_LABEL);
+  // An unannotated window only means "no song" in a file the user marked
+  // complete. See `noneFromCompleteFilesOnly`.
+  const trustedNegative = resolved.noneFromCompleteFilesOnly
+    ? allNegative.filter((sample) => sample.fileIsComplete)
+    : allNegative;
+  const negative = trustedNegative.length > 0 ? trustedNegative : allNegative;
+  const augmented = augmentHandMask(positive, resolved.handMaskAugmentFraction);
+  const maxNone = Math.max(1, Math.floor(positive.length * resolved.maxNoneToSongRatio));
   const keptNegative = evenlySample(negative, maxNone);
   const kept = [...positive, ...augmented, ...keptNegative];
 
@@ -985,8 +1081,7 @@ function fitModelFromSamples(
   const labelToIndex = new Map(labels.map((label, idx) => [label, idx]));
 
   const rawVectors = kept.map((sample) => sample.features);
-  const scalingMode = config.featureScaling ?? 'minmax';
-  const { means, stds } = standardize(rawVectors, scalingMode);
+  const { means, stds } = standardize(rawVectors, resolved.featureScaling);
 
   const normalizedGroups = new Map<number, number[][]>();
   for (const sample of kept) {
@@ -1003,7 +1098,7 @@ function fitModelFromSamples(
   const {
     prototypes, prototypeCounts, kernelScale, scoreNeighbors,
     perLabelBudget, underBudgetLabels
-  } = buildPrototypesFromGroups(normalizedGroups, config, noneLabelIndex);
+  } = buildPrototypesFromGroups(normalizedGroups, resolved, noneLabelIndex);
 
   const labelCounts: Record<string, number> = {};
   for (const sample of kept) {
@@ -1019,7 +1114,7 @@ function fitModelFromSamples(
     // Save the resolved config, not the partial config from the caller. A
     // model that omits `decoder`, `scoreMode` or `featureScaling` changes
     // behaviour when a default changes.
-    config: resolveTrainConfig(config),
+    config: resolved,
     featureNames: [...FEATURE_NAMES],
     labels,
     featureMeans: means,
@@ -1035,6 +1130,7 @@ function fitModelFromSamples(
       positiveSamples: positive.length,
       augmentedSamples: augmented.length,
       noneSamples: keptNegative.length,
+      noneSamplesDroppedAsUntrusted: allNegative.length - negative.length,
       labelCounts,
       prototypesPerLabel: perLabelBudget,
       underAnnotatedLabels: underBudgetLabels
@@ -1269,7 +1365,9 @@ function computeEvidence(scoresList: number[][]): WindowEvidence[] {
 function anchorLinkDecode(
   evidence: WindowEvidence[],
   config: TrainConfig,
-  noneLabelIndex: number
+  noneLabelIndex: number,
+  /** Per-window: may this window be linked into a neighbouring anchor run? */
+  linkable: boolean[]
 ): { labels: number[]; confidence: number[] } {
   const n = evidence.length;
   const labels = new Array<number>(n).fill(-1);
@@ -1291,6 +1389,8 @@ function anchorLinkDecode(
 
   const canFill = (i: number, label: number): boolean => {
     if (labels[i] !== -1) return false;
+    // Dead air is not ambiguous evidence that the song continues.
+    if (!linkable[i]) return false;
     const e = evidence[i];
     if (e.bestLabel === label) return true;
     if (e.margin >= anchorMargin) return false;
@@ -1511,7 +1611,9 @@ function buildUnlabeledWindows(notes: NoteEvent[], config: Pick<TrainConfig, 'wi
       startTime,
       endTime: startTime + config.windowSec,
       label: NO_SONG_LABEL,
-      features: featureInfo.features
+      features: featureInfo.features,
+      // Prediction input, never a training sample.
+      fileIsComplete: false
     });
   }
   return windows;
@@ -1547,7 +1649,16 @@ export function predictWindowsFromSamples(
   if (decoder === 'anchor') {
     const noneLabelIndex = model.labels.indexOf(NO_SONG_LABEL);
     const evidence = computeEvidence(scoresList);
-    const { labels, confidence } = anchorLinkDecode(evidence, model.config, noneLabelIndex);
+    // A model saved before this rule existed has no value here, and a change
+    // to a default must not change an existing model (see v2.3 in the
+    // changelog), so an absent value means "off" rather than the new default.
+    const maxLinkSilence = model.config.linkMaxSilenceRatio ?? Number.POSITIVE_INFINITY;
+    const linkable = windows.map(
+      (window) => window.features[SILENCE_RATIO_INDEX] < maxLinkSilence
+    );
+    const { labels, confidence } = anchorLinkDecode(
+      evidence, model.config, noneLabelIndex, linkable
+    );
     const predictions: WindowPrediction[] = [];
     for (let i = 0; i < windowCount; i++) {
       predictions.push({
