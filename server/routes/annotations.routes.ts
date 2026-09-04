@@ -195,6 +195,39 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+router.post('/:id/split', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const holeStartTime = parseOptionalNumber(req.body.holeStartTime ?? req.body.startTime);
+    const holeEndTime = parseOptionalNumber(req.body.holeEndTime ?? req.body.endTime);
+
+    if (holeStartTime === undefined || holeEndTime === undefined) {
+      return res.status(400).json({ error: 'holeStartTime and holeEndTime are required' });
+    }
+
+    if (holeStartTime >= holeEndTime) {
+      return res.status(400).json({ error: 'holeStartTime must be less than holeEndTime' });
+    }
+
+    const existing = AnnotationModel.findById(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Annotation not found' });
+    }
+
+    if (holeStartTime <= existing.start_time || holeEndTime >= existing.end_time) {
+      return res.status(400).json({
+        error: `Split hole [${holeStartTime}, ${holeEndTime}] must be strictly within annotation bounds [${existing.start_time}, ${existing.end_time}]`
+      });
+    }
+
+    const result = AnnotationModel.split(id, holeStartTime, holeEndTime);
+    res.json(result);
+  } catch (error) {
+    console.error('Error splitting annotation:', error);
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to split annotation' });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id);

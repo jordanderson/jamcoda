@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { annotationsApi, ignoredSectionsApi } from '@/api/localEndpoints';
+import { annotationsApi } from '@/api/localEndpoints';
 
 export function useCreateAnnotation() {
   const queryClient = useQueryClient();
@@ -58,6 +58,31 @@ export function useDeleteAnnotation() {
   });
 }
 
+export function useSplitAnnotation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      holeStartTime,
+      holeEndTime
+    }: {
+      id: number;
+      holeStartTime: number;
+      holeEndTime: number;
+    }) => annotationsApi.split(id, { holeStartTime, holeEndTime }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fileDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['filesByDate'] });
+      queryClient.invalidateQueries({ queryKey: ['songPlayHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['uniqueSongNames'] });
+      queryClient.invalidateQueries({ queryKey: ['rebuildStatus'] });
+      queryClient.invalidateQueries({ queryKey: ['predictionReviews'] });
+      queryClient.invalidateQueries({ queryKey: ['predictionReviewQueue'] });
+    }
+  });
+}
+
 export function useUniqueSongNames() {
   return useQuery({
     queryKey: ['uniqueSongNames'],
@@ -109,32 +134,6 @@ export function useRenameSongName() {
       queryClient.invalidateQueries({ queryKey: ['uniqueSongNames'] });
       queryClient.invalidateQueries({ queryKey: ['predictionReviews'] });
       queryClient.invalidateQueries({ queryKey: ['predictionReviewQueue'] });
-    }
-  });
-}
-
-export function useCreateIgnoredSection() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ignoredSectionsApi.create,
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['fileDetail', variables.fileId] });
-      queryClient.invalidateQueries({ queryKey: ['filesByDate'] });
-      queryClient.invalidateQueries({ queryKey: ['predictionReviews'] });
-      queryClient.invalidateQueries({ queryKey: ['predictionReviewQueue'] });
-    }
-  });
-}
-
-export function useDeleteIgnoredSection() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ignoredSectionsApi.delete,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fileDetail'] });
-      queryClient.invalidateQueries({ queryKey: ['filesByDate'] });
     }
   });
 }

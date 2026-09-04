@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Scissors, Sparkles } from 'lucide-react';
 import { formatTime } from '@/utils/format'
 import { useSongSuggestions } from '@/hooks/useAnnotations'
 
@@ -9,17 +9,27 @@ interface AnnotationModalProps {
   endTime: number;
   existingSongNames: string[];
   onSubmit: (songName: string, startTime?: number, endTime?: number) => void;
-  onSubmitIgnoredSection?: (startTime: number, endTime: number, reason?: string) => void;
   onCancel: () => void;
   initialSongName?: string;
   mode?: 'create' | 'edit';
   allowTimeEdit?: boolean;
-  enableIgnoredSectionOption?: boolean;
-  initialAction?: 'annotation' | 'ignored';
   /** File id used to fetch model-ranked song suggestions in create mode. */
   fileId?: number | null;
   /** Optional callback to snap start/end to nearest played notes. */
   onSnapTimes?: (start: number, end: number) => { startTime: number; endTime: number };
+  /** Existing annotation containing the selected region that can be split into two segments. */
+  splitTargetAnnotation?: {
+    id: number;
+    song_name: string;
+    start_time: number;
+    end_time: number;
+  } | null;
+  /** Callback to split the containing annotation around the selected region. */
+  onSplitAnnotation?: (
+    annotation: { id: number; song_name: string; start_time: number; end_time: number },
+    startTime: number,
+    endTime: number
+  ) => Promise<void> | void;
 }
 
 export function AnnotationModal({
@@ -28,22 +38,20 @@ export function AnnotationModal({
   endTime,
   existingSongNames,
   onSubmit,
-  onSubmitIgnoredSection,
   onCancel,
   initialSongName = '',
   mode = 'create',
   allowTimeEdit = false,
-  enableIgnoredSectionOption = false,
-  initialAction = 'annotation',
   fileId = null,
-  onSnapTimes
+  onSnapTimes,
+  splitTargetAnnotation,
+  onSplitAnnotation
 }: AnnotationModalProps) {
   const [inputValue, setInputValue] = useState(initialSongName);
-  const [ignoredReason, setIgnoredReason] = useState('');
   const [editStartTime, setEditStartTime] = useState(startTime);
   const [editEndTime, setEditEndTime] = useState(endTime);
-  const [actionType, setActionType] = useState<'annotation' | 'ignored'>(initialAction);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isSplitting, setIsSplitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Suggest songs from the model for this region while the create modal is open.
@@ -65,33 +73,48 @@ export function AnnotationModal({
   useEffect(() => {
     if (isOpen) {
       setInputValue(initialSongName);
-      setIgnoredReason('');
       setEditStartTime(startTime);
       setEditEndTime(endTime);
-      setActionType(initialAction);
       setSelectedIndex(0);
+      setIsSplitting(false);
       // Focus the input once the modal has rendered.
       setTimeout(() => inputRef.current?.focus(), 10);
     }
-  }, [isOpen, initialSongName, startTime, endTime, initialAction]);
+  }, [isOpen, initialSongName, startTime, endTime]);
 
   // Reset the selected index when suggestions change.
   useEffect(() => {
     setSelectedIndex(0);
   }, [inputValue]);
 
+  const effectiveStartTime = allowTimeEdit ? editStartTime : startTime;
+  const effectiveEndTime = allowTimeEdit ? editEndTime : endTime;
+  const canSplitTarget = Boolean(
+    splitTargetAnnotation &&
+    onSplitAnnotation &&
+    splitTargetAnnotation.start_time < effectiveStartTime &&
+    effectiveEndTime < splitTargetAnnotation.end_time &&
+    effectiveStartTime < effectiveEndTime
+  );
+
+  const handleSplit = async () => {
+    if (!splitTargetAnnotation || !onSplitAnnotation || !canSplitTarget) return;
+    setIsSplitting(true);
+    try {
+      await onSplitAnnotation(
+        splitTargetAnnotation,
+        effectiveStartTime,
+        effectiveEndTime
+      );
+    } catch {
+      // Caller handles error notification
+    } finally {
+      setIsSplitting(false);
+    }
+  };
+
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (actionType === 'ignored') {
-      if (!onSubmitIgnoredSection) return;
-      onSubmitIgnoredSection(
-        allowTimeEdit ? editStartTime : startTime,
-        allowTimeEdit ? editEndTime : endTime,
-        ignoredReason.trim() || undefined
-      );
-      return;
-    }
-
     const songName = inputValue.trim();
     if (songName) {
       if (allowTimeEdit || editStartTime !== startTime || editEndTime !== endTime) {
@@ -105,7 +128,7 @@ export function AnnotationModal({
   const handleSelectSuggestion = (songName: string) => {
     setInputValue(songName);
     // Submit immediately when selecting from autocomplete (only when not editing times).
-    if (!allowTimeEdit && actionType === 'annotation') {
+    if (!allowTimeEdit) {
       if (editStartTime !== startTime || editEndTime !== endTime) {
         onSubmit(songName, editStartTime, editEndTime);
       } else {
@@ -117,9 +140,6 @@ export function AnnotationModal({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       onCancel();
-    } else if (actionType === 'ignored' && e.key === 'Enter') {
-      e.preventDefault();
-      handleSubmit();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSelectedIndex(prev => Math.min(prev + 1, suggestions.length - 1));
@@ -148,14 +168,15 @@ export function AnnotationModal({
         onClick={e => e.stopPropagation()}
       >
         <div className="p-6">
-          <h2 className="text-xl font-bold mb-2 text-gray-900">
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
             {mode === 'edit' ? 'Edit Annotation' : 'Create Annotation'}
           </h2>
+
           {!allowTimeEdit && (
-            <div className="mb-4 flex items-center justify-between text-sm text-gray-600">
-              <p>
-                Region: {formatTime(editStartTime)} - {formatTime(editEndTime)} ({(editEndTime - editStartTime).toFixed(1)}s)
-              </p>
+            <div className="flex items-center justify-between text-xs text-gray-500 mb-4">
+              <span>
+                Region: <strong className="font-semibold text-gray-800">{formatTime(effectiveStartTime)} – {formatTime(effectiveEndTime)}</strong> ({(effectiveEndTime - effectiveStartTime).toFixed(1)}s)
+              </span>
               {onSnapTimes && (
                 <button
                   type="button"
@@ -165,7 +186,7 @@ export function AnnotationModal({
                     setEditEndTime(snapped.endTime);
                   }}
                   className="text-xs text-indigo-600 hover:text-indigo-800 font-medium inline-flex items-center gap-1 hover:underline cursor-pointer"
-                  title="Snap selection to nearest played notes"
+                  title="Snap to nearest played notes"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   Snap to Notes
@@ -174,28 +195,75 @@ export function AnnotationModal({
             </div>
           )}
 
+          {canSplitTarget && splitTargetAnnotation && (
+            <div className="mb-4 p-3.5 rounded-lg border border-amber-200 bg-amber-50/80">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 uppercase tracking-wide">
+                    <Scissors className="w-3.5 h-3.5" />
+                    Inside Existing Annotation
+                  </div>
+                  <p className="mt-1 text-sm font-bold text-gray-900 truncate">
+                    {splitTargetAnnotation.song_name}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Current span: {formatTime(splitTargetAnnotation.start_time)} – {formatTime(splitTargetAnnotation.end_time)}
+                  </p>
+                  <p className="mt-1.5 text-xs text-amber-900 leading-relaxed">
+                    Split into two segments ({formatTime(splitTargetAnnotation.start_time)} – {formatTime(effectiveStartTime)} and {formatTime(effectiveEndTime)} – {formatTime(splitTargetAnnotation.end_time)}) with a {formatTime(effectiveStartTime)} – {formatTime(effectiveEndTime)} hole.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSplit}
+                  disabled={isSplitting}
+                  className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  title="Split annotation into two segments with this hole"
+                >
+                  <Scissors className="w-3.5 h-3.5" />
+                  {isSplitting ? 'Splitting...' : 'Split Annotation'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {canSplitTarget && splitTargetAnnotation && (
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-white px-2 text-gray-400 font-medium">
+                  or annotate this region as a song
+                </span>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
-          {allowTimeEdit && (
-            <div className="mb-4 grid grid-cols-2 gap-4">
+            {allowTimeEdit && (
+              <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     Start Time (seconds)
                   </label>
                   <input
                     type="number"
                     step="0.1"
+                    min="0"
                     value={editStartTime}
                     onChange={e => setEditStartTime(parseFloat(e.target.value))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9198E5] focus:border-transparent"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     End Time (seconds)
                   </label>
                   <input
                     type="number"
                     step="0.1"
+                    min="0"
                     value={editEndTime}
                     onChange={e => setEditEndTime(parseFloat(e.target.value))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9198E5] focus:border-transparent"
@@ -221,37 +289,9 @@ export function AnnotationModal({
                     </button>
                   )}
                 </div>
-            </div>
-          )}
+              </div>
+            )}
 
-          {enableIgnoredSectionOption && mode === 'create' && (
-            <div className="mb-4 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setActionType('annotation')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  actionType === 'annotation'
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Create Annotation
-              </button>
-              <button
-                type="button"
-                onClick={() => setActionType('ignored')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  actionType === 'ignored'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Mark Invalid
-              </button>
-            </div>
-          )}
-
-          {actionType === 'annotation' ? (
             <div className="mb-4">
               {suggestionsQuery.isFetching && (
                 <div className="mb-4 flex items-center gap-2 text-xs text-gray-500">
@@ -326,48 +366,42 @@ export function AnnotationModal({
                 </p>
               )}
             </div>
-          ) : (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Reason (optional)
-              </label>
-              <input
-                ref={inputRef}
-                type="text"
-                value={ignoredReason}
-                onChange={e => setIgnoredReason(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="e.g. noodling, metronome, talking, artifact"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#9198E5] focus:border-transparent"
-              />
-            </div>
-          )}
 
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                onClick={onCancel}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={actionType === 'annotation' && !inputValue.trim()}
-                className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {actionType === 'ignored'
-                  ? 'Mark Invalid'
-                  : (mode === 'edit' ? 'Save Changes' : 'Create Annotation')}
-              </button>
+            <div className="flex gap-3 justify-between items-center">
+              {canSplitTarget && splitTargetAnnotation ? (
+                <button
+                  type="button"
+                  onClick={handleSplit}
+                  disabled={isSplitting}
+                  className="px-3.5 py-2 text-xs font-semibold text-amber-800 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  <Scissors className="w-3.5 h-3.5" />
+                  {isSplitting ? 'Splitting...' : 'Split Annotation'}
+                </button>
+              ) : <div />}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  disabled={isSplitting}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!inputValue.trim() || isSplitting}
+                  className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {mode === 'edit' ? 'Save Changes' : 'Create Annotation'}
+                </button>
+              </div>
             </div>
           </form>
 
-          {actionType === 'annotation' && (
-            <p className="mt-4 text-xs text-gray-500 text-center">
-              Tip: Use ↑↓ to navigate, Enter to select, Esc to cancel
-            </p>
-          )}
+          <p className="mt-4 text-xs text-gray-500 text-center">
+            Tip: Use ↑↓ to navigate, Enter to select, Esc to cancel
+          </p>
         </div>
       </div>
     </div>

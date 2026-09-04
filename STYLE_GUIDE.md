@@ -239,7 +239,7 @@ Use `useToasts()` for the queue and render `<ToastStack>` last in the page tree:
 ```jsx
 const { toasts, showToast, dismissToast, clearToasts } = useToasts()
 
-showToast({ type: 'success', message: 'Ignored section deleted.' })
+showToast({ type: 'success', message: 'Annotation deleted.' })
 showToast({
   type: 'success',
   message: 'Generated 4 prediction segments for this file.'

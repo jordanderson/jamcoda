@@ -45,7 +45,6 @@ beforeEach(() => {
   const db = getDb();
   db.exec(`
     DELETE FROM prediction_reviews;
-    DELETE FROM ignored_sections;
     DELETE FROM annotations;
     DELETE FROM files;
   `);

@@ -124,10 +124,9 @@ async function main() {
     }
   }
 
-  if (result.annotatedRangeCount > 0 || result.ignoredRangeCount > 0) {
+  if (result.annotatedRangeCount > 0) {
     console.log(
-      `Excluded ranges: ${result.annotatedRangeCount} annotated`
-      + ` + ${result.ignoredRangeCount} ignored;`
+      `Excluded ranges: ${result.annotatedRangeCount} annotated;`
       + ` altered ${result.excludedSegmentCount} of ${result.rawSegmentCount} raw segment(s).`
     );
   }

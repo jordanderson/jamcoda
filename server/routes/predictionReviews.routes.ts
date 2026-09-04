@@ -398,7 +398,6 @@ router.post('/run', async (req: Request, res: Response) => {
       insertedCount: result.insertedCount,
       segmentCount: result.segments.length,
       annotatedRangeCount: result.annotatedRangeCount,
-      ignoredRangeCount: result.ignoredRangeCount,
       excludedSegmentCount: result.excludedSegmentCount,
       bookmarkSplitCount: result.bookmarkSplitCount,
       bookmarkCount: result.bookmarks.length,

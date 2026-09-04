@@ -7,11 +7,10 @@ import {
   stringToTextColor,
   stringToTimelineColor
 } from './pianoRollColors'
-import type { RollAnnotation, RollIgnoredSection, RollPrediction } from './pianoRollTypes'
+import type { RollAnnotation, RollPrediction } from './pianoRollTypes'
 
 /**
- * The three chip rows below the notes: annotations, predictions, and ignored
- * sections.
+ * The two chip rows below the notes: annotations and predictions.
  *
  * Each row is `memo`'d. A chip repeats its label once per 1000px, plus
  * resize handles and a delete button per label for annotations. None of it
@@ -217,65 +216,3 @@ export const PredictionTimeline = memo(function PredictionTimeline({
   )
 })
 
-interface IgnoredTimelineProps {
-  ignoredSections: RollIgnoredSection[]
-  pixelsPerTimeStep: number
-  onIgnoredSectionClick?: (ignoredSectionId: number) => void
-  onSeek: (time: number) => void
-}
-
-export const IgnoredTimeline = memo(function IgnoredTimeline({
-  ignoredSections,
-  pixelsPerTimeStep,
-  onIgnoredSectionClick,
-  onSeek
-}: IgnoredTimelineProps) {
-  if (ignoredSections.length === 0) {
-    return (
-      <div className="absolute inset-0 flex items-center px-3 text-xs text-gray-500">
-        No ignored sections
-      </div>
-    )
-  }
-
-  return (
-    <>
-      {ignoredSections.map((ignoredSection) => {
-        const startX = ignoredSection.startTime * pixelsPerTimeStep
-        const width = Math.max(28, (ignoredSection.endTime - ignoredSection.startTime) * pixelsPerTimeStep)
-        const labelOffsets = buildRepeatingLabelOffsets(width)
-        const label = ignoredSection.reason?.trim()
-          ? `Ignored: ${ignoredSection.reason}`
-          : 'Ignored'
-
-        return (
-          <button
-            key={`ignored-timeline-${ignoredSection.id}`}
-            type="button"
-            onClick={() => {
-              if (onIgnoredSectionClick) {
-                onIgnoredSectionClick(ignoredSection.id)
-                return
-              }
-              onSeek(ignoredSection.startTime)
-            }}
-            className="absolute top-1 h-8 rounded border border-gray-500/40 bg-gray-300/70 text-[11px] font-semibold text-gray-900 text-left overflow-hidden shadow-sm hover:brightness-95 transition-[filter]"
-            style={{ left: `${startX}px`, width: `${width}px` }}
-            aria-label={`${label} (${ignoredSection.startTime.toFixed(1)} to ${ignoredSection.endTime.toFixed(1)} seconds)`}
-            title={`${label} (${ignoredSection.startTime.toFixed(1)}s - ${ignoredSection.endTime.toFixed(1)}s)`}
-          >
-            {labelOffsets.map((offset) => (
-              <span
-                key={`${ignoredSection.id}-${offset}`}
-                className="absolute top-1/2 -translate-y-1/2 whitespace-nowrap pointer-events-none"
-                style={{ left: `${offset}px` }}
-              >
-                {label}
-              </span>
-            ))}
-          </button>
-        )
-      })}
-    </>
-  )
-})

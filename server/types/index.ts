@@ -8,7 +8,6 @@
 export type {
   Annotation,
   FileRecord,
-  IgnoredSection,
   PredictionReview,
   PredictionReviewStatus,
   SongPlayHistoryRow
@@ -61,14 +60,6 @@ export interface UpdateAnnotationData {
   startTime?: number;
   endTime?: number;
   notes?: string;
-}
-
-/** Payload for creating an ignored time range for a file. */
-export interface CreateIgnoredSectionData {
-  fileId: number;
-  startTime: number;
-  endTime: number;
-  reason?: string | null;
 }
 
 /** Response returned after globally renaming a song. */

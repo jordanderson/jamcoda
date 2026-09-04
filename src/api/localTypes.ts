@@ -2,19 +2,16 @@
  * Response and request shapes for the local backend API.
  *
  * DB row types are re-exported from `core/types`, shared with the server, so
- * the two sides cannot drift. They previously did: `IgnoredSection.reason`
- * was `string | null` on the server but `reason?: string` here.
+ * the two sides cannot drift.
  */
 export type {
   Annotation,
-  IgnoredSection,
   PredictionReview,
   PredictionReviewStatus,
   SongPlayHistoryRow
 } from '@core/types';
 
 import type {
-  IgnoredSection,
   PredictionReview,
   SongPlayHistoryRow
 } from '@core/types';
@@ -99,9 +96,7 @@ export interface RunPredictionForFileResponse {
   insertedCount: number;
   segmentCount: number;
   annotatedRangeCount?: number;
-  ignoredRangeCount?: number;
   excludedSegmentCount?: number;
-  ignoredSegmentCount?: number;
 }
 
 /** Request body for rebuilding the segmentation model from annotations. */
@@ -246,19 +241,6 @@ export interface FileDetailAnnotation {
   updated_at: number;
 }
 
-/** Standalone ignored-sections list response. */
-export interface IgnoredSectionListResponse {
-  sections: IgnoredSection[];
-}
-
-/** Request payload for creating an ignored section. */
-export interface CreateIgnoredSectionRequest {
-  fileId: number;
-  startTime: number;
-  endTime: number;
-  reason?: string | null;
-}
-
 /** One model-ranked song suggestion for a time range. */
 export interface SongSuggestion {
   songName: string;
@@ -269,12 +251,6 @@ export interface SongSuggestion {
 /** Response from POST /api/annotations/song-suggestions. */
 export interface SongSuggestionsResponse {
   suggestions: SongSuggestion[];
-}
-
-/** Response after creating an ignored section and clearing overlaps. */
-export interface CreateIgnoredSectionResponse {
-  section: IgnoredSection;
-  clearedPredictionCount: number;
 }
 
 /** Device passage bookmark parsed from the JMX trailer. */
@@ -312,7 +288,6 @@ export interface FileDetailResponse {
   /** Whole percent of the file's duration covered by annotations. */
   percentageAnnotated: number;
   annotations: FileDetailAnnotation[];
-  ignoredSections: IgnoredSection[];
   bookmarks: FileBookmark[];
   skips: FileSkip[];
 }

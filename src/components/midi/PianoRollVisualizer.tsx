@@ -13,14 +13,12 @@ import {
 } from './PianoRollOverlays'
 import {
   AnnotationTimeline,
-  IgnoredTimeline,
   PredictionTimeline,
   type AnnotationResizeEdge
 } from './PianoRollTimelines'
 import type {
   RollAnnotation,
   RollBookmark,
-  RollIgnoredSection,
   RollPrediction,
   RollSkip
 } from './pianoRollTypes'
@@ -31,7 +29,6 @@ interface PianoRollVisualizerProps {
   isPlaying?: boolean
   annotations?: RollAnnotation[]
   predictions?: RollPrediction[]
-  ignoredSections?: RollIgnoredSection[]
   bookmarks?: RollBookmark[]
   skips?: RollSkip[]
   /** Only render silence gaps at or above this many seconds (default 8). */
@@ -45,7 +42,6 @@ interface PianoRollVisualizerProps {
   onSnapToPlaybackChange?: (snap: boolean) => void
   onHoverTimeChange?: (time: number | null) => void
   onPredictionClick?: (predictionId: number) => void
-  onIgnoredSectionClick?: (ignoredSectionId: number) => void
   onAnnotationDelete?: (annotationId: number) => void
   onAnnotationResize?: (
     annotationId: number,
@@ -63,7 +59,6 @@ const ROLL_CONFIG = {
 
 const EMPTY_ANNOTATIONS: RollAnnotation[] = []
 const EMPTY_PREDICTIONS: RollPrediction[] = []
-const EMPTY_IGNORED: RollIgnoredSection[] = []
 const EMPTY_BOOKMARKS: RollBookmark[] = []
 const EMPTY_SKIPS: RollSkip[] = []
 
@@ -72,7 +67,7 @@ const EMPTY_SKIPS: RollSkip[] = []
  *
  * Re-renders every animation frame during playback, since the playhead
  * arrives as a prop. Everything expensive sits behind a `memo` boundary: the
- * notes, the three chip rows, the bands, and the device markers. A frame
+ * notes, the two chip rows, the bands, and the device markers. A frame
  * costs this small tree plus one repositioned `<div>`. Callers must pass
  * stable handlers for that to hold; `DetailPage` uses `useCallback`
  * throughout.
@@ -83,7 +78,6 @@ function PianoRollVisualizerImpl({
   isPlaying = false,
   annotations = EMPTY_ANNOTATIONS,
   predictions = EMPTY_PREDICTIONS,
-  ignoredSections = EMPTY_IGNORED,
   bookmarks = EMPTY_BOOKMARKS,
   skips = EMPTY_SKIPS,
   minSkipDisplaySec = 8,
@@ -96,7 +90,6 @@ function PianoRollVisualizerImpl({
   onSnapToPlaybackChange,
   onHoverTimeChange,
   onPredictionClick,
-  onIgnoredSectionClick,
   onAnnotationDelete,
   onAnnotationResize
 }: PianoRollVisualizerProps) {
@@ -135,11 +128,8 @@ function PianoRollVisualizerImpl({
     for (const prediction of predictions) {
       if (prediction.endTime > end) end = prediction.endTime
     }
-    for (const ignoredSection of ignoredSections) {
-      if (ignoredSection.endTime > end) end = ignoredSection.endTime
-    }
     return end
-  }, [sequence, displayedAnnotations, predictions, ignoredSections])
+  }, [sequence, displayedAnnotations, predictions])
 
   // Note geometry is derived from the active sequence and rendered as SVG
   // rects below, so it stays in sync without any imperative redraw step.
@@ -312,15 +302,6 @@ function PianoRollVisualizerImpl({
             predictions={predictions}
             pixelsPerTimeStep={pixelsPerTimeStep}
             onPredictionClick={onPredictionClick}
-            onSeek={seekAndFollow}
-          />
-        </div>
-
-        <div className="relative h-10 border-t bg-gray-100/70">
-          <IgnoredTimeline
-            ignoredSections={ignoredSections}
-            pixelsPerTimeStep={pixelsPerTimeStep}
-            onIgnoredSectionClick={onIgnoredSectionClick}
             onSeek={seekAndFollow}
           />
         </div>

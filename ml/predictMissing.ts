@@ -27,8 +27,8 @@ import {
  * completion is authoritative and blocks the pipeline.
  *
  * This is the same pipeline as `POST /api/prediction-reviews/run` and
- * `ml:predict-import` (`runPredictionImport`), so exclusion of annotated and
- * ignored ranges, bookmark/silence-gap splitting, and insert shape all match.
+ * `ml:predict-import` (`runPredictionImport`), so exclusion of annotated
+ * ranges, bookmark/silence-gap splitting, and insert shape all match.
  */
 
 interface Candidate {

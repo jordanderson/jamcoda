@@ -2,7 +2,6 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import * as AnnotationModel from '@models/Annotation';
 import * as FileModel from '@models/File';
-import * as IgnoredSectionModel from '@models/IgnoredSection';
 import * as PredictionReviewModel from '@models/PredictionReview';
 import {
   countModifiedSegments,
@@ -62,7 +61,7 @@ export interface RunPredictionResult {
   config: PredictConfig;
   modelConfig: { windowSec: number; stepSec: number; k: number };
   segments: SongSegment[];
-  /** Segments the model produced before annotated/ignored ranges were removed. */
+  /** Segments the model produced before annotated ranges were removed. */
   rawSegmentCount: number;
   /** Segments dropped or trimmed by exclusion. */
   excludedSegmentCount: number;
@@ -75,7 +74,6 @@ export interface RunPredictionResult {
   /** Silence gaps parsed from the file's JMX trailer. */
   skips: JmxSkip[];
   annotatedRangeCount: number;
-  ignoredRangeCount: number;
   clearedCount: number;
   insertedCount: number;
   dryRun: boolean;
@@ -158,14 +156,13 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
   }, notes);
 
   const annotatedRanges: TimeRange[] = AnnotationModel.listRangesByFileId(fileId);
-  const ignoredRanges: TimeRange[] = IgnoredSectionModel.listRangesByFileId(fileId);
 
   const bookmarks = parseBookmarks(file.bookmarks_json);
   const skips = parseSkips(file.skips_json);
 
   const excluded = removeExcludedRangesFromSegments(
     rawSegments,
-    [...annotatedRanges, ...ignoredRanges],
+    annotatedRanges,
     config.minSegmentSec
   );
   const excludedSegmentCount = countModifiedSegments(rawSegments, excluded);
@@ -236,7 +233,6 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
     bookmarks,
     skips,
     annotatedRangeCount: annotatedRanges.length,
-    ignoredRangeCount: ignoredRanges.length,
     clearedCount,
     insertedCount,
     dryRun

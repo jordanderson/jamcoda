@@ -5,9 +5,8 @@ import { useLocalFileDownload } from '@/hooks/useLocalFileDownload';
 import { useMidiPlayer } from '@/hooks/useMidiPlayer';
 import {
   useCreateAnnotation,
-  useCreateIgnoredSection,
   useDeleteAnnotation,
-  useDeleteIgnoredSection,
+  useSplitAnnotation,
   useUpdateAnnotation,
   useUniqueSongNames
 } from '@/hooks/useAnnotations';
@@ -21,7 +20,6 @@ import { PianoRollVisualizer } from '@/components/midi/PianoRollVisualizer';
 import type {
   RollAnnotation,
   RollBookmark,
-  RollIgnoredSection,
   RollPrediction,
   RollSkip
 } from '@/components/midi/pianoRollTypes';
@@ -46,7 +44,6 @@ import {
 } from './annotationGaps';
 import { DetailAnnotationList } from './DetailAnnotationList';
 import { DetailDeviceMarkers, type DeviceMarker } from './DetailDeviceMarkers';
-import { DetailIgnoredSections } from './DetailIgnoredSections';
 import { DetailPredictionList } from './DetailPredictionList';
 
 interface DetailPageProps {
@@ -59,7 +56,6 @@ interface AnnotationModalState {
   annotationId?: number;
   initialSongName?: string;
   mode?: 'create' | 'edit';
-  initialAction?: 'annotation' | 'ignored';
 }
 
 /** Device silence gaps shorter than this are noise, not passage boundaries. */
@@ -92,10 +88,9 @@ export function DetailPage({ fileId }: DetailPageProps) {
   } = useMidiPlayer();
 
   const createAnnotation = useCreateAnnotation();
-  const createIgnoredSection = useCreateIgnoredSection();
-  const deleteIgnoredSection = useDeleteIgnoredSection();
   const deleteAnnotation = useDeleteAnnotation();
   const updateAnnotation = useUpdateAnnotation();
+  const splitAnnotation = useSplitAnnotation();
   const runPredictionForFile = useRunPredictionForFile();
   const updatePredictionReview = useUpdatePredictionReview();
   const promotePredictionReview = usePromotePredictionReview();
@@ -211,11 +206,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
     [annotationFlourishesById]
   );
 
-  const ignoredSections = useMemo(() => {
-    return [...(file?.ignoredSections ?? [])]
-      .filter((section) => section.end_time > section.start_time)
-      .sort((a, b) => a.start_time - b.start_time || a.id - b.id);
-  }, [file?.ignoredSections]);
 
   const deviceMarkers = useMemo<DeviceMarker[]>(() => {
     const bookmarkMarkers = bookmarks.map((bookmark) => ({
@@ -323,30 +313,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
       .sort((a, b) => a.startTime - b.startTime || a.id - b.id);
   }, [reviewListResponse?.reviews, timelineEndLimit]);
 
-  const ignoredTimelineSegments = useMemo<RollIgnoredSection[]>(() => {
-    return ignoredSections.reduce<RollIgnoredSection[]>((segments, section) => {
-      if (!Number.isFinite(section.start_time) || !Number.isFinite(section.end_time)) {
-        return segments;
-      }
-
-      const startTime = Math.max(0, section.start_time);
-      const endTime = timelineEndLimit !== undefined
-        ? Math.min(timelineEndLimit, section.end_time)
-        : section.end_time;
-
-      if (endTime <= startTime) {
-        return segments;
-      }
-
-      segments.push({
-        id: section.id,
-        startTime,
-        endTime,
-        reason: section.reason ?? undefined
-      });
-      return segments;
-    }, []);
-  }, [ignoredSections, timelineEndLimit]);
 
   // ---------------------------------------------------------------------------
   // Playback and view state
@@ -455,8 +421,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
 
     setAnnotationModalData({
       startTime: Math.min(startCheckpoint, endCheckpoint),
-      endTime: Math.max(startCheckpoint, endCheckpoint),
-      initialAction: 'annotation'
+      endTime: Math.max(startCheckpoint, endCheckpoint)
     });
     handleClearCheckpoints();
   }, [startCheckpoint, endCheckpoint, handleClearCheckpoints]);
@@ -549,86 +514,8 @@ export function DetailPage({ fileId }: DetailPageProps) {
       return;
     }
 
-    setAnnotationModalData({ startTime, endTime, initialAction: 'annotation' });
+    setAnnotationModalData({ startTime, endTime });
   }, []);
-
-  const handleSubmitIgnoredSection = useCallback(async (
-    startTime: number,
-    endTime: number,
-    reason?: string
-  ) => {
-    if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
-      showToast({
-        type: 'error',
-        message: 'Start and end times must be valid numbers.'
-      });
-      return;
-    }
-
-    if (startTime >= endTime) {
-      showToast({
-        type: 'error',
-        message: 'Start time must be less than end time.'
-      });
-      return;
-    }
-
-    if (startTime < 0) {
-      showToast({
-        type: 'error',
-        message: 'Start time cannot be negative.'
-      });
-      return;
-    }
-
-    if (duration > 0 && endTime > duration + 0.001) {
-      showToast({
-        type: 'error',
-        message: `End time must be within file duration (${formatTime(duration)}).`
-      });
-      return;
-    }
-
-    try {
-      const result = await createIgnoredSection.mutateAsync({
-        fileId,
-        startTime,
-        endTime,
-        reason: reason?.trim() || null
-      });
-
-      const cleared = result.clearedPredictionCount;
-      const clearedMessage = cleared > 0
-        ? ` Cleared ${cleared} overlapping unpromoted prediction row${cleared === 1 ? '' : 's'}.`
-        : '';
-      showToast({
-        type: 'success',
-        message: `Ignored section added.${clearedMessage}`
-      });
-      setAnnotationModalData(null);
-    } catch (error) {
-      showToast({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to add ignored section.'
-      });
-    }
-  }, [createIgnoredSection.mutateAsync, duration, fileId, showToast]);
-
-  const handleDeleteIgnoredSection = useCallback((ignoredSectionId: number) => {
-    if (!confirm('Delete this ignored section?')) return;
-
-    deleteIgnoredSection.mutate(ignoredSectionId, {
-      onSuccess: () => {
-        showToast({ type: 'success', message: 'Ignored section deleted.' });
-      },
-      onError: (error) => {
-        showToast({
-          type: 'error',
-          message: error instanceof Error ? error.message : 'Failed to delete ignored section.'
-        });
-      }
-    });
-  }, [deleteIgnoredSection.mutate, showToast]);
 
   const handleDeleteAnnotation = useCallback((annotationId: number) => {
     if (!confirm('Delete this annotation?')) return;
@@ -636,15 +523,9 @@ export function DetailPage({ fileId }: DetailPageProps) {
   }, [deleteAnnotation.mutate]);
 
   const handleRegionSelect = useCallback((startTime: number, endTime: number) => {
-    setAnnotationModalData({ startTime, endTime, initialAction: 'annotation' });
+    setAnnotationModalData({ startTime, endTime });
     setIsAnnotationMode(false);
   }, []);
-
-  const handleIgnoredSectionClick = useCallback((ignoredSectionId: number) => {
-    const section = ignoredSections.find((item) => item.id === ignoredSectionId);
-    if (!section) return;
-    handleSeek((section.start_time + section.end_time) / 2);
-  }, [handleSeek, ignoredSections]);
 
   const handleAnnotationResize = useCallback(async (
     annotationId: number,
@@ -739,8 +620,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
       endTime: annotation.end_time,
       annotationId: annotation.id,
       initialSongName: annotation.song_name,
-      mode: 'edit',
-      initialAction: 'annotation'
+      mode: 'edit'
     });
   }, []);
 
@@ -760,33 +640,12 @@ export function DetailPage({ fileId }: DetailPageProps) {
     const splitKey = `${annotation.id}:${gapIndex}`;
     setSplittingGapKey(splitKey);
 
-    const originalStart = annotation.start_time;
-    const originalEnd = annotation.end_time;
-
     try {
-      await updateAnnotation.mutateAsync({
+      await splitAnnotation.mutateAsync({
         id: annotation.id,
-        data: { startTime: originalStart, endTime: gap.startTime }
+        holeStartTime: gap.startTime,
+        holeEndTime: gap.endTime
       });
-
-      try {
-        await createAnnotation.mutateAsync({
-          fileId,
-          songName: annotation.song_name,
-          startTime: gap.endTime,
-          endTime: originalEnd
-        });
-      } catch (createError) {
-        await updateAnnotation.mutateAsync({
-          id: annotation.id,
-          data: { startTime: originalStart, endTime: originalEnd }
-        });
-        throw new Error(
-          createError instanceof Error
-            ? `Split failed while creating second segment. Original annotation was restored. ${createError.message}`
-            : 'Split failed while creating second segment. Original annotation was restored.'
-        );
-      }
 
       showToast({
         type: 'success',
@@ -800,7 +659,51 @@ export function DetailPage({ fileId }: DetailPageProps) {
     } finally {
       setSplittingGapKey((current) => (current === splitKey ? null : current));
     }
-  }, [createAnnotation.mutateAsync, fileId, updateAnnotation.mutateAsync, showToast]);
+  }, [showToast, splitAnnotation]);
+
+  const splitCandidateAnnotation = useMemo(() => {
+    if (!annotationModalData || annotationModalData.mode === 'edit') return null;
+    const { startTime, endTime } = annotationModalData;
+    return annotations.find(
+      (ann) => ann.start_time < startTime && ann.end_time > endTime
+    ) ?? null;
+  }, [annotationModalData, annotations]);
+
+  const handleSplitAnnotationAtRegion = useCallback(async (
+    targetAnnotation: { id: number; song_name: string; start_time: number; end_time: number },
+    splitStartTime: number,
+    splitEndTime: number
+  ) => {
+    const splitStart = Number(splitStartTime.toFixed(3));
+    const splitEnd = Number(splitEndTime.toFixed(3));
+
+    if (splitStart <= targetAnnotation.start_time || splitEnd >= targetAnnotation.end_time || splitStart >= splitEnd) {
+      showToast({
+        type: 'error',
+        message: 'The selected split region must be strictly inside the existing annotation.'
+      });
+      return;
+    }
+
+    try {
+      await splitAnnotation.mutateAsync({
+        id: targetAnnotation.id,
+        holeStartTime: splitStart,
+        holeEndTime: splitEnd
+      });
+
+      showToast({
+        type: 'success',
+        message: `Split "${targetAnnotation.song_name}" into two segments with a hole from ${formatTime(splitStart)} to ${formatTime(splitEnd)}.`
+      });
+      setAnnotationModalData(null);
+    } catch (error) {
+      showToast({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to split annotation.'
+      });
+    }
+  }, [showToast, splitAnnotation]);
 
   const handleTrimAnnotationGap = useCallback(async (
     annotation: RollAnnotation,
@@ -1145,14 +1048,13 @@ export function DetailPage({ fileId }: DetailPageProps) {
         endTime={annotationModalData?.endTime ?? 0}
         existingSongNames={uniqueSongNames}
         onSubmit={handleAnnotationSubmit}
-        onSubmitIgnoredSection={handleSubmitIgnoredSection}
         onCancel={handleAnnotationCancel}
         initialSongName={annotationModalData?.initialSongName}
         mode={annotationModalData?.mode ?? 'create'}
         allowTimeEdit={annotationModalData?.mode === 'edit'}
-        enableIgnoredSectionOption={annotationModalData?.mode !== 'edit'}
-        initialAction={annotationModalData?.initialAction ?? 'annotation'}
         onSnapTimes={handleSnapTimes}
+        splitTargetAnnotation={splitCandidateAnnotation}
+        onSplitAnnotation={handleSplitAnnotationAtRegion}
       />
 
       {selectedPredictionReview && (
@@ -1459,7 +1361,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
               isPlaying={isPlaying}
               annotations={annotations}
               predictions={predictionTimelineSegments}
-              ignoredSections={ignoredTimelineSegments}
               bookmarks={bookmarks}
               skips={skips}
               minSkipDisplaySec={MIN_SKIP_DISPLAY_SEC}
@@ -1472,7 +1373,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
               onSnapToPlaybackChange={setSnapToPlayback}
               onHoverTimeChange={setHoveredRollTime}
               onPredictionClick={handleOpenPredictionActionModal}
-              onIgnoredSectionClick={handleIgnoredSectionClick}
               onAnnotationDelete={handleDeleteAnnotation}
               onAnnotationResize={handleAnnotationResize}
             />
@@ -1579,22 +1479,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
             onTrimFlourish={handleTrimFlourish}
             onSnapBounds={handleSnapBounds}
           />
-
-          <div className="mt-8 border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Ignored Sections ({ignoredSections.length})
-            </h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Ignored sections are excluded from prediction generation and can be left unannotated.
-            </p>
-
-            <DetailIgnoredSections
-              sections={ignoredSections}
-              isDeleting={deleteIgnoredSection.isPending}
-              onSeek={handleSeek}
-              onDelete={handleDeleteIgnoredSection}
-            />
-          </div>
         </div>
       </div>
 

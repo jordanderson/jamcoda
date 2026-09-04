@@ -16,12 +16,6 @@ export interface RollPrediction {
   confidence: number | null
 }
 
-export interface RollIgnoredSection {
-  id: number
-  startTime: number
-  endTime: number
-  reason?: string
-}
 
 /** Device passage bookmark, drawn as a solid green circle like the Jamcorder. */
 export interface RollBookmark {

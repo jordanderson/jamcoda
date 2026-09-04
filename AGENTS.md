@@ -160,7 +160,7 @@ Core frontend routes:
   samples; without that, a stop or pause during the load window is dropped and
   audio starts anyway.
 - The detail page re-renders every animation frame during playback, so the roll's
-  layers and the annotation/ignored lists sit behind `memo` with
+  layers and the annotation list sit behind `memo` with
   `useCallback`-stable handlers. An unmemoised array or inline handler on that
   path silently restores a full-page render at 60fps.
 

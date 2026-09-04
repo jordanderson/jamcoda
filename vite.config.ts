@@ -17,7 +17,6 @@ const LOCAL_API_PREFIXES = [
   '/api/files',
   '/api/annotations',
   '/api/prediction-reviews',
-  '/api/ignored-sections',
 ] as const
 
 const LOCAL_API_TARGET = 'http://localhost:3001'

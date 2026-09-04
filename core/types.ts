@@ -2,9 +2,7 @@
  * Row shapes that cross the HTTP boundary.
  *
  * These live in `core/` because both the Express layer and the browser client
- * need the same definitions. Each side previously declared its own copy, which
- * had drifted: `IgnoredSection.reason` was `string | null` on the server and
- * `reason?: string` in the client.
+ * need the same definitions.
  *
  * Server-only payload types (`Create...Data` / `Update...Data` shapes) stay
  * in `server/types`. These are what gets serialized to JSON.
@@ -41,17 +39,6 @@ export interface Annotation {
   start_time: number;
   end_time: number;
   notes: string | null;
-  created_at: number;
-  updated_at: number;
-}
-
-/** DB row stored in `ignored_sections`. */
-export interface IgnoredSection {
-  id: number;
-  file_id: number;
-  start_time: number;
-  end_time: number;
-  reason: string | null;
   created_at: number;
   updated_at: number;
 }

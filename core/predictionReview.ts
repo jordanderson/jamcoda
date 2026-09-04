@@ -45,8 +45,7 @@ export interface ResolvedReviewFields {
 
 /**
  * Resolve the effective song name and time range for a review -- the values
- * shown in the UI, matched against ignored sections, and written to
- * `annotations` on promotion.
+ * shown in the UI and written to `annotations` on promotion.
  */
 export function resolveReviewFields(review: PredictionReview): ResolvedReviewFields {
   const useReviewed = usesReviewedValues(review.status);

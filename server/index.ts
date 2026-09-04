@@ -5,7 +5,6 @@ import syncRoutes from './routes/sync.routes';
 import filesRoutes from './routes/files.routes';
 import annotationsRoutes from './routes/annotations.routes';
 import predictionReviewsRoutes from './routes/predictionReviews.routes';
-import ignoredSectionsRoutes from './routes/ignoredSections.routes';
 
 const app = express();
 const PORT = Number(process.env.JAMCODA_SERVER_PORT || 3001);
@@ -28,7 +27,6 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/files', filesRoutes);
 app.use('/api/annotations', annotationsRoutes);
 app.use('/api/prediction-reviews', predictionReviewsRoutes);
-app.use('/api/ignored-sections', ignoredSectionsRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

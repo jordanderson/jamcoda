@@ -1,10 +1,7 @@
 // API client for the local Express backend on localhost:3001.
 import type {
-  CreateIgnoredSectionRequest,
-  CreateIgnoredSectionResponse,
   FilesByDateResponse,
   FileDetailResponse,
-  IgnoredSectionListResponse,
   MergePredictionReviewsRequest,
   MergePredictionReviewsResponse,
   PredictionReviewListResponse,
@@ -81,38 +78,6 @@ export const localFilesApi = {
   }
 };
 
-export const ignoredSectionsApi = {
-  list: async (fileId: number): Promise<IgnoredSectionListResponse> => {
-    const params = new URLSearchParams({ fileId: String(fileId) });
-    const response = await fetch(`/api/ignored-sections?${params.toString()}`);
-    if (!response.ok) {
-      return throwApiError(response, 'Failed to list ignored sections');
-    }
-    return response.json();
-  },
-
-  create: async (data: CreateIgnoredSectionRequest): Promise<CreateIgnoredSectionResponse> => {
-    const response = await fetch('/api/ignored-sections', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!response.ok) {
-      return throwApiError(response, 'Failed to create ignored section');
-    }
-    return response.json();
-  },
-
-  delete: async (id: number): Promise<void> => {
-    const response = await fetch(`/api/ignored-sections/${id}`, {
-      method: 'DELETE'
-    });
-    if (!response.ok) {
-      return throwApiError(response, 'Failed to delete ignored section');
-    }
-  }
-};
-
 export const annotationsApi = {
   list: async (fileId: number) => {
     const response = await fetch(`/api/annotations/${fileId}`);
@@ -169,6 +134,19 @@ export const annotationsApi = {
   delete: async (id: number) => {
     const response = await fetch(`/api/annotations/${id}`, { method: 'DELETE' });
     if (!response.ok) return throwApiError(response, 'Failed to delete annotation');
+  },
+
+  split: async (
+    id: number,
+    data: { holeStartTime: number; holeEndTime: number }
+  ): Promise<{ first: any; second: any }> => {
+    const response = await fetch(`/api/annotations/${id}/split`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) return throwApiError(response, 'Failed to split annotation');
+    return response.json();
   },
 
   renameSongName: async (data: RenameSongNameRequest): Promise<RenameSongNameResponse> => {

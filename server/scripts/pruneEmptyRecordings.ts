@@ -57,7 +57,6 @@ function findProtectedIds(): Set<number> {
   const rows = getDb().prepare(`
     SELECT DISTINCT file_id as fileId FROM annotations
     UNION SELECT DISTINCT file_id FROM prediction_reviews
-    UNION SELECT DISTINCT file_id FROM ignored_sections
   `).all() as Array<{ fileId: number }>;
   return new Set(rows.map((row) => row.fileId));
 }
@@ -118,7 +117,7 @@ async function main() {
 
     for (const candidate of candidates) {
       if (protectedIds.has(candidate.id)) {
-        kept.push({ candidate, reason: 'has annotations, predictions or ignored sections' });
+        kept.push({ candidate, reason: 'has annotations or predictions' });
         continue;
       }
       const check = verifyEmptyOnDisk(candidate.localPath);

@@ -75,7 +75,7 @@ const MILLISECOND_TIMESTAMP_FLOOR = 100_000_000_000;
  */
 function repairMillisecondTimestamps(apply: boolean): number {
   const db = getDb();
-  const tables = ['annotations', 'ignored_sections'] as const;
+  const tables = ['annotations'] as const;
   let total = 0;
 
   for (const table of tables) {
@@ -247,16 +247,8 @@ async function main() {
          WHERE file_id IN (${fileIds.map(() => '?').join(',')})`
       )
       .get(...fileIds) as { n: number }).n;
-    const ignoredCount = fileIds.length === 0 ? 0 : (db
-      .prepare(
-        `SELECT COUNT(*) AS n FROM ignored_sections
-         WHERE file_id IN (${fileIds.map(() => '?').join(',')})`
-      )
-      .get(...fileIds) as { n: number }).n;
-
     console.log(`  annotations:        ${annotations.length}`);
     console.log(`  prediction_reviews: ${reviewCount}`);
-    console.log(`  ignored_sections:   ${ignoredCount}`);
     console.log(`  midi_duration:      ${affected.length} (cleared, recomputed on next read)`);
     console.log('  bookmarks / skips:  untouched, already on the JMX grid');
 
@@ -302,9 +294,6 @@ async function main() {
       const scaleAnnotation = db.prepare(
         'UPDATE annotations SET start_time = start_time / ?, end_time = end_time / ?, updated_at = ? WHERE file_id = ?'
       );
-      const scaleIgnored = db.prepare(
-        'UPDATE ignored_sections SET start_time = start_time / ?, end_time = end_time / ?, updated_at = ? WHERE file_id = ?'
-      );
       const scaleReview = db.prepare(
         `UPDATE prediction_reviews SET
            predicted_start_time = predicted_start_time / ?,
@@ -318,7 +307,6 @@ async function main() {
       for (const file of affected) {
         const f = file.factor;
         scaleAnnotation.run(f, f, now, file.id);
-        scaleIgnored.run(f, f, now, file.id);
         scaleReview.run(f, f, f, f, file.id);
         clearDuration.run(file.id);
       }

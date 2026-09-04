@@ -26,7 +26,6 @@ Use this README for daily use and fast codebase onboarding.
 - Open a file (`#/detail/:id`).
 - Use piano roll playback with `S/E/C` checkpoints or manual region selection.
 - Add, edit, and delete annotations.
-- Add ignored sections for ranges you do not plan to annotate.
 - Use `Run Predictions` for that file.
 - Use `Mark Complete` when the remaining unannotated time is improvised playing.
   - Marking complete clears all predictions for that file.
@@ -115,11 +114,6 @@ The app uses `http://localhost:3001` for local state and ML actions.
 - `POST /api/prediction-reviews/run`
 - `POST /api/prediction-reviews/rebuild-model`
 
-### Ignored Sections
-- `GET /api/ignored-sections?fileId=<id>`
-- `POST /api/ignored-sections`
-- `DELETE /api/ignored-sections/:id`
-
 ## Local Data Layout
 
 - SQLite DB: `data/jamcoda.db`
@@ -131,7 +125,6 @@ Main tables:
 - `files`: synced file metadata + completion flags
 - `annotations`: human-labeled song segments
 - `prediction_reviews`: model proposals + review decisions + promotion linkage
-- `ignored_sections`: ranges intentionally excluded from annotation/prediction
 - `sync_metadata`: last sync metadata
 
 ## Playback Notes
@@ -191,7 +184,7 @@ npm run dev
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:3001`
 
-Vite proxies local APIs first (`/api/sync`, `/api/files`, `/api/annotations`, `/api/prediction-reviews`, `/api/ignored-sections`) and then forwards remaining `/api/*` to Jamcorder.
+Vite proxies local APIs first (`/api/sync`, `/api/files`, `/api/annotations`, `/api/prediction-reviews`) and then forwards remaining `/api/*` to Jamcorder.
 
 ## Configuration
 
@@ -265,8 +258,6 @@ Important behavior constraints:
 - File completion is authoritative and blocks `/api/prediction-reviews/run`.
 - Marking complete clears prediction rows for that file.
 - Prediction generation excludes existing annotation ranges for that file.
-- Prediction generation excludes time ranges saved in `ignored_sections`.
-- Creating an ignored section deletes overlapping unpromoted prediction rows for that file.
 - Merge creates one new `edited` row and marks source rows `invalid`.
 - Promotion only accepts `confirmed` or `edited`.
 - Playback is forced piano regardless of MIDI instrument program.

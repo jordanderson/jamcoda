@@ -261,3 +261,55 @@ export function renameSongName(oldSongName: string, newSongName: string): number
   `).run(newSongName, now, oldSongName);
   return result.changes;
 }
+
+export function split(
+  id: number,
+  holeStartTime: number,
+  holeEndTime: number
+): { first: Annotation; second: Annotation } {
+  const db = getDb();
+  const current = findById(id);
+  if (!current) {
+    throw new Error(`Annotation ${id} not found`);
+  }
+
+  if (
+    !Number.isFinite(holeStartTime) ||
+    !Number.isFinite(holeEndTime) ||
+    holeStartTime <= current.start_time ||
+    holeEndTime >= current.end_time ||
+    holeStartTime >= holeEndTime
+  ) {
+    throw new Error(
+      `Invalid split range [${holeStartTime}, ${holeEndTime}] for annotation [${current.start_time}, ${current.end_time}]`
+    );
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const tx = db.transaction(() => {
+    db.prepare(`
+      UPDATE annotations
+      SET end_time = ?, updated_at = ?
+      WHERE id = ?
+    `).run(holeStartTime, now, current.id);
+
+    const result = db.prepare(`
+      INSERT INTO annotations (file_id, song_name, start_time, end_time, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      current.file_id,
+      current.song_name,
+      holeEndTime,
+      current.end_time,
+      current.notes,
+      now,
+      now
+    );
+
+    const first = findById(current.id)!;
+    const second = findById(result.lastInsertRowid as number)!;
+    return { first, second };
+  });
+
+  return tx();
+}

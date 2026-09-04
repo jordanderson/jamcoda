@@ -2,7 +2,6 @@ import express from 'express';
 import { readFileSync } from 'fs';
 import * as FileModel from '@models/File';
 import * as AnnotationModel from '@models/Annotation';
-import * as IgnoredSectionModel from '@models/IgnoredSection';
 import * as PredictionReviewModel from '@models/PredictionReview';
 
 const router = express.Router();
@@ -96,10 +95,6 @@ router.get('/:id', async (req, res) => {
       ...annotation,
       notes: annotation.notes ?? undefined
     }));
-    const ignoredSections = IgnoredSectionModel.findByFileId(id).map((section) => ({
-      ...section,
-      reason: section.reason ?? undefined
-    }));
 
     let bookmarks: Array<Record<string, unknown>> = [];
     if (file.bookmarks_json) {
@@ -140,7 +135,6 @@ router.get('/:id', async (req, res) => {
       completedAt: file.completed_at,
       percentageAnnotated,
       annotations,
-      ignoredSections,
       bookmarks,
       skips
     });

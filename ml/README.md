@@ -64,7 +64,6 @@ Training pulls from:
 
 Prediction review/promotion uses:
 - `prediction_reviews` table
-- `ignored_sections` table (ranges excluded from prediction output)
 - optional promotion into `annotations`
 
 ## Commands
@@ -77,7 +76,7 @@ Run from repo root.
 npm run db:migrate
 ```
 
-This applies DB schema migrations (including `prediction_reviews` and `ignored_sections`).
+This applies DB schema migrations (including `prediction_reviews`).
 
 ### 2) Train model
 
@@ -319,7 +318,6 @@ a segment of mostly linked windows. One shared scale decreased accuracy (v2.3 in
 
 Prediction output is post-filtered against:
 - existing `annotations` for the target file
-- `ignored_sections` for the target file
 
 ## Review States and Promotion
 
@@ -362,7 +360,6 @@ Practical heuristics for practice-session data:
 - Keep song naming consistent; rename globally when needed.
 - Do not stretch one annotation across long silence; split into separate played spans.
 - Mark file complete when remaining time is intentionally unlabeled improvisation/noodling.
-- Use ignored sections for short/noisy passages you intentionally never want predicted/annotated.
 
 ## Tuning Short vs Long Segment Bias
 
@@ -404,7 +401,7 @@ Rebuild model after new annotations using sidebar `Rebuild Model` or `npm run ml
 - `server/services/predictionImport.ts`: the prediction + import pipeline itself,
   shared with `POST /api/prediction-reviews/run` so the CLI and the API cannot
   drift. Schema is the migration runner's job; nothing here creates tables.
-- `core/timeRanges.ts`: annotated/ignored range exclusion
+- `core/timeRanges.ts`: annotated range exclusion
 - `core/cli/args.ts`: shared CLI argument parsing
 - `server/scripts/migrate.ts`: DB migration entrypoint
 - `server/routes/predictionReviews.routes.ts`: API workflow glue

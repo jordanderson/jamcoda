@@ -5,6 +5,7 @@ import { syncAssetMetadataMigration } from './002-sync-asset-metadata';
 import { syncHighWaterMarkMigration } from './003-sync-high-water-mark';
 import { bookmarksMigration } from './004-file-bookmarks';
 import { skipsMigration } from './005-file-skips';
+import { dropIgnoredSectionsMigration } from './006-drop-ignored-sections';
 
 /**
  * All migrations, in application order. New migrations should be added as
@@ -15,7 +16,8 @@ const migrations: Migration[] = [
   syncAssetMetadataMigration,
   syncHighWaterMarkMigration,
   bookmarksMigration,
-  skipsMigration
+  skipsMigration,
+  dropIgnoredSectionsMigration
 ];
 
 function nowUnix(): number {

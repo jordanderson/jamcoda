@@ -67,7 +67,7 @@ export interface BrowseProgress {
  *
  * A file marked complete counts as fully annotated whatever its annotations
  * add up to: completion is authoritative, and it is how a recording with
- * deliberately unannotated stretches -- warm-ups, ignored sections -- is
+ * deliberately unannotated stretches -- warm-ups, idle time -- is
  * called done. Every other file contributes the span its annotations cover.
  *
  * Deliberately computed over the whole library rather than the current
