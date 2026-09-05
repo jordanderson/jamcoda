@@ -978,7 +978,16 @@ function buildPrototypesFromGroups(
     ? Math.max(1, Math.min(requested, smallestCount))
     : 1;
 
-  const kernelScale = estimateKernelScale(normalizedGroups, prototypes);
+  // The kernel scale is read only by 'avg' scoring, but the field must stay
+  // populated (`loadModel`/tests and saved-model shape). In 'min' mode — every
+  // shipped config — estimate it on a token sample: the full 800-window sweep
+  // cost ~21-28% of every leave-one-out fold for a value nothing reads. See
+  // PERFORMANCE_TUNING.md item 1.
+  const kernelScale = estimateKernelScale(
+    normalizedGroups,
+    prototypes,
+    config.scoreMode === 'avg' ? 800 : 50
+  );
   const underBudgetLabels: number[] = [];
   for (const [labelIndex, count] of support) {
     if (labelIndex !== noneLabelIndex && count < perLabelBudget) underBudgetLabels.push(labelIndex);
@@ -1323,7 +1332,7 @@ interface WindowEvidence {
   rank: number[];
 }
 
-function computeEvidence(scoresList: number[][]): WindowEvidence[] {
+function computeEvidence(scoresList: number[][], needRank: boolean): WindowEvidence[] {
   return scoresList.map((scores) => {
     let top1 = -Infinity;
     let top2 = -Infinity;
@@ -1341,11 +1350,16 @@ function computeEvidence(scoresList: number[][]): WindowEvidence[] {
     const scale = Math.abs(top1) + Math.abs(top2);
     const margin = scale > 1e-9 ? (top1 - top2) / scale : 0;
 
-    const order = scores
-      .map((score, labelIndex) => ({ score, labelIndex }))
-      .sort((a, b) => b.score - a.score);
+    // `rank` is read only when `fillTopK >= 0`; the default disables it.
+    // Building it costs a sort per window — ~11M discarded allocations per
+    // leave-one-out run. See PERFORMANCE_TUNING.md item 7.
     const rank = new Array<number>(scores.length).fill(0);
-    order.forEach((entry, position) => { rank[entry.labelIndex] = position; });
+    if (needRank) {
+      scores
+        .map((score, labelIndex) => ({ score, labelIndex }))
+        .sort((a, b) => b.score - a.score)
+        .forEach((entry, position) => { rank[entry.labelIndex] = position; });
+    }
 
     return { scores, bestLabel, margin, rank };
   });
@@ -1648,7 +1662,7 @@ export function predictWindowsFromSamples(
 
   if (decoder === 'anchor') {
     const noneLabelIndex = model.labels.indexOf(NO_SONG_LABEL);
-    const evidence = computeEvidence(scoresList);
+    const evidence = computeEvidence(scoresList, (model.config.fillTopK ?? -1) >= 0);
     // A model saved before this rule existed has no value here, and a change
     // to a default must not change an existing model (see v2.3 in the
     // changelog), so an absent value means "off" rather than the new default.
