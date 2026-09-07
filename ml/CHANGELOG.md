@@ -18,6 +18,148 @@ How to read the numbers:
 
 ---
 
+## 2026-09-06 — bridge linking: a finished song no longer runs long (experimental, opt-in)
+
+### Context
+
+Reported symptom: a take keeps its label past the point where the playing
+stopped, so the next song's prediction starts late. On the frozen 144-file
+snapshot the median matched take ended **6.09s late**, and 81% of takes followed
+by a different song ended more than 2s late.
+
+Two candidate causes were measured and **ruled out**:
+
+- **Note snapping.** Running the same folds without `snapSegmentBoundaries`
+  moves the median end error from +6.09s to +6.02s. Snapping accounts for 0.07s
+  of it. The adjacent-pair snapping refinement proposed in
+  `experiments-2026-09-06.md` is not worth building for this. (That note, and the
+  one below, are kept locally under `data/ml/notes/`, which is gitignored.)
+- **The classifier.** Across the 6,391 windows that sit between an annotated end
+  and its late prediction, the take's own song is the model's top label in a
+  median **11.1%** of them, and `__none__` in 0.0%. The model does not think the
+  song continues.
+
+The cause is pass 2 of `anchorLinkDecode`. It links any window that is not
+confidently something else, nothing bounds that on the right, and runs are
+extended in recording order, so the earlier song reaches an ambiguous window
+first and keeps it. The region between takes is not silent — mean
+`silence_ratio` 0.097 — so `linkMaxSilenceRatio` never fires. A take's own edges
+are short by comparison: median 2.8s from the annotated start to its first
+anchor, 3.6s from its last anchor to the annotated end.
+
+But that rule is load-bearing, and cutting it back naively costs more than it
+saves: one 272s take carried by a *single* three-window anchor scores IoU 0.99
+under legacy, because nothing else was anchored for 208s. What separates the two
+cases is not per-window evidence — per window neither looks like anything — but
+where a song sits in the ranking **averaged over a whole span**: median rank 1.3
+across spans inside its own take against 16.0 outside one. The fraction of
+windows a song actually wins does not separate them at all.
+
+### What changed
+
+`--link-policy bridge`, plus `--link-tail-sec` (default 2) and
+`--link-rescue-rank` (default 5) in `ml:eval`. Legacy is still the default and is
+bit-identical when the flag is absent — the legacy report matches the previous
+one across all 22 metric keys.
+
+1. A span with an anchor run of the **same** song on both sides is a passage
+   inside a take: fill it from both ends with the existing rule, no limit.
+2. Past a song's outermost anchor nothing vouches for it, so the run advances
+   `linkTailSec` seconds and then only while the song is still the model's own
+   top choice. A side with no different song anchored beyond it is not leashed —
+   there is nothing to arbitrate against, so silence stays the only stop.
+3. Unvouched tails advance in lockstep, so two songs reaching for the same
+   window meet in the middle rather than the earlier one taking all of it.
+4. A rescue pass then gives an unlabelled span to a neighbouring song when that
+   song's mean rank across the whole span is at most `linkRescueRank`. Silence
+   splits a span rather than being claimed with it, and a span with the same song
+   on both sides is skipped — that is the break between two takes of it.
+
+Rules 1–3 fix the overrun; rule 4 pays back the coverage they cost.
+
+Also added `npm run ml:compare`, which holds two eval reports against each other
+on the annotations both matched, so a change in aggregate metrics can be told
+apart from a change in which takes were recognized at all.
+
+And a **Prediction Lab** on the file detail page, for trying these settings on a
+recording you know. Preview is a dry run, so nothing reaches the review queue
+until it is applied, and candidates live only in the page. Decode-only settings
+go through `POST /api/prediction-reviews/run` as `decoderOverrides` and
+re-decode the saved model rather than retraining it, so candidates that differ
+only there are comparable. A preview is allowed on a completed file — a
+committed run still is not — because that is the only place a prediction can be
+checked against a known answer; there it shows the model's segments before
+annotated time is subtracted. It is for forming a hypothesis, not settling one:
+`ml:eval` over the library remains what decides.
+
+### Numbers
+
+Complete files, leave-one-file-out, 103 files / 688 annotations, snapshot
+`926d930d…`. `evidence` is the `--anchor-gap-policy` experiment from the same
+day, shown for comparison.
+
+| | legacy | `evidence` | rules 1–3 only | **`bridge`** |
+| --- | ---: | ---: | ---: | ---: |
+| Segment F1 | 91.42% | 91.63% | 92.31% | **93.06%** |
+| recall / precision | 92.99 / 89.90 | 93.19 / 90.12 | 89.99 / 94.76 | 92.37 / 93.76 |
+| Median end error | +6.09s | +4.39s | +0.27s | **+1.20s** |
+| Mean absolute end error | 20.32s | 19.42s | 15.46s | **16.03s** |
+| End within 2s | 19.6% | 25.4% | 42.8% | **38.7%** |
+| Start within 2s | 40.2% | 47.8% | 64.3% | **63.4%** |
+| Start more than 2s early | 25.7% | 30.3% | 18.6% | **21.6%** |
+| Matched annotations | 393 | 393 | 381 | **393** |
+
+Paired over the 385 annotations both runs matched: endings improve on 208 and
+worsen on 44; starts improve on 169 and worsen on 84. F1 **+1.640 points, file
+bootstrap 95% [+1.016, +2.287]**. On the same 47 close different-song transitions
+the companion document measured, the median ending error goes +3.70s → **+0.14s**
+and the next take's start +2.51s → **+0.30s**, against +1.24s / +0.33s for
+`evidence`.
+
+Held out by recording date, the newest 25% of complete files (26 files, which did
+not inform either threshold): matched takes unchanged at 76, median end error
++4.98s → +1.41s, mean absolute 19.76s → 16.54s, end within 2s 22.4% → 38.2%,
+start within 2s 50.0% → 67.1%, start more than 2s early 28.9% → 25.0%. F1 there
+moves +0.772; the gain is smaller on recent recordings because they already score
+93.7%.
+
+The gain survives every decoder setting swept (`anchorMargin` 0.10–0.25,
+`minAnchorRun` 2–5, `linkMaxSilenceRatio` 0.5–0.9: +1.40 to +2.59) and both
+thresholds are flat (rescue rank 2–10: 92.46–93.26; leash 1–4s: 92.98–93.06).
+Per file, 54 of 102 improve, 14 worsen, 34 are unchanged.
+
+### What it costs, and what is still wrong
+
+- Annotation recall falls 92.99% → 92.37% on complete files and 94.49% → 93.50%
+  on incomplete ones, against precision rising 89.90% → 93.76%.
+- 14 of 102 complete files get worse, the worst by 8.9 F1 points.
+- **Repeated takes of the same song are now the dominant error** (median end
+  error +28.4s after a gap, +54.0s back to back, against +32.9s and +73.6s for
+  legacy). Two takes of one song vouch for each other and merge. Rules 1–3 alone
+  get these to +13.6s and +45.2s; the rescue pass gives part of that back. A
+  stop/restart cue used as a barrier to vouching would fix both.
+- The rescue pass costs about a point of ending precision against rules 1–3
+  alone. `--link-rescue-rank -1` is the better setting when ending accuracy
+  matters more than coverage, and still beats legacy on every boundary statistic.
+
+Not the default, but now trainable: `ml:train --link-policy bridge`, plus
+`--link-tail-sec` and `--link-rescue-rank`, and the same three fields on
+`POST /api/prediction-reviews/rebuild-model`. `resolveTrainConfig` fills the two
+thresholds only when the policy is on, so a model trained with it records all
+three and the CLI, the import pipeline and the API decode it identically, while
+a legacy-trained model records none of them and is unchanged. Turning it on for
+real means retraining and reading the review queue's confirmed/edited/invalid
+split — the offline evidence here does not measure how the predictions feel to
+correct by hand. Full method, the rejected variants
+— global `fillTopK`, per-window rank gating, all-or-nothing bridging, a
+contention horizon, vote fraction as the rescue statistic, rescuing same-song
+spans, and `bridge` combined with `evidence` — and reproduction commands are in
+`experiments-2026-09-06-linking.md`, under the gitignored `data/ml/notes/`. The
+entry above stands on its own; that note is the long-form working record rather
+than something this entry depends on.
+
+---
+
 ## 2026-09-03 — v2.10: honest evaluation scope, prototype budget, silence-blocked linking (accepted)
 
 ### Context
@@ -54,7 +196,8 @@ non-monotone, which reads as noise; the complete-files metric moves 83.1% to
 86.4% over the same sweep. Precision lost on incomplete files was cancelling
 recall gained, and several sweeps were read as flat when they were not.
 
-Full method and the rejected ideas: [`experiments-2026-09-03-addendum.md`](./experiments-2026-09-03-addendum.md).
+Full method and the rejected ideas: `experiments-2026-09-03-addendum.md`, under
+the gitignored `data/ml/notes/`.
 
 ### What changed
 
@@ -221,7 +364,7 @@ Full library in-sample test (111 files, 162,753 extracted windows):
 - **Segment F1:** 75.5%
 
 #### 3. Architectural Experiments
-Detailed experimentation logs exploring window duration sweeps ($2.5\text{s} \to 6.0\text{s}$), multi-scale dual-window concatenation, and note-density-modulated confidence thresholding are documented in [`ml/experiments-2026-09-03.md`](./experiments-2026-09-03.md).
+Detailed experimentation logs exploring window duration sweeps ($2.5\text{s} \to 6.0\text{s}$), multi-scale dual-window concatenation, and note-density-modulated confidence thresholding are documented in `experiments-2026-09-03.md`, under the gitignored `data/ml/notes/`.
 
 ---
 
@@ -273,7 +416,8 @@ Diagnostic analysis of v2.4 LOO errors revealed that **92.7% of all classificati
 - **Ablation of `tempo_bpm`:** Removed `tempo_bpm` from the feature set (38 -> 37 features). Practice speed variation no longer distorts nearest-prototype distance.
 - **Rebalanced prototype budgeting:** Default `maxNonePrototypes` reduced from 120 to 60; default `prototypeBudget` increased from 1200 to 2000. Songs receive ample prototypes to capture diverse musical sections without being swallowed by silence.
 - **Phrase gap merging:** Default `mergeGapSec` increased from 3s to 5s to bridge typical micro-pauses between practice phrases.
-- `MODEL_VERSION` bumped to `v2.6`. Full report saved in `ml/experiments-2026-09-02.md`.
+- `MODEL_VERSION` bumped to `v2.6`. Full report saved in
+  `experiments-2026-09-02.md`, under the gitignored `data/ml/notes/`.
 
 ### Results
 

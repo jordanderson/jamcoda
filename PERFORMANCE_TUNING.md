@@ -5,10 +5,20 @@ what is worth changing. Measured 2026-09-04 on an Apple M1 (4 performance + 4
 efficiency cores, 16 GB) against the library at that date: 119 annotated files,
 172,078 windows, 37 features, 64 labels.
 
+**2026-09-06 update:** items 2 and 6 are now implemented in `ml:eval` and the
+shared prediction path. On a frozen 144-file/1,004-annotation snapshot, a full
+LOO run fell from 165s to 103s with all existing report metrics exactly equal.
+Cached decoder sweeps take about 4s including CLI startup (the decoder itself
+is ~0.12s; feature extraction and cache reads still cost time). A saved-model
+inference benchmark improved 1.43x. Method and full tables are in
+`experiments-2026-09-06.md`, under the gitignored `data/ml/notes/`.
+The separate window-only `evaluateLeaveOneOut` training helper benefits from
+the scorer but does not use the CLI's persistent fold cache.
+
 This is a ranked worklist with the measurements that justify the ranking,
-including the ideas that measured as *not* worth doing. Items 1 and 7 have
-since been implemented; everything else is still open. Both were output-neutral
-by construction, so results from before and after the change stay comparable.
+including the ideas that measured as *not* worth doing. Items 1, 2 and 7 and
+the single-neighbor path in item 6 have since been implemented. These runtime
+changes preserve prediction outputs; comparisons still require identical data.
 
 ## The shape of the problem
 
@@ -55,7 +65,11 @@ the mode cannot read it.
 
 ## 2. Cache the per-fold score matrix
 
-**The largest structural win. Turns decoder sweeps into sub-second runs.**
+**IMPLEMENTED for `ml:eval`. Decoder computation is sub-second; complete cached
+CLI runs are about 4 seconds.** See `ml/evalCache.ts`, `scoreWindowsFromSamples`
+and `decodeWindowScores`. Fingerprints cover all annotations, MIDI bytes,
+completion, training/scoring config and source. Each fold retains its labels;
+normalization and prototype selection still happen on training files only.
 
 `predictWindowsFromSamples` (`ml/songSegmentation.ts:1632`) splits cleanly in
 two: build `scoresList` (all of the cost), then `anchorLinkDecode` (nearly
@@ -148,7 +162,11 @@ they cannot drift and so item 2 benefits both.
 
 ## 6. Flatten prototypes into one `Float64Array`
 
-**~1.2-1.5x on the scoring loop.**
+**IMPLEMENTED for nearest-one `min` scoring; measured 1.43x for saved-model
+inference.** `ml/prototypeScorer.ts` packs once per scoring batch, preserves
+double precision and feature accumulation order, and tracks a scalar nearest
+distance per label. No persistent mutable-model cache or model format change.
+Multi-neighbor, average-kernel and legacy kNN modes keep their existing scorers.
 
 `model.prototypes` is an array of objects each holding a `number[]`, built by
 `JSON.parse` of the model file, so the feature vectors are scattered across the
@@ -160,7 +178,8 @@ heap. Benchmarked against a flat, label-major `Float64Array`:
 | P=21,312 | 1,687 us/window | 1,428 us/window |
 
 This also explains the super-linear scaling noted in
-`ml/experiments-2026-09-03-addendum.md` ("wall time grows faster than the
+`experiments-2026-09-03-addendum.md`, under the gitignored `data/ml/notes/`
+("wall time grows faster than the
 prototype count"): 2.97x the prototypes cost 4.50x the predict time in the fold
 measurement above, which is cache pressure, not arithmetic.
 
@@ -230,8 +249,7 @@ Of what remains: item 6 would take another 1.2-1.5x off the scoring loop, item 2
 removes the run entirely for decoder-parameter variants, and items 3 and 4
 multiply whatever is left.
 
-Order of remaining work, cheapest-first: 4 (a launch-script fix, not a code
-change), then 6, then 3, then 2, then 8. Items 2 and 3 are the ones that change
-how a sweep is run rather than how fast a fold is, and 8 is the one that makes
-wide worker fan-out fit in memory. Item 5 is tidiness and disk, not speed —
-do it when touching that code for another reason.
+Remaining candidates are 4 (launch-script scheduling), 3 (workers), then 8
+(fold fitting). Any normalization reuse in item 8 must preserve each fold's
+training-only sample selection and scaling; globally normalized features would
+leak held-out data. Item 5 is tidiness and disk, not speed.

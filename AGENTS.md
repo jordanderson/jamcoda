@@ -93,7 +93,8 @@ Core frontend routes:
   is scored against, and the same model measures 85% precision on complete files
   and 38% on incomplete ones. The aggregate therefore tracks annotation coverage
   rather than the model, and moves less than a point across changes that move
-  the honest number by three. See `ml/experiments-2026-09-03-addendum.md`.
+  the honest number by three. See `experiments-2026-09-03-addendum.md`, under
+  the gitignored `data/ml/notes/`.
 - **`__none__` training windows come only from files marked complete**
   (`TrainConfig.noneFromCompleteFilesOnly`, on by default). An unannotated
   window asserts "no song" only where the user declared the file finished;

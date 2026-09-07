@@ -56,6 +56,13 @@ function parseDecoder(value: string | undefined): TrainConfig['decoder'] {
   throw new Error(`Invalid --decoder value "${value}". Use anchor, viterbi, or smooth.`);
 }
 
+function parseLinkPolicy(value: string | undefined): TrainConfig['linkPolicy'] {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'legacy' || normalized === 'bridge') return normalized;
+  throw new Error(`Invalid --link-policy value "${value}". Use legacy or bridge.`);
+}
+
 function usage() {
   console.log(`
 Train a MIDI song-segmentation model from local annotations.
@@ -86,6 +93,15 @@ Options:
   --link-confidence <n>        Minimum confidence for a linked window (default: 0.5)
   --link-max-silence <float>   A window at or above this silence_ratio cannot be
                                linked into an anchor run (default: 0.7; 1 disables)
+  --link-policy <legacy|bridge>  How ambiguous windows join an anchor run
+                               (default: legacy). \`bridge\` stops a finished song
+                               running into the next one; see ml/CHANGELOG.md
+                               2026-09-06 before turning it on
+  --link-tail-sec <float>      Seconds an unvouched tail may run past its anchor
+                               run (bridge only; default: 2)
+  --link-rescue-rank <float>   Mean span rank at which an unlabelled span is
+                               given to a neighbouring song (bridge only;
+                               default: 5; -1 disables the pass)
   --trusted-none         Train __none__ only on files marked complete, instead of
                          on every annotated file (default: off — it helps only at
                          a small --prototype-budget; see ml/CHANGELOG.md v2.10)
@@ -124,6 +140,9 @@ async function main() {
     fillTopK: optionalInt('--fill-topk'),
     linkConfidence: clampOptional(optionalNum('--link-confidence'), 0, 1),
     linkMaxSilenceRatio: clampOptional(optionalNum('--link-max-silence'), 0, 1),
+    linkPolicy: parseLinkPolicy(readArg('--link-policy')),
+    linkTailSec: optionalNum('--link-tail-sec', 0),
+    linkRescueRank: optionalNum('--link-rescue-rank', -1),
     noneFromCompleteFilesOnly: hasFlag('--trusted-none') ? true : undefined
   };
 

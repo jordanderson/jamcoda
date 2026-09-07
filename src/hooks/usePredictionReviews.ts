@@ -97,6 +97,18 @@ export function useRunPredictionForFile() {
   });
 }
 
+/**
+ * A preview run. It writes nothing, so unlike `useRunPredictionForFile` it
+ * invalidates no queries — the review queue on screen is still the truth, and
+ * the candidate lives only in the caller's state until it is committed.
+ */
+export function usePreviewPredictionForFile() {
+  return useMutation({
+    mutationFn: (params: Omit<RunPredictionForFileRequest, 'dryRun'>) =>
+      predictionReviewsApi.runForFile({ ...params, dryRun: true })
+  });
+}
+
 export function useRebuildPredictionModel() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { performance } from 'node:perf_hooks';
 import {
   clamp, ensureDirForFile, hasFlag, parseNum, pct, readArg, resolveDbPath, roundTo
 } from '@core/cli/args';
@@ -11,11 +12,17 @@ import {
   loadAnnotatedMidiFiles,
   loadModel,
   predictWindowsFromSamples,
+  decodeWindowScores,
+  scoreWindowsFromSamples,
+  resolveTrainConfig,
   trainModelFromSamples,
   windowsToSegments,
   type AnnotatedMidiFile,
-  type PredictConfig
+  type PredictConfig,
+  type TrainConfig
 } from './songSegmentation.js';
+import { datasetIdentity, digest, EvalScoreCache, scoringConfig, scoringSourceIdentity } from './evalCache.js';
+import { matchBoundaries, summarizeBoundaries, type BoundaryMatch } from './boundaryEvaluation.js';
 
 interface FileEvalRow {
   fileId: number;
@@ -86,6 +93,14 @@ interface SongEvalRow {
 }
 
 interface EvalReport {
+  dataset: ReturnType<typeof datasetIdentity>;
+  modelSha256: string;
+  scoringSourceSha256: string;
+  trainConfig: TrainConfig;
+  timingMs: Record<string, number>;
+  scoreCache: { hits: number; misses: number; enabled: boolean };
+  boundaryComplete: ReturnType<typeof summarizeBoundaries>;
+  boundaryMatchesComplete: BoundaryMatch[];
   generatedAt: string;
   mode: 'insample' | 'loo';
   modelPath: string;
@@ -153,6 +168,17 @@ Options:
   --min-segment-confidence <n>   Segment evaluation confidence threshold (default: 0.3)
   --merge-gap-sec <n>            Segment evaluation merge gap (default: 5)
   --include-none                 Also evaluate __none__ windows
+  --cache-dir <path>             Reuse per-fold scores (default: data/ml/eval-cache)
+  --no-cache                     Disable score caching for timing/reference checks
+  --expect-dataset <sha256>       Refuse a run against different annotations/MIDI
+  --anchor-margin <n>            Override decoder seed margin without retraining
+  --min-anchor-run <int>         Override minimum anchor run
+  --fill-topk <int>              Override linking affinity (-1 disables)
+  --link-max-silence <n>          Override silence linking limit
+  --anchor-gap-policy <legacy|midpoint|evidence>  Experimental transition placement
+  --link-policy <legacy|bridge>  Ambiguous-window linking rule
+  --link-tail-sec <n>            Seconds an unvouched tail may run (bridge only)
+  --link-rescue-rank <n>        Mean-rank span rescue; -1 disables (bridge default 5)
   --quiet                        Reduce per-file logging
   --help                         Show this help
 `);
@@ -319,6 +345,8 @@ function evaluateFileSegments(
 }
 
 async function main() {
+  const startedAt = performance.now();
+  const timingMs = { features: 0, fit: 0, score: 0, decode: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
   if (hasFlag('--help')) {
     usage();
     return;
@@ -341,6 +369,40 @@ async function main() {
   };
 
   const model = loadModel(modelPath);
+  const modelSha256 = digest(readFileSync(modelPath));
+  const scoringSourceSha256 = scoringSourceIdentity();
+  const numericOverrides = [
+    ['--anchor-margin', 'anchorMargin', 0, Infinity, false],
+    ['--min-anchor-run', 'minAnchorRun', 1, Infinity, true],
+    ['--fill-topk', 'fillTopK', -1, Infinity, true],
+    ['--link-max-silence', 'linkMaxSilenceRatio', 0, 1, false],
+    ['--link-tail-sec', 'linkTailSec', 0, Infinity, false],
+    ['--link-rescue-rank', 'linkRescueRank', -1, Infinity, false]
+  ] as const;
+  for (const [flag, key, min, max, integer] of numericOverrides) {
+    const raw = readArg(flag);
+    if (raw === undefined) continue;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < min || value > max || (integer && !Number.isInteger(value))) {
+      throw new Error(`Invalid ${flag}: ${raw}`);
+    }
+    model.config[key] = value;
+  }
+  const gapPolicy = readArg('--anchor-gap-policy');
+  if (gapPolicy !== undefined) {
+    if (gapPolicy !== 'legacy' && gapPolicy !== 'midpoint' && gapPolicy !== 'evidence') {
+      throw new Error('Invalid --anchor-gap-policy; use legacy, midpoint, or evidence.');
+    }
+    model.config.anchorGapPolicy = gapPolicy;
+  }
+  const linkPolicy = readArg('--link-policy');
+  if (linkPolicy !== undefined) {
+    if (linkPolicy !== 'legacy' && linkPolicy !== 'bridge') {
+      throw new Error('Invalid --link-policy; use legacy or bridge.');
+    }
+    model.config.linkPolicy = linkPolicy;
+  }
+  if (mode === 'loo') model.config = resolveTrainConfig(model.config);
   const modelVersion = model.modelVersion ?? `v${model.version}`;
   const outPath = outArg ? path.resolve(outArg) : defaultReportPath(mode, modelVersion);
   const ignored = decoderIgnoredOptions(model.config.decoder);
@@ -354,12 +416,31 @@ async function main() {
   if (files.length === 0) {
     throw new Error('No annotated files found in DB.');
   }
+  const dataset = datasetIdentity(files);
+  const expectedDataset = readArg('--expect-dataset');
+  if (expectedDataset && expectedDataset !== dataset.sha256) {
+    throw new Error(`Dataset changed: expected ${expectedDataset}, found ${dataset.sha256}.`);
+  }
+  const cache = hasFlag('--no-cache') ? undefined : new EvalScoreCache(
+    path.resolve(readArg('--cache-dir') || 'data/ml/eval-cache'),
+    {
+      schema: 1, dataset: dataset.sha256, source: scoringSourceSha256, mode,
+      config: scoringConfig(model.config),
+      // LOO trains fresh folds: the saved prototypes and date are irrelevant.
+      model: mode === 'insample' ? modelSha256 : undefined
+    }
+  );
+  const scoreCache = { hits: 0, misses: 0, enabled: !!cache };
+  const boundaryMatchesComplete: BoundaryMatch[] = [];
+  let completeAnnotations = 0;
+  let completePredictions = 0;
   const totalAnnotations = files.reduce((sum, file) => sum + file.annotations.length, 0);
   const windowsByFile = new Map<number, ReturnType<typeof buildSamplesForFile>>();
   const notesByFile = new Map<number, ReturnType<typeof extractNotesFromMidi>>();
   let totalTruthWindows = 0;
 
   console.log('Extracting window features from MIDI files...');
+  const featuresStartedAt = performance.now();
   for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
     const file = files[fileIndex];
     const featureStartMs = Date.now();
@@ -385,6 +466,7 @@ async function main() {
       );
     }
   }
+  timingMs.features = performance.now() - featuresStartedAt;
 
   console.log('Starting evaluation...');
   console.log(`  model: ${modelPath} (${modelVersion}, ${model.createdAt})`);
@@ -403,6 +485,7 @@ async function main() {
   );
   console.log(`  dataset: files=${formatCount(files.length)}, annotations=${formatCount(totalAnnotations)}`);
   console.log(`  total windows extracted=${formatCount(totalTruthWindows)}`);
+  console.log(`  dataset sha256: ${dataset.sha256}`);
 
   const byFile: FileEvalRow[] = [];
   const confusion = new Map<string, number>();
@@ -419,29 +502,47 @@ async function main() {
     let predictedWindows: ReturnType<typeof predictWindowsFromSamples> = [];
     let trainWindowCount = 0;
 
-    if (mode === 'insample') {
-      predictedWindows = predictWindowsFromSamples(model, truthWindows, predictConfig);
-    } else {
-      const trainSamples: ReturnType<typeof buildSamplesForFile> = [];
-      for (const trainFile of files) {
-        if (trainFile.fileId === file.fileId) continue;
-        const trainWindows = windowsByFile.get(trainFile.fileId) || [];
-        trainSamples.push(...trainWindows);
-      }
-      trainWindowCount = trainSamples.length;
-      if (trainSamples.length === 0) {
-        if (!quiet) {
-          console.log(
-            `[${fileIndex + 1}/${files.length}] ${file.filename} (#${file.fileId})`
-            + ' | skipped: no training windows for LOO fold'
-          );
+    const cacheStartedAt = performance.now();
+    let scored = cache?.read(file.fileId, truthWindows.length);
+    timingMs.cacheRead += performance.now() - cacheStartedAt;
+    if (scored) scoreCache.hits++;
+    else {
+      scoreCache.misses++;
+      let foldModel = model;
+      if (mode === 'loo') {
+        const fitStartedAt = performance.now();
+        const trainSamples: ReturnType<typeof buildSamplesForFile> = [];
+        for (const trainFile of files) {
+          if (trainFile.fileId === file.fileId) continue;
+          const trainWindows = windowsByFile.get(trainFile.fileId) || [];
+          trainSamples.push(...trainWindows);
         }
-        continue;
-      }
+        trainWindowCount = trainSamples.length;
+        if (trainSamples.length === 0) {
+          if (!quiet) {
+            console.log(
+              `[${fileIndex + 1}/${files.length}] ${file.filename} (#${file.fileId})`
+              + ' | skipped: no training windows for LOO fold'
+            );
+          }
+          continue;
+        }
 
-      const foldModel = trainModelFromSamples(trainSamples, model.config);
-      predictedWindows = predictWindowsFromSamples(foldModel, truthWindows, predictConfig);
+        foldModel = trainModelFromSamples(trainSamples, model.config);
+        timingMs.fit += performance.now() - fitStartedAt;
+      }
+      const scoreStartedAt = performance.now();
+      scored = { labels: foldModel.labels, scores: scoreWindowsFromSamples(foldModel, truthWindows) };
+      timingMs.score += performance.now() - scoreStartedAt;
+      const writeStartedAt = performance.now();
+      cache?.write(file.fileId, scored);
+      timingMs.cacheWrite += performance.now() - writeStartedAt;
     }
+    const decodeStartedAt = performance.now();
+    predictedWindows = decodeWindowScores(
+      { config: model.config, labels: scored.labels }, truthWindows, scored.scores, predictConfig
+    );
+    timingMs.decode += performance.now() - decodeStartedAt;
     const predictedByStart = new Map<string, string>();
     for (const prediction of predictedWindows) {
       predictedByStart.set(roundTo(prediction.startTime).toFixed(6), prediction.label);
@@ -502,6 +603,11 @@ async function main() {
     }, fileNotes);
 
     const fileSegmentRow = evaluateFileSegments(file, segments);
+    if (file.isComplete) {
+      completeAnnotations += file.annotations.length;
+      completePredictions += segments.length;
+      boundaryMatchesComplete.push(...matchBoundaries(file.fileId, file.annotations, segments));
+    }
     if (fileSegmentRow) {
       byFileSegment.push(fileSegmentRow);
       accumulateSegmentSummary(segmentSummary, fileSegmentRow);
@@ -527,7 +633,7 @@ async function main() {
         console.log(
           `[${fileIndex + 1}/${files.length}] ${file.filename} (#${file.fileId})`
           + ` | truth=${formatCount(truthWindows.length)}`
-          + (mode === 'loo' ? ` | train=${formatCount(trainWindowCount)}` : '')
+          + (mode === 'loo' ? (trainWindowCount ? ` | train=${formatCount(trainWindowCount)}` : ' | cached scores') : '')
           + ` | predicted=${formatCount(predictedWindows.length)}`
           + ` | eval=${formatCount(fileRow.evaluatedWindows)}`
           + ` | acc=${pct(fileRow.accuracy)}`
@@ -596,7 +702,16 @@ async function main() {
     })
     .sort((a, b) => b.annotationSec - a.annotationSec || a.songName.localeCompare(b.songName));
 
+  // Detect edits to the live DB or MIDI while the run was in progress. A copied
+  // DB (--db) is preferable for sweeps; never publish mixed-snapshot results.
+  if (datasetIdentity(loadAnnotatedMidiFiles(dbPath, rootDir)).sha256 !== dataset.sha256) {
+    throw new Error('Annotations or MIDI changed during evaluation. Re-run against a database snapshot.');
+  }
+  timingMs.total = performance.now() - startedAt;
   const report: EvalReport = {
+    dataset, modelSha256, scoringSourceSha256, trainConfig: model.config, timingMs, scoreCache,
+    boundaryComplete: summarizeBoundaries(boundaryMatchesComplete, completeAnnotations, completePredictions),
+    boundaryMatchesComplete,
     generatedAt: new Date().toISOString(),
     mode,
     modelPath,
@@ -634,6 +749,13 @@ async function main() {
   writeFileSync(outPath, JSON.stringify(report, null, 2), 'utf8');
 
   console.log('\nEvaluation summary:');
+  console.log(`  runtime=${(timingMs.total / 1000).toFixed(2)}s; score cache hits=${scoreCache.hits}, misses=${scoreCache.misses}`);
+  const boundaries = report.boundaryComplete;
+  console.log(`  complete-file boundaries: ${boundaries.matched}/${boundaries.annotations} annotations matched (mutual best IoU >= 0.5)`);
+  if (boundaries.start && boundaries.end) {
+    console.log(`  start/end mean absolute error=${boundaries.start.meanAbsoluteSec.toFixed(2)}s/${boundaries.end.meanAbsoluteSec.toFixed(2)}s;`
+      + ` mean signed error=${boundaries.start.meanSignedSec.toFixed(2)}s/${boundaries.end.meanSignedSec.toFixed(2)}s (positive = late)`);
+  }
   console.log(
     `  files=${formatCount(report.filesEvaluated)}`
     + ` windows=${formatCount(report.windowsEvaluated)}`

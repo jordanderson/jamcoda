@@ -11,10 +11,12 @@ import {
 } from '@core/timeRanges';
 import type { JmxBookmark, JmxSkip } from '@server/types';
 import {
+  DECODE_ONLY_CONFIG_KEYS,
   extractNotesFromMidi,
   loadModel,
   predictWindows,
   windowsToSegments,
+  type DecodeOnlyConfig,
   type PredictConfig,
   type SongSegment
 } from '../../ml/songSegmentation';
@@ -43,6 +45,13 @@ export interface RunPredictionOptions {
   modelVersion?: string;
   /** Compute segments without writing anything. */
   dryRun?: boolean;
+  /**
+   * Decoder settings applied on top of the saved model's own config. These
+   * never change the trained model, so two runs differing only here are
+   * comparable — that is what lets a preview try a decoder setting without
+   * rebuilding. Anything absent falls back to what the model was trained with.
+   */
+  decoderOverrides?: DecodeOnlyConfig;
   /** Root used to resolve the file's relative `local_path`. */
   rootDir?: string;
   /**
@@ -60,7 +69,16 @@ export interface RunPredictionResult {
   modelVersion: string;
   config: PredictConfig;
   modelConfig: { windowSec: number; stepSec: number; k: number };
+  /** The decoder settings actually used, after any overrides. */
+  decodeConfig: DecodeOnlyConfig;
   segments: SongSegment[];
+  /**
+   * What the model said before annotated ranges were removed and bookmark and
+   * silence splits applied. Only populated for a dry run: on a file that is
+   * already annotated every segment is excluded, so the written shape says
+   * nothing about the model, and comparing decoder settings needs this.
+   */
+  rawSegments: SongSegment[];
   /** Segments the model produced before annotated ranges were removed. */
   rawSegmentCount: number;
   /** Segments dropped or trimmed by exclusion. */
@@ -126,6 +144,7 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
     config,
     clearUnpromoted = true,
     dryRun = false,
+    decoderOverrides,
     rootDir = process.cwd()
   } = options;
 
@@ -136,8 +155,10 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
 
   // File completion is authoritative. A completed file's annotations are
   // final, so re-running predictions is rejected rather than silently
-  // producing rows that can never be promoted.
-  if (file.is_complete) {
+  // producing rows that can never be promoted. A dry run writes nothing, and a
+  // completed file is the only place a prediction can be held against a known
+  // answer, so previewing one is allowed.
+  if (file.is_complete && !dryRun) {
     throw new PredictionImportError(
       'Cannot run predictions on a file marked complete',
       'invalid'
@@ -147,6 +168,15 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
   const midiPath = resolveMidiPath(file.local_path, rootDir);
 
   const model = loadModel(modelPath);
+  if (decoderOverrides) {
+    // Copy key by key rather than spreading. The type says decode-only, but a
+    // caller reaching past it must not be able to change how the windows are
+    // cut and pass the result off as this model's output.
+    for (const key of DECODE_ONLY_CONFIG_KEYS) {
+      const value = decoderOverrides[key];
+      if (value !== undefined) (model.config[key] as unknown) = value;
+    }
+  }
   const notes = extractNotesFromMidi(midiPath);
   const windows = predictWindows(model, midiPath, config);
   const rawSegments = windowsToSegments(windows, {
@@ -225,7 +255,13 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
       stepSec: model.config.stepSec,
       k: model.config.k
     },
+    decodeConfig: Object.fromEntries(
+      DECODE_ONLY_CONFIG_KEYS
+        .filter((key) => model.config[key] !== undefined)
+        .map((key) => [key, model.config[key]])
+    ),
     segments,
+    rawSegments: dryRun ? rawSegments : [],
     rawSegmentCount: rawSegments.length,
     excludedSegmentCount,
     bookmarkSplitCount,

@@ -103,7 +103,8 @@ npm run ml:train -- \
   --anchor-margin 0.15 \
   --min-anchor-run 3 \
   --fill-topk -1 \
-  --link-max-silence 0.7
+  --link-max-silence 0.7 \
+  --link-policy legacy
 ```
 
 Notes:
@@ -125,6 +126,14 @@ Notes:
   budget. See the model summary above.
 - `--link-max-silence` sets the `silence_ratio` at which a window stops being
   linkable into an anchor run (default 0.7; 1 disables the rule).
+- `--link-policy bridge` trains a model that stops a finished song running into
+  the next one. Default `legacy`. `--link-tail-sec` (default 2) and
+  `--link-rescue-rank` (default 5, `-1` off) tune it and are only read under
+  `bridge`. A model trained with the policy records all three, so the CLI, the
+  import pipeline and the API all decode it the same way and a later change to a
+  default cannot move an existing model. Measured at +1.64 complete-file F1 with
+  the median ending error down from +6.09s to +1.20s — read the 2026-09-06 entry
+  in [`CHANGELOG.md`](CHANGELOG.md) for what it costs before turning it on.
 - `--scaling` is the per-feature normalization (`minmax`, `zscore`, or `none`).
 - `--score-neighbors` is the number of nearest prototypes to average per label
   (default 1, the single nearest). The fit clamps this value to the smallest
@@ -212,6 +221,92 @@ how much of each annotated span is covered by a same-song predicted segment
 (annotation recall), and how much of each predicted segment actually overlaps a
 same-song annotation (segment precision), plus an F1 across both.
 
+### Fast, comparable decoder sweeps
+
+`ml:eval` caches each fold's label scores under `data/ml/eval-cache/`. The first
+run fits and scores normally; later runs with the same data and scoring config
+reuse those scores. MIDI feature extraction, decoding, note snapping and metrics
+still run. Use `--cache-dir <path>` for a separate cache or `--no-cache` for a
+fresh runtime measurement. The cache is disposable and never updates annotations,
+prediction reviews, or the saved model.
+
+The cache key includes annotation ranges and names, file completion, MIDI byte
+hashes, training/scoring settings, and source hashes. LOO caches cover the entire
+training population, not just the held-out file, and keep each fold's own label
+list. In-sample caches also pin the model bytes. A prototype budget, feature,
+normalization or training-data change therefore recomputes the scores. Decoder
+and segment-filter overrides can reuse them:
+
+```bash
+npm run ml:eval -- --out data/ml/baseline.json
+npm run ml:eval -- --anchor-margin 0.18 --out data/ml/margin18.json
+npm run ml:eval -- --anchor-gap-policy evidence --out data/ml/gap-evidence.json
+```
+
+Reports contain `dataset.sha256`, a content manifest, the full effective training
+config, model/source hashes, cache hit counts, and stage timings. **Only compare
+variants with the same dataset hash.** For ongoing annotation work, use a SQLite
+backup as `--db <snapshot>` for every run; a raw copy of a live WAL-mode database
+can miss committed annotations. `--expect-dataset <sha256>` refuses a run if the
+input changed, and evaluation checks again before writing the report. A model
+version or annotation count alone is not a dataset identity.
+
+`boundaryComplete` reports start/end signed error (positive = late), absolute
+error, p90 absolute error, and fractions within 2 seconds or more than 2 seconds
+early/late. It uses mutual best same-song overlap matches with IoU >= 0.5; missed
+takes and excess fragments appear in the unmatched counts. `boundaryMatchesComplete`
+keeps individual errors for paired comparisons. A lower error among fewer matched
+takes is not automatically an improvement: compare overlap F1, matched coverage,
+and the same matched annotations across variants.
+
+`--link-policy legacy|bridge` is an **experimental**, eval-only override that
+changes how ambiguous windows join an anchor run, and is the largest measured
+improvement to boundary placement so far. Legacy links any window that is not
+confidently something else, without limit and in recording order, so a finished
+song owns the warm-up and noodling until the next song anchors — the median take
+ended 6.09s late. `bridge` links a span freely when an anchor run of the *same*
+song closes it, leashes an unvouched tail to `--link-tail-sec` (default 2),
+advances competing tails in lockstep, and then gives leftover spans to a
+neighbouring song when that song's mean rank across the whole span is at most
+`--link-rescue-rank` (default 5; `-1` disables the pass). Median end error falls
+to +1.20s, complete-file F1 rises 1.64 points, and the same number of takes is
+recognized. It costs a little annotation recall and does not fix repeated takes
+of the same song. See
+the 2026-09-06 entry in [`CHANGELOG.md`](CHANGELOG.md) for the committed
+summary, and `experiments-2026-09-06-linking.md` under the gitignored
+`data/ml/notes/` for the full method, the held-out check and the rejected
+alternatives.
+
+`--anchor-gap-policy legacy|midpoint|evidence` is an **experimental**, eval-only
+override. Legacy is the existing behavior: the earlier anchor claims ambiguous
+windows first. The other policies divide a mutually linkable gap between two
+different-song anchors at its midpoint or the best single change in their score
+evidence. Silence and strong competing evidence remain barriers. These experiments
+do not change the app's default decoder or the saved model. See
+`experiments-2026-09-06.md`, under the gitignored `data/ml/notes/`, for
+controlled results.
+
+### Compare two runs, not two numbers
+
+`ml:eval` scores one run. Whether a change helped is a question about two, and
+an aggregate can move either because the same takes were predicted better or
+because a different set of takes was recognized at all. `ml:compare` separates
+those:
+
+```bash
+npm run ml:compare -- --baseline data/ml/legacy.json --variant data/ml/bridge.json
+```
+
+It refuses reports from different datasets, then reports: complete-file F1 with
+a per-file bootstrap interval; how many annotations each run matched and how many
+they share; start and end error over the shared annotations only, with
+improved/worsened counts; and the close different-song transitions both runs
+matched at both ends. `--out` writes the whole thing, including every transition,
+as JSON. It reads reports only — it never opens the database or the model.
+
+Read the interval, not just the delta. A gain whose interval crosses zero rests
+on a few files.
+
 ### Read the complete-files row, not the aggregate
 
 Segment precision is reported three ways: over files marked complete, over the
@@ -239,7 +334,7 @@ The practical consequence is that the aggregate row barely responds to real
 changes. Across window lengths 4s to 8s it moves less than a point and
 non-monotonically, while the complete-files row moves 3.3 points. Precision lost
 on incomplete files cancels recall gained. See
-[`experiments-2026-09-03-addendum.md`](./experiments-2026-09-03-addendum.md).
+`experiments-2026-09-03-addendum.md`, under the gitignored `data/ml/notes/`.
 
 Marking a file complete therefore does two things: it puts the file into the
 honest evaluation population, and it makes the file's unannotated time usable as
@@ -258,6 +353,49 @@ You do not need terminal commands for routine iteration:
   in `reRunErrors` without failing the rebuild. This is opt-in and off by
   default (it can take a long time): the sidebar shows a "Re-score pending
   predictions" checkbox, or pass `reRunUnsure: true` to the endpoint.
+- Under the piano roll on every file, a **whole-recording overview** draws the
+  annotations, the current predictions and any previewed Prediction Lab
+  candidates as one bar each on a shared time axis, with the playhead marked
+  across all of them. It is the counterpart to the piano roll's scrolling note
+  view: the shape of a session at a glance, one click to jump to any song, and —
+  with a candidate up there — a direct read on where a setting change moves a
+  boundary relative to what is playing.
+  Candidate runs are owned by the detail page rather than the lab, which is what
+  lets both draw them. The playhead is a sibling overlay, never a prop of the
+  memoised `SpanRow`: `currentTime` changes every frame, and threading it into
+  the rows would re-render every span in the file per frame — the mistake
+  `PianoRollTimelines` is written to avoid.
+- The **Prediction Lab** on a file's detail page tries prediction settings on
+  that one recording. Preview runs the pipeline with `dryRun`, so nothing
+  reaches `prediction_reviews` until "Apply"; candidates are held in the page
+  and disappear when you leave it. Settings are split into *segment shaping*
+  (post-decode filters) and *decoding* — the decoding fields re-decode the same
+  trained model, so two candidates that differ only there came from one model
+  and are directly comparable. Because a preview writes nothing it is also
+  allowed on a file marked complete, which a committed run is not: that is the
+  only place a prediction can be held against a known answer. On such a file the
+  lab shows the model's segments *before* annotated time is subtracted, since
+  otherwise a fully annotated file leaves nothing to look at.
+  The "Current review queue" row is *stored* output, which can predate the model
+  on disk — comparing a candidate against it mixes a model change with a settings
+  change. Once a preview has reported which model it used, a mismatch is called
+  out; for a like-for-like baseline, preview once with `Link policy: legacy`.
+  **One recording forms a hypothesis; it does not settle one.** Confirm a
+  setting across the library with `ml:eval` and `ml:compare` before it changes
+  how models are built. Every field carries a `?` with a plain-language note on
+  what it does and which way to move it, including which fields the default
+  anchor decoder ignores outright; the copy lives in
+  `src/components/files/predictionSettingHelp.ts`.
+- `POST /api/prediction-reviews/run` accepts `dryRun` and `decoderOverrides` in
+  addition to the segment filters. `decoderOverrides` takes only decode-only
+  fields (`DECODE_ONLY_CONFIG_KEYS`); anything else is dropped, so a preview can
+  never show segments from a model that was never built.
+- `POST /api/prediction-reviews/rebuild-model` accepts the same training knobs
+  as `ml:train`, including `linkPolicy`, `linkTailSec` and `linkRescueRank`.
+  Anything the request omits is left undefined so `resolveTrainConfig` supplies
+  it, which is what keeps the button and the CLI building the same model. The
+  sidebar sends none of them, so the button trains a `legacy` model until that
+  changes.
 - The sidebar `Rebuild Model` button shows a badge when annotations have changed
   since the last build: the count of annotations created or edited after the
   model's `createdAt`, plus any song names the model has never seen, from
@@ -393,11 +531,25 @@ Rebuild model after new annotations using sidebar `Rebuild Model` or `npm run ml
 
 ## Key Files (for Coding Agents)
 
+Experiment write-ups are **not** in the repo. Each dated `experiments-*.md` lives
+under `data/ml/notes/`, which is gitignored along with the reports and model
+snapshots it cites. `CHANGELOG.md` is the committed record and stands on its own;
+the notes are the long-form working detail behind each entry. A changelog entry
+naming a file you do not have is expected, not a broken link.
+
 - `ml/songSegmentation.ts`: feature extraction, prototype training, anchor-link decoding, segmentation
 - `ml/songSegmentation.test.ts`: co-located tests for feature extraction, prototype training, and decoding
+- `ml/prototypeScorer.ts`: packed nearest-prototype scoring for the default `min`/single-neighbour mode
+- `ml/evalCache.ts`: dataset/config/source fingerprints and the persistent per-fold score cache
+- `ml/boundaryEvaluation.ts`: take-level boundary matching and signed start/end error
+- `ml/evalComparison.ts` + `ml/compareEvals.ts`: paired comparison of two eval reports (`ml:compare`)
 - `ml/train.ts`: CLI training entrypoint
 - `ml/predict.ts`: CLI prediction entrypoint (model only, no DB writes)
 - `ml/predictAndImport.ts`: CLI wrapper around the shared import pipeline
+- `src/components/files/FileOverview.tsx`: whole-recording span bars and playhead, shared by the detail page and the lab
+- `src/components/files/predictionCandidates.ts`: the previewed-run shape both of them draw
+- `src/components/files/PredictionLab.tsx`: per-file settings preview and candidate comparison
+- `src/components/files/predictionSettingHelp.ts`: the `?` copy for every lab setting
 - `server/services/predictionImport.ts`: the prediction + import pipeline itself,
   shared with `POST /api/prediction-reviews/run` so the CLI and the API cannot
   drift. Schema is the migration runner's job; nothing here creates tables.

@@ -11,11 +11,13 @@ import {
 } from '../services/predictionImport';
 import { getRebuildStatus } from '../services/rebuildStatus';
 import {
+  DECODE_ONLY_CONFIG_KEYS,
   evaluateLeaveOneOut,
   loadAnnotatedMidiFiles,
   saveModel,
   trainModel,
   TRAIN_CONFIG_DEFAULTS,
+  type DecodeOnlyConfig,
   type PredictConfig,
   type TrainConfig
 } from '../../ml/songSegmentation';
@@ -77,6 +79,46 @@ function parseOptionalScoreMode(value: unknown): TrainConfig['scoreMode'] {
     if (normalized === 'min' || normalized === 'avg') return normalized;
   }
   return undefined;
+}
+
+function parseOptionalLinkPolicy(value: unknown): TrainConfig['linkPolicy'] {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'legacy' || normalized === 'bridge') return normalized;
+  }
+  return undefined;
+}
+
+/**
+ * Decoder settings a caller may apply on top of the saved model's config.
+ *
+ * Only decode-only fields are accepted: they re-decode the same trained model,
+ * so a preview cannot silently produce segments from a model that was never
+ * built. Unknown or malformed values are dropped rather than rejected, matching
+ * the rest of this route.
+ */
+function parseDecoderOverrides(value: unknown): DecodeOnlyConfig | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const body = value as Record<string, unknown>;
+  const overrides: Record<string, unknown> = {};
+  for (const key of DECODE_ONLY_CONFIG_KEYS) {
+    if (!(key in body) || body[key] === undefined || body[key] === null || body[key] === '') continue;
+    if (key === 'decoder') {
+      const parsed = parseOptionalDecoder(body[key]);
+      if (parsed) overrides[key] = parsed;
+    } else if (key === 'linkPolicy') {
+      const parsed = parseOptionalLinkPolicy(body[key]);
+      if (parsed) overrides[key] = parsed;
+    } else if (key === 'anchorGapPolicy') {
+      const raw = typeof body[key] === 'string' ? (body[key] as string).trim().toLowerCase() : '';
+      if (raw === 'legacy' || raw === 'midpoint' || raw === 'evidence') overrides[key] = raw;
+    } else {
+      const parsed = parseOptionalNumber(body[key]);
+      if (parsed !== undefined) overrides[key] = parsed;
+    }
+  }
+  return Object.keys(overrides).length > 0 ? (overrides as DecodeOnlyConfig) : undefined;
 }
 
 function parseOptionalDecoder(value: unknown): TrainConfig['decoder'] {
@@ -378,6 +420,9 @@ router.post('/run', async (req: Request, res: Response) => {
     };
     const clearUnpromoted = parseOptionalBoolean(req.body.clearUnpromoted) ?? true;
     const minSkipSplitSec = Math.max(0, parseOptionalNumber(req.body.minSkipSplitSec) ?? 30);
+    // A dry run writes nothing, so it is also allowed on a completed file —
+    // the only place a prediction can be held against a known answer.
+    const dryRun = parseOptionalBoolean(req.body.dryRun) ?? false;
 
     const result = runPredictionImport({
       fileId,
@@ -385,6 +430,8 @@ router.post('/run', async (req: Request, res: Response) => {
       config,
       clearUnpromoted,
       minSkipSplitSec,
+      dryRun,
+      decoderOverrides: parseDecoderOverrides(req.body.decoderOverrides),
       rootDir: projectRoot
     });
 
@@ -402,7 +449,13 @@ router.post('/run', async (req: Request, res: Response) => {
       bookmarkSplitCount: result.bookmarkSplitCount,
       bookmarkCount: result.bookmarks.length,
       skipSplitCount: result.skipSplitCount,
-      skipCount: result.skips.length
+      skipCount: result.skips.length,
+      dryRun: result.dryRun,
+      decodeConfig: result.decodeConfig,
+      // Only a preview needs the segments themselves; a committed run has
+      // already written them and the client refetches the review rows.
+      segments: result.dryRun ? result.segments : undefined,
+      rawSegments: result.dryRun ? result.rawSegments : undefined
     });
   } catch (error) {
     if (error instanceof PredictionImportError) {
@@ -474,6 +527,9 @@ router.post('/rebuild-model', async (req: Request, res: Response) => {
       fillTopK: parseOptionalNumber(req.body.fillTopK),
       linkConfidence: optionalClamped(req.body.linkConfidence, 0, 1),
       linkMaxSilenceRatio: optionalClamped(req.body.linkMaxSilenceRatio, 0, 1),
+      linkPolicy: parseOptionalLinkPolicy(req.body.linkPolicy),
+      linkTailSec: optionalNumber(req.body.linkTailSec, 0),
+      linkRescueRank: optionalNumber(req.body.linkRescueRank, -1),
       noneFromCompleteFilesOnly: parseOptionalBoolean(req.body.noneFromCompleteFilesOnly)
     };
     const includeEvaluation = parseOptionalBoolean(req.body.includeEvaluation) ?? false;

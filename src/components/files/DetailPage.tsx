@@ -46,6 +46,9 @@ import {
 import { DetailAnnotationList } from './DetailAnnotationList';
 import { DetailDeviceMarkers, type DeviceMarker } from './DetailDeviceMarkers';
 import { DetailPredictionList } from './DetailPredictionList';
+import { PredictionLab } from './PredictionLab';
+import { FileOverview } from './FileOverview';
+import type { CandidateRun } from './predictionCandidates';
 
 interface DetailPageProps {
   fileId: number;
@@ -96,6 +99,10 @@ export function DetailPage({ fileId }: DetailPageProps) {
   const updatePredictionReview = useUpdatePredictionReview();
   const promotePredictionReview = usePromotePredictionReview();
   const setFileCompletion = useSetFileCompletion();
+  // Previewed Prediction Lab runs. They live here, not in the lab, so the
+  // overview beside the piano roll can draw them against the notes. Nothing is
+  // persisted: they are gone when this page is.
+  const [candidateRuns, setCandidateRuns] = useState<CandidateRun[]>([]);
   const { data: reviewListResponse } = usePredictionReviews({
     fileId,
     includePromoted: false,
@@ -297,6 +304,19 @@ export function DetailPage({ fileId }: DetailPageProps) {
       ? total
       : undefined;
   }, [sequence?.totalTime]);
+
+  // The one model behind the queue on screen, when they agree. Mixed versions
+  // mean the queue was built in more than one pass, which is not a baseline
+  // either, so it is reported as such rather than picking one.
+  const queueModelVersion = useMemo<string | undefined>(() => {
+    const versions = new Set(
+      (reviewListResponse?.reviews ?? [])
+        .map((review) => review.model_version)
+        .filter((version): version is string => Boolean(version))
+    );
+    if (versions.size === 0) return undefined;
+    return versions.size === 1 ? [...versions][0] : 'several runs';
+  }, [reviewListResponse?.reviews]);
 
   const predictionTimelineSegments = useMemo<RollPrediction[]>(() => {
     return (reviewListResponse?.reviews ?? [])
@@ -1385,6 +1405,15 @@ export function DetailPage({ fileId }: DetailPageProps) {
               onAnnotationDelete={handleDeleteAnnotation}
               onAnnotationResize={handleAnnotationResize}
             />
+            <FileOverview
+              durationSec={duration}
+              currentTime={currentTime ?? 0}
+              annotations={annotations}
+              predictions={predictionTimelineSegments}
+              candidates={candidateRuns}
+              isFileComplete={Boolean(file.isComplete)}
+              onSeek={handleSeek}
+            />
             <DetailDeviceMarkers markers={deviceMarkers} onSeek={handleSeek} />
           </div>
         </div>
@@ -1426,6 +1455,20 @@ export function DetailPage({ fileId }: DetailPageProps) {
           </div>
         </div>
       )}
+
+      <PredictionLab
+        fileId={fileId}
+        durationSec={duration}
+        currentTime={currentTime ?? 0}
+        annotations={annotations}
+        currentPredictions={predictionTimelineSegments}
+        isFileComplete={Boolean(file.isComplete)}
+        queueModelVersion={queueModelVersion}
+        runs={candidateRuns}
+        onRunsChange={setCandidateRuns}
+        onSeek={handleSeek}
+        onError={(message) => showToast({ type: 'error', message })}
+      />
 
       {/* Annotations */}
       <div className="border rounded-lg shadow-sm bg-white">

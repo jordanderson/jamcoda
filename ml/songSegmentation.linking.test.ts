@@ -1,0 +1,172 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { decodeWindowScores, resolveTrainConfig, type TrainConfig } from './songSegmentation.js';
+
+const options = { minWindowConfidence: 0, smoothingWindows: 1 };
+const base: TrainConfig = {
+  windowSec: 6, stepSec: 1, k: 1, maxNoneToSongRatio: 1, decoder: 'anchor',
+  minAnchorRun: 3, anchorMargin: 0.15, linkMaxSilenceRatio: 0.7
+};
+// Enough songs for a rank to mean something: the rescue pass asks where a song
+// sits in the ranking, which three labels cannot express.
+const LABELS = ['__none__', 'A', 'B', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7'];
+const FILLER = [-3, -3, -3, -3, -3, -3, -3];
+/** Filler that outranks a far-down A and B without ever beating `__none__`. */
+const NEAR_FILLER = [-2.05, -2.06, -2.07, -2.08, -2.09, -2.10, -2.11];
+
+const anchorA = [-10, -1, -5, ...FILLER];
+const anchorB = [-10, -5, -1, ...FILLER];
+// Ambiguous, and both A and B are far down the ranking (8th and 9th of ten).
+const vagueFar = [-2, -9, -9.1, ...NEAR_FILLER];
+// Ambiguous, and B is the runner-up throughout while A stays far down.
+const vagueTowardB = [-2, -9, -2.04, ...NEAR_FILLER];
+// Ambiguous, with A the top label.
+const vagueA = [-2.1, -2, -2.05, ...FILLER];
+const runs = <T>(n: number, value: T) => Array.from({ length: n }, () => value);
+
+function decode(config: Partial<TrainConfig>, matrix: number[][], silenceAt: number[] = []) {
+  const windows = matrix.map((_, i) => ({
+    startTime: i, endTime: i + 6,
+    features: Array.from({ length: 37 }, (_, j) => (j === 34 && silenceAt.includes(i) ? 1 : 0))
+  }));
+  return decodeWindowScores({ labels: LABELS, config: { ...base, ...config } },
+    windows, matrix, options).map((window) => window.label);
+}
+
+// A 3s leash with the rescue pass off, so each rule can be seen on its own.
+const LEASH: Partial<TrainConfig> = { linkPolicy: 'bridge', linkTailSec: 3, linkRescueRank: -1 };
+const BRIDGE: Partial<TrainConfig> = { linkPolicy: 'bridge', linkTailSec: 3 };
+const transition = [...runs(3, anchorA), ...runs(10, vagueFar), ...runs(3, anchorB)];
+const towardB = [...runs(3, anchorA), ...runs(10, vagueTowardB), ...runs(3, anchorB)];
+
+describe('bridge linking', () => {
+  it('leaves legacy linking untouched when absent or explicitly legacy', () => {
+    // The finished song owns every ambiguous window up to the next anchor.
+    assert.deepEqual(decode({}, transition), [...runs(13, 'A'), ...runs(3, 'B')]);
+    assert.deepEqual(decode({ linkPolicy: 'legacy' }, transition), decode({}, transition));
+    assert.deepEqual(decode({ linkPolicy: 'legacy', linkTailSec: 3 }, transition), decode({}, transition));
+  });
+
+  it('leashes both songs across a transition instead of giving the gap to the earlier one', () => {
+    // Each side reaches 3 windows into the gap; the unexplained middle is left
+    // unlabelled rather than assigned to whichever song came first.
+    assert.deepEqual(decode(LEASH, transition),
+      [...runs(6, 'A'), ...runs(4, '__none__'), ...runs(6, 'B')]);
+  });
+
+  it('gives the same answer when the recording is reversed', () => {
+    const matrix = [...runs(3, anchorA), ...runs(9, vagueFar), ...runs(4, anchorB)];
+    const swapAB = (row: number[]) => [row[0], row[2], row[1], ...row.slice(3)];
+    const rename = (label: string) => (label === 'A' ? 'B' : label === 'B' ? 'A' : label);
+    const mirrored = decode(LEASH, [...matrix].reverse().map(swapAB)).reverse().map(rename);
+    assert.deepEqual(mirrored, decode(LEASH, matrix));
+    // Legacy is not symmetric: it is exactly the bias this policy removes.
+    assert.notDeepEqual(
+      decode({}, [...matrix].reverse().map(swapAB)).reverse().map(rename),
+      decode({}, matrix)
+    );
+  });
+
+  it('does not leash a span that a second anchor run of the same song closes', () => {
+    const inside = [...runs(3, anchorA), ...runs(10, vagueFar), ...runs(3, anchorA)];
+    // Both ends vouch for the span, so it is a passage inside one take.
+    assert.deepEqual(decode(LEASH, inside), runs(16, 'A'));
+    assert.deepEqual(decode(LEASH, inside), decode({}, inside));
+  });
+
+  it('follows a tail past the leash only while the song stays the top choice', () => {
+    const matrix = [...runs(3, anchorA), ...runs(10, vagueA), ...runs(3, anchorB)];
+    // A is still the model's first choice through the gap, so it keeps going;
+    // B only reaches its 3 leashed windows.
+    assert.deepEqual(decode(LEASH, matrix), [...runs(10, 'A'), ...runs(6, 'B')]);
+  });
+
+  it('still treats silence as a barrier for both the leash and a vouched span', () => {
+    // Silence one window into A's leash stops A there; B is unaffected.
+    assert.deepEqual(decode(LEASH, transition, [4]),
+      [...runs(4, 'A'), ...runs(6, '__none__'), ...runs(6, 'B')]);
+    const inside = [...runs(3, anchorA), ...runs(10, vagueFar), ...runs(3, anchorA)];
+    // A vouched span is filled from both ends and stops at the silent window.
+    assert.deepEqual(decode(LEASH, inside, [8]),
+      [...runs(8, 'A'), '__none__', ...runs(7, 'A')]);
+  });
+
+  it('does not leash a side with no other song to arbitrate against', () => {
+    // The only anchored song in the recording: nothing competes for either
+    // edge, so silence stays the only stop and this matches legacy.
+    const alone = [...runs(6, vagueFar), ...runs(3, anchorA), ...runs(6, vagueFar)];
+    assert.deepEqual(decode(LEASH, alone), runs(15, 'A'));
+    assert.deepEqual(decode(LEASH, alone), decode({}, alone));
+    // With B anchored later, A's right side is contested and leashed, while
+    // A's left edge and B's right edge still run free.
+    const pair = [...runs(6, vagueFar), ...runs(3, anchorA), ...runs(10, vagueFar),
+      ...runs(3, anchorB), ...runs(6, vagueFar)];
+    assert.deepEqual(decode(LEASH, pair),
+      [...runs(12, 'A'), ...runs(4, '__none__'), ...runs(12, 'B')]);
+  });
+});
+
+describe('span rescue', () => {
+  it('gives a leashed-off span to the song the whole span favours, not the earlier one', () => {
+    // B is the runner-up in every gap window while A sits 8th, so the middle
+    // the leash left unlabelled belongs to B — though A reaches it first.
+    assert.deepEqual(decode(BRIDGE, towardB), [...runs(6, 'A'), ...runs(10, 'B')]);
+    // Legacy hands the same windows to A purely because it comes first.
+    assert.deepEqual(decode({}, towardB), [...runs(13, 'A'), ...runs(3, 'B')]);
+  });
+
+  it('leaves a span alone when neither neighbour ranks well across it', () => {
+    // Both songs sit 8th and 9th through the gap: dead air between takes.
+    assert.deepEqual(decode(BRIDGE, transition), decode(LEASH, transition));
+  });
+
+  it('is on by default under bridge, off by default otherwise, and tunable', () => {
+    assert.deepEqual(decode({ ...BRIDGE, linkRescueRank: 5 }, towardB), decode(BRIDGE, towardB));
+    // A negative rank disables it, as with fillTopK.
+    assert.deepEqual(decode({ ...BRIDGE, linkRescueRank: -1 }, towardB),
+      [...runs(6, 'A'), ...runs(4, '__none__'), ...runs(6, 'B')]);
+    // Rank 0 demands the outright top choice, which `__none__` holds here.
+    assert.deepEqual(decode({ ...BRIDGE, linkRescueRank: 0 }, towardB),
+      [...runs(6, 'A'), ...runs(4, '__none__'), ...runs(6, 'B')]);
+    // Legacy linking does not run the pass unless it is asked for.
+    assert.deepEqual(decode({ linkPolicy: 'legacy' }, towardB), decode({}, towardB));
+  });
+
+  it('does not claim silence, and splits a span at it', () => {
+    // The silent window at 8 stays unlabelled and cuts the rescued span, so
+    // only the part still touching B's segment is absorbed.
+    assert.deepEqual(decode(BRIDGE, towardB, [8]),
+      [...runs(6, 'A'), ...runs(3, '__none__'), ...runs(7, 'B')]);
+  });
+});
+
+describe('bridge linking config resolution', () => {
+  it('freezes both thresholds into a model trained with the policy, and only then', () => {
+    // Legacy training must not record thresholds it never used: a model whose
+    // policy were changed later would otherwise inherit stale values.
+    const legacy = resolveTrainConfig(base);
+    assert.equal(legacy.linkTailSec, undefined);
+    assert.equal(legacy.linkRescueRank, undefined);
+    assert.equal(resolveTrainConfig({ ...base, linkPolicy: 'legacy' }).linkTailSec, undefined);
+
+    const bridge = resolveTrainConfig({ ...base, linkPolicy: 'bridge' });
+    assert.equal(bridge.linkTailSec, 2);
+    assert.equal(bridge.linkRescueRank, 5);
+
+    const explicit = resolveTrainConfig({ ...base, linkPolicy: 'bridge', linkTailSec: 6, linkRescueRank: -1 });
+    assert.equal(explicit.linkTailSec, 6);
+    assert.equal(explicit.linkRescueRank, -1);
+  });
+
+  it('decodes a resolved config exactly as it decodes the unresolved one', () => {
+    // The decoder repeats these two defaults for configs that never went
+    // through resolveTrainConfig. This is the guard against the two drifting.
+    for (const matrix of [transition, towardB]) {
+      assert.deepEqual(
+        decode(resolveTrainConfig({ ...base, linkPolicy: 'bridge' }), matrix),
+        decode({ linkPolicy: 'bridge' }, matrix)
+      );
+    }
+    assert.deepEqual(decode(resolveTrainConfig(base), transition), decode({}, transition));
+  });
+});

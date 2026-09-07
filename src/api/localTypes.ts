@@ -68,6 +68,31 @@ export interface MergePredictionReviewsResponse {
 }
 
 /** Request body for running model prediction on one file. */
+/**
+ * Model settings the decoder reads but the fit never sees.
+ *
+ * Overriding one of these re-decodes the saved model instead of retraining it,
+ * so two runs that differ only here came from the same trained model and are
+ * directly comparable. The server accepts these keys only; anything else is
+ * dropped, so a preview can never show segments from a model that was never
+ * built. Mirrors `DECODE_ONLY_CONFIG_KEYS` in `ml/songSegmentation.ts`.
+ */
+export interface PredictionDecoderOverrides {
+  decoder?: 'anchor' | 'viterbi' | 'smooth';
+  viterbiChangePenalty?: number;
+  temperature?: number;
+  anchorMargin?: number;
+  minAnchorRun?: number;
+  fillMinMargin?: number;
+  fillTopK?: number;
+  linkConfidence?: number;
+  linkMaxSilenceRatio?: number;
+  anchorGapPolicy?: 'legacy' | 'midpoint' | 'evidence';
+  linkPolicy?: 'legacy' | 'bridge';
+  linkTailSec?: number;
+  linkRescueRank?: number;
+}
+
 export interface RunPredictionForFileRequest {
   fileId: number;
   clearUnpromoted?: boolean;
@@ -77,6 +102,23 @@ export interface RunPredictionForFileRequest {
   minSegmentConfidence?: number;
   mergeGapSec?: number;
   modelPath?: string;
+  /**
+   * Compute the segments and return them without writing any review rows.
+   * A preview is also allowed on a file marked complete, which a committed run
+   * is not, because that is the only place a prediction can be held against a
+   * known answer.
+   */
+  dryRun?: boolean;
+  decoderOverrides?: PredictionDecoderOverrides;
+}
+
+/** One predicted span, as returned by a dry run. */
+export interface PredictedSegment {
+  songName: string;
+  startTime: number;
+  endTime: number;
+  durationSec: number;
+  confidence: number;
 }
 
 /** Detailed response for prediction run stats and inserted rows. */
@@ -97,6 +139,19 @@ export interface RunPredictionForFileResponse {
   segmentCount: number;
   annotatedRangeCount?: number;
   excludedSegmentCount?: number;
+  bookmarkSplitCount?: number;
+  skipSplitCount?: number;
+  dryRun?: boolean;
+  /** The decoder settings actually used, after any overrides. */
+  decodeConfig?: PredictionDecoderOverrides;
+  /** Present only for a dry run; a committed run has already written its rows. */
+  segments?: PredictedSegment[];
+  /**
+   * Present only for a dry run: what the model said before annotated ranges
+   * were removed and bookmark/silence splits applied. On an already-annotated
+   * file `segments` is nearly empty, so this is what shows the model's opinion.
+   */
+  rawSegments?: PredictedSegment[];
 }
 
 /** Request body for rebuilding the segmentation model from annotations. */

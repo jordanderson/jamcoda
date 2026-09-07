@@ -27,7 +27,8 @@
     "ml:predict": "tsx --tsconfig tsconfig.server.json ml/predict.ts",
     "ml:predict-import": "tsx --tsconfig tsconfig.server.json ml/predictAndImport.ts",
     "ml:predict-missing": "tsx --tsconfig tsconfig.server.json ml/predictMissing.ts",
-    "ml:eval": "tsx --tsconfig tsconfig.server.json ml/eval.ts"
+    "ml:eval": "tsx --tsconfig tsconfig.server.json ml/eval.ts",
+    "ml:compare": "tsx --tsconfig tsconfig.server.json ml/compareEvals.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",

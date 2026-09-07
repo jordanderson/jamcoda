@@ -4,6 +4,7 @@ import path from 'node:path';
 import { parseNoteSequence, buildPedalIntervals, heldByPedal } from '@core/midi/noteSequence';
 import { clamp, ensureDirForFile, roundTo } from '@core/cli/args';
 import { snapSegmentBoundaries, type BoundaryNote } from '@core/boundaries';
+import { createNearestPrototypeScorer } from './prototypeScorer.js';
 
 export const NO_SONG_LABEL = '__none__';
 
@@ -210,6 +211,38 @@ export interface TrainConfig {
   anchorMargin?: number;
   /** Anchor-link decoder: minimum consecutive anchor windows forming a seed run (default 3). */
   minAnchorRun?: number;
+  /** Experimental competition between different-song anchors; absent preserves legacy linking. */
+  anchorGapPolicy?: 'legacy' | 'midpoint' | 'evidence';
+  /**
+   * How ambiguous windows join an anchor run. `legacy` extends every run
+   * outwards until a barrier, so the earlier song owns the dead zone after it
+   * stops playing. `bridge` links ambiguous windows only when a second anchor
+   * run of the same song closes the span; past the last anchor a run advances
+   * only while the model itself still ranks that song first. Absent preserves
+   * legacy linking.
+   */
+  linkPolicy?: 'legacy' | 'bridge';
+  /**
+   * With `linkPolicy: 'bridge'`, how many seconds an unvouched tail may run
+   * past its anchor run before the song must be the model's own first choice
+   * to continue. Defaults to 2; the rescue pass below, not the leash, is what
+   * covers a take's own ending. Spans closed by a second anchor run of the same
+   * song are never limited.
+   */
+  linkTailSec?: number;
+  /**
+   * Rescue pass: an unlabelled span may be given to a neighbouring song when
+   * that song's *mean* score rank across the whole span is at most this value
+   * (0 = the model's top choice throughout). Inside a take a song stays near the
+   * top even where it never wins a single window; in the dead air between takes
+   * it collapses down the ranking. A span with the same song on both sides is
+   * skipped: that is the break between two takes of it. Negative disables the
+   * pass, as with
+   * `fillTopK`. Defaults to 5 under `linkPolicy: 'bridge'` — between the
+   * measured p75 rank inside a take (4.0) and the p25 outside one (7.2) — and to
+   * disabled otherwise, so legacy decoding is unchanged.
+   */
+  linkRescueRank?: number;
   /** Anchor-link decoder: minimum margin for a window to be linked into a run (default 0). */
   fillMinMargin?: number;
   /** Anchor-link decoder: a linked window must rank the run's label within its
@@ -368,6 +401,23 @@ export const TRAIN_CONFIG_DEFAULTS = {
 } as const;
 
 /**
+ * Config fields the decoder reads but the fit never sees.
+ *
+ * Changing one of these re-decodes existing scores instead of retraining, so
+ * two runs that differ only here are directly comparable — which is what makes
+ * the eval score cache safe to reuse and what lets a prediction preview try a
+ * decoder setting without rebuilding the model. One definition, because a
+ * second copy that disagreed would silently serve stale scores.
+ */
+export const DECODE_ONLY_CONFIG_KEYS = [
+  'decoder', 'viterbiChangePenalty', 'temperature', 'anchorMargin', 'minAnchorRun',
+  'fillMinMargin', 'fillTopK', 'linkConfidence', 'linkMaxSilenceRatio', 'anchorGapPolicy',
+  'linkPolicy', 'linkTailSec', 'linkRescueRank'
+] as const;
+
+export type DecodeOnlyConfig = Partial<Pick<TrainConfig, typeof DECODE_ONLY_CONFIG_KEYS[number]>>;
+
+/**
  * A `TrainConfig` with every optional field filled in. Anything that builds the
  * model takes this rather than the caller's partial config, so a default has
  * exactly one definition (`resolveTrainConfig`) and cannot be restated — and
@@ -386,7 +436,7 @@ export type ResolvedTrainConfig = Required<
 > & TrainConfig;
 
 export function resolveTrainConfig(config: TrainConfig): ResolvedTrainConfig {
-  return {
+  const resolved: ResolvedTrainConfig = {
     ...config,
     prototypeBudget: config.prototypeBudget ?? 8000,
     maxNonePrototypes: config.maxNonePrototypes ?? 60,
@@ -407,6 +457,17 @@ export function resolveTrainConfig(config: TrainConfig): ResolvedTrainConfig {
     viterbiChangePenalty: config.viterbiChangePenalty ?? 1,
     kernelScale: config.kernelScale ?? 0
   };
+
+  // Bridge linking's two thresholds are resolved only when that policy is on.
+  // What they mean depends on `linkPolicy`, so writing them into a model built
+  // with legacy linking would freeze values the decoder never used, and would
+  // then quietly disagree with it if that model's policy were changed later.
+  if (resolved.linkPolicy === 'bridge') {
+    resolved.linkTailSec = resolved.linkTailSec ?? 2;
+    resolved.linkRescueRank = resolved.linkRescueRank ?? 5;
+  }
+
+  return resolved;
 }
 
 /**
@@ -1396,6 +1457,7 @@ function anchorLinkDecode(
   const fillMinMargin = config.fillMinMargin ?? 0;
   const fillTopK = config.fillTopK ?? -1;
   const linkConfidence = clamp(config.linkConfidence ?? 0.5, 0, 1);
+  const anchors: Array<{ start: number; end: number; label: number; fillConf: number }> = [];
 
   const isAnchor = new Array<boolean>(n).fill(false);
   for (let i = 0; i < n; i++) {
@@ -1405,8 +1467,7 @@ function anchorLinkDecode(
     }
   }
 
-  const canFill = (i: number, label: number): boolean => {
-    if (labels[i] !== -1) return false;
+  const canLink = (i: number, label: number): boolean => {
     // Dead air is not ambiguous evidence that the song continues.
     if (!linkable[i]) return false;
     const e = evidence[i];
@@ -1416,6 +1477,7 @@ function anchorLinkDecode(
     if (fillTopK >= 0 && e.rank[label] >= fillTopK) return false;
     return true;
   };
+  const canFill = (i: number, label: number) => labels[i] === -1 && canLink(i, label);
 
   // Pass 1: seed runs of consecutive same-label anchors. Linked windows get
   // the run margin, or `linkConfidence` if the margin is lower.
@@ -1434,26 +1496,199 @@ function anchorLinkDecode(
     if (j - i >= minAnchorRun) {
       const runMargin = marginSum / (j - i);
       const fillConf = Math.max(linkConfidence, runMargin * 0.85);
+      anchors.push({ start: i, end: j, label, fillConf });
       for (let k = i; k < j; k++) {
         labels[k] = label;
         confidence[k] = evidence[k].margin;
       }
-      // Extend this run to the right.
-      for (let k = j; k < n; k++) {
-        if (labels[k] !== -1) break;
-        if (!canFill(k, label)) break;
-        labels[k] = label;
-        confidence[k] = fillConf;
-      }
-      // Extend this run to the left.
-      for (let k = i - 1; k >= 0; k--) {
-        if (labels[k] !== -1) break;
-        if (!canFill(k, label)) break;
-        labels[k] = label;
-        confidence[k] = fillConf;
+      if (config.linkPolicy !== 'bridge') {
+        // Extend this run to the right.
+        for (let k = j; k < n; k++) {
+          if (labels[k] !== -1) break;
+          if (!canFill(k, label)) break;
+          labels[k] = label;
+          confidence[k] = fillConf;
+        }
+        // Extend this run to the left.
+        for (let k = i - 1; k >= 0; k--) {
+          if (labels[k] !== -1) break;
+          if (!canFill(k, label)) break;
+          labels[k] = label;
+          confidence[k] = fillConf;
+        }
       }
     }
     i = j;
+  }
+
+  // Legacy linking treats "the evidence here is ambiguous" as "the song that
+  // was playing is still playing", and nothing bounds that on the right. After
+  // a take actually stops, the following warm-up and noodling is ambiguous but
+  // not silent, so the finished song keeps claiming it until the next song
+  // produces an anchor. Bridge linking splits the two cases the single
+  // `canFill` rule conflates:
+  //
+  //   * an ambiguous span *between two anchor runs of the same song* is a
+  //     passage inside a take. Both ends vouch for it, so link all of it.
+  //   * an ambiguous span past a song's outermost anchor is unvouched. Nothing
+  //     ahead confirms the song is still playing, so advance only while the
+  //     model itself still ranks that song first.
+  if (config.linkPolicy === 'bridge') {
+    // These two fallbacks must match `resolveTrainConfig`; a model trained with
+    // this policy carries both explicitly, so they only apply to a config that
+    // was never resolved.
+    const tailLimit = Math.floor((config.linkTailSec ?? 2) / Math.max(1e-9, config.stepSec));
+    /**
+     * The leash arbitrates contention between two songs. Beyond a song's
+     * outermost anchor in a recording there is no other song to arbitrate
+     * against, so silence stays the only stop, as it was before.
+     */
+    const contested = (a: number, side: 1 | -1): boolean => {
+      for (let b = a + side; b >= 0 && b < anchors.length; b += side) {
+        if (anchors[b].label !== anchors[a].label) return true;
+      }
+      return false;
+    };
+
+    const claim = (k: number, run: { label: number; fillConf: number }, limit = Infinity, distance = 0): boolean => {
+      if (k < 0 || k >= n || labels[k] !== -1 || !canLink(k, run.label)) return false;
+      // Past the leash the song must still be the model's own first choice.
+      if (distance > limit && evidence[k].bestLabel !== run.label) return false;
+      labels[k] = run.label;
+      confidence[k] = run.fillConf;
+      return true;
+    };
+
+    // Vouched: another anchor run of the same song closes this side, so the
+    // span is a passage inside a take and links with no leash, exactly as
+    // before. Extending from both ends rather than requiring the whole span to
+    // be fillable keeps the legacy reach when something blocks the middle.
+    for (let a = 0; a < anchors.length; a++) {
+      const run = anchors[a];
+      if (anchors[a + 1]?.label === run.label) {
+        for (let k = run.end; claim(k, run); k++);
+      }
+      if (anchors[a - 1]?.label === run.label) {
+        for (let k = run.start - 1; claim(k, run); k--);
+      }
+    }
+
+    // Unvouched tails advance in lockstep. Two songs reaching for the same
+    // window meet in the middle instead of the earlier one taking all of it,
+    // which is the directional bias that made a finished song run long.
+    const rightAlive = anchors.map((run, a) => anchors[a + 1]?.label !== run.label);
+    const leftAlive = anchors.map((run, a) => anchors[a - 1]?.label !== run.label);
+    const rightLimit = anchors.map((_, a) => (contested(a, 1) ? tailLimit : Infinity));
+    const leftLimit = anchors.map((_, a) => (contested(a, -1) ? tailLimit : Infinity));
+    for (let d = 1; ; d++) {
+      let advanced = false;
+      for (let a = 0; a < anchors.length; a++) {
+        if (rightAlive[a]) {
+          rightAlive[a] = claim(anchors[a].end + d - 1, anchors[a], rightLimit[a], d);
+          advanced = advanced || rightAlive[a];
+        }
+        if (leftAlive[a]) {
+          leftAlive[a] = claim(anchors[a].start - d, anchors[a], leftLimit[a], d);
+          advanced = advanced || leftAlive[a];
+        }
+      }
+      if (!advanced) break;
+    }
+  }
+
+  // Legacy extension gives the earlier song first claim on every ambiguous
+  // window. Compete only inside an uninterrupted, mutually linkable gap between
+  // two established different-song anchors. Preserve silence, strong third-song
+  // evidence, same-song links, and open recording edges.
+  if (config.anchorGapPolicy && config.anchorGapPolicy !== 'legacy') {
+    for (let a = 1; a < anchors.length; a++) {
+      const left = anchors[a - 1];
+      const right = anchors[a];
+      if (left.label === right.label || left.end >= right.start) continue;
+      let eligible = true;
+      for (let i = left.end; i < right.start; i++) {
+        if (!canLink(i, left.label) || !canLink(i, right.label)) {
+          eligible = false;
+          break;
+        }
+      }
+      if (!eligible) continue;
+      const midpoint = (left.end + right.start) / 2;
+      let split = Math.round(midpoint);
+      if (config.anchorGapPolicy === 'evidence') {
+        // Maximize evidence for a single A -> B change. Moving the cut right
+        // changes the objective by score(A) - score(B) at that window.
+        let cumulative = 0;
+        let best = 0;
+        split = left.end;
+        for (let i = left.end; i < right.start; i++) {
+          cumulative += evidence[i].scores[left.label] - evidence[i].scores[right.label];
+          if (cumulative > best || (cumulative === best
+            && Math.abs(i + 1 - midpoint) < Math.abs(split - midpoint))) {
+            best = cumulative;
+            split = i + 1;
+          }
+        }
+      }
+      for (let i = left.end; i < right.start; i++) {
+        const owner = i < split ? left : right;
+        labels[i] = owner.label;
+        confidence[i] = owner.fillConf;
+      }
+    }
+  }
+
+  // Per-window evidence cannot tell a passage the model half-recognizes from
+  // the dead air after a take: in both, no song wins the window. Averaged over a
+  // whole span it can. A song sits a median rank of 1.3 across spans inside its
+  // own take and 16 across spans outside it, so a span-level mean recovers the
+  // long takes that a leash truncates without reopening the gap between takes.
+  const rescueRank = config.linkRescueRank ?? (config.linkPolicy === 'bridge' ? 5 : -1);
+  if (rescueRank >= 0) {
+    const rescueConfidence = clamp(config.linkConfidence ?? 0.5, 0, 1);
+    const meanRank = (from: number, to: number, label: number): number => {
+      let sum = 0;
+      for (let i = from; i < to; i++) {
+        const scores = evidence[i].scores;
+        const value = scores[label];
+        for (let c = 0; c < scores.length; c++) if (scores[c] > value) sum++;
+      }
+      return sum / (to - from);
+    };
+    for (let i = 0; i < n; ) {
+      if (labels[i] !== -1 || !linkable[i]) {
+        i++;
+        continue;
+      }
+      // Silence still splits a span rather than being claimed with it.
+      let j = i;
+      while (j < n && labels[j] === -1 && linkable[j]) j++;
+      const left = i > 0 ? labels[i - 1] : -1;
+      const right = j < n ? labels[j] : -1;
+      let best = -1;
+      let bestRank = rescueRank;
+      // The rescue exists to undo the leash, and the leash only ever applies to
+      // a song's outer edge. The same song on both sides was never leashed — it
+      // was vouched, and something stopped the fill — so this is the break
+      // between two takes of one song, not a passage inside one. Absorbing it
+      // would merge the takes, which is already the largest error left.
+      const betweenTakesOfOneSong = left >= 0 && left === right && left !== noneLabelIndex;
+      for (const neighbour of betweenTakesOfOneSong ? [] : [left, right]) {
+        if (neighbour < 0 || neighbour === noneLabelIndex || neighbour === best) continue;
+        const rank = meanRank(i, j, neighbour);
+        if (rank <= bestRank) {
+          bestRank = rank;
+          best = neighbour;
+        }
+      }
+      if (best >= 0) {
+        for (let k = i; k < j; k++) {
+          labels[k] = best;
+          confidence[k] = rescueConfidence;
+        }
+      }
+      i = j;
+    }
   }
 
   for (let i = 0; i < n; i++) {
@@ -1652,17 +1887,38 @@ export function predictWindowsFromSamples(
   windows: Pick<WindowSample, 'startTime' | 'endTime' | 'features'>[],
   options: Pick<PredictConfig, 'minWindowConfidence' | 'smoothingWindows'>
 ): WindowPrediction[] {
+  return decodeWindowScores(model, windows, scoreWindowsFromSamples(model, windows), options);
+}
+
+/** Expensive stage, independent of decoder and segment-filter settings. */
+export function scoreWindowsFromSamples(
+  model: SongSegmentModel,
+  windows: Pick<WindowSample, 'features'>[]
+): number[][] {
+  const score = model.prototypes?.length && model.config.scoreMode !== 'avg'
+    && Math.max(1, model.scoreNeighbors ?? 1) === 1
+    ? createNearestPrototypeScorer(model.prototypes, model.labels.length)
+    : (vector: number[]) => computeLabelScores(vector, model);
+  return windows.map((window) => score(
+    normalizeVector(window.features, model.featureMeans, model.featureStds)
+  ));
+}
+
+/** Cheap stage: the scores must come from this model and these windows, in order. */
+export function decodeWindowScores(
+  model: Pick<SongSegmentModel, 'config' | 'labels'>,
+  windows: Pick<WindowSample, 'startTime' | 'endTime' | 'features'>[],
+  scoresList: number[][],
+  options: Pick<PredictConfig, 'minWindowConfidence' | 'smoothingWindows'>
+): WindowPrediction[] {
   const windowCount = windows.length;
+  if (scoresList.length !== windowCount || scoresList.some((row) => row.length !== model.labels.length)) {
+    throw new Error('Score matrix dimensions do not match the model labels and windows.');
+  }
   if (windowCount === 0) return [];
 
   const decoder = model.config.decoder ?? 'anchor';
   const temperature = model.config.temperature ?? 1;
-
-  const scoresList = new Array<number[]>(windowCount);
-  for (let i = 0; i < windowCount; i++) {
-    const normalized = normalizeVector(windows[i].features, model.featureMeans, model.featureStds);
-    scoresList[i] = computeLabelScores(normalized, model);
-  }
 
   if (decoder === 'anchor') {
     const noneLabelIndex = model.labels.indexOf(NO_SONG_LABEL);
