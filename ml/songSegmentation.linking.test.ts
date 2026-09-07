@@ -16,6 +16,8 @@ const NEAR_FILLER = [-2.05, -2.06, -2.07, -2.08, -2.09, -2.10, -2.11];
 
 const anchorA = [-10, -1, -5, ...FILLER];
 const anchorB = [-10, -5, -1, ...FILLER];
+// A third song, anchored strongly enough to block a fill it is too short to seed.
+const anchorC = [-10, -5, -5, -1, -3, -3, -3, -3, -3, -3];
 // Ambiguous, and both A and B are far down the ranking (8th and 9th of ten).
 const vagueFar = [-2, -9, -9.1, ...NEAR_FILLER];
 // Ambiguous, and B is the runner-up throughout while A stays far down.
@@ -141,32 +143,98 @@ describe('span rescue', () => {
 });
 
 describe('bridge linking config resolution', () => {
-  it('freezes both thresholds into a model trained with the policy, and only then', () => {
+  it('is what a model trains with unless legacy is asked for', () => {
+    const resolved = resolveTrainConfig(base);
+    assert.equal(resolved.linkPolicy, 'bridge');
+    assert.equal(resolved.linkTailSec, 2);
+    assert.equal(resolved.linkRescueRank, 5);
+
     // Legacy training must not record thresholds it never used: a model whose
     // policy were changed later would otherwise inherit stale values.
-    const legacy = resolveTrainConfig(base);
+    const legacy = resolveTrainConfig({ ...base, linkPolicy: 'legacy' });
+    assert.equal(legacy.linkPolicy, 'legacy');
     assert.equal(legacy.linkTailSec, undefined);
     assert.equal(legacy.linkRescueRank, undefined);
-    assert.equal(resolveTrainConfig({ ...base, linkPolicy: 'legacy' }).linkTailSec, undefined);
-
-    const bridge = resolveTrainConfig({ ...base, linkPolicy: 'bridge' });
-    assert.equal(bridge.linkTailSec, 2);
-    assert.equal(bridge.linkRescueRank, 5);
 
     const explicit = resolveTrainConfig({ ...base, linkPolicy: 'bridge', linkTailSec: 6, linkRescueRank: -1 });
     assert.equal(explicit.linkTailSec, 6);
     assert.equal(explicit.linkRescueRank, -1);
   });
 
+  it('leaves a model saved before the default changed decoding as legacy', () => {
+    // The default lives at fit time only. A stored config with no policy is a
+    // model built under legacy linking, and the decoder must keep reading it
+    // that way — a default must never move an existing model.
+    for (const matrix of [transition, towardB]) {
+      assert.deepEqual(decode({}, matrix), decode({ linkPolicy: 'legacy' }, matrix));
+      assert.notDeepEqual(decode({}, matrix), decode({ linkPolicy: 'bridge' }, matrix));
+    }
+  });
+
   it('decodes a resolved config exactly as it decodes the unresolved one', () => {
-    // The decoder repeats these two defaults for configs that never went
-    // through resolveTrainConfig. This is the guard against the two drifting.
+    // The decoder repeats these defaults for configs that never went through
+    // resolveTrainConfig. This is the guard against the two drifting.
     for (const matrix of [transition, towardB]) {
       assert.deepEqual(
         decode(resolveTrainConfig({ ...base, linkPolicy: 'bridge' }), matrix),
         decode({ linkPolicy: 'bridge' }, matrix)
       );
+      assert.deepEqual(
+        decode(resolveTrainConfig({ ...base, linkPolicy: 'legacy' }), matrix),
+        decode({ linkPolicy: 'legacy' }, matrix)
+      );
     }
-    assert.deepEqual(decode(resolveTrainConfig(base), transition), decode({}, transition));
+  });
+});
+
+describe('span rescue lookahead', () => {
+  // A span that favours B only in the windows nearest B. Averaged whole, B
+  // fails the rank test and the span is abandoned; tested a few windows at a
+  // time, B keeps the part it explains.
+  const nearB = [...runs(3, anchorA), ...runs(14, vagueFar), ...runs(6, vagueTowardB),
+    ...runs(3, anchorB)];
+
+  it('claims only the part of a span a song explains', () => {
+    // Whole-span mean: B ranks 9th across most of the 14 unlabelled windows,
+    // so the leash result stands and every one of them is dropped.
+    assert.deepEqual(decode(BRIDGE, nearB), decode(LEASH, nearB));
+    // With a lookahead, B creeps back over the windows that do favour it and
+    // stops where its evidence stops, instead of taking all or nothing.
+    assert.deepEqual(decode({ ...BRIDGE, linkRescueLookaheadSec: 4 }, nearB),
+      [...runs(6, 'A'), ...runs(12, '__none__'), ...runs(8, 'B')]);
+  });
+
+  it('is off by default, and a lookahead of 0 is the whole-span test', () => {
+    for (const matrix of [transition, towardB, nearB]) {
+      assert.deepEqual(decode({ ...BRIDGE, linkRescueLookaheadSec: 0 }, matrix),
+        decode(BRIDGE, matrix));
+    }
+  });
+
+  it('does not reopen a span a leash closed for want of evidence', () => {
+    // Neither song ranks well anywhere in the gap: a lookahead must not turn
+    // dead air into coverage just because it looks at less of it at a time.
+    assert.deepEqual(decode({ ...BRIDGE, linkRescueLookaheadSec: 4 }, transition),
+      decode(LEASH, transition));
+  });
+
+  it('still refuses a span between two takes of one song', () => {
+    // A third song anchors too briefly to seed a run but blocks the vouched
+    // fill from both sides. The span it leaves has A on both sides, which is
+    // the break between two takes, so the rescue leaves it alone.
+    const blocked = [...runs(3, anchorA), ...runs(4, vagueA), ...runs(2, anchorC),
+      ...runs(4, vagueA), ...runs(3, anchorA)];
+    assert.deepEqual(decode({ ...BRIDGE, linkRescueLookaheadSec: 4 }, blocked),
+      [...runs(7, 'A'), ...runs(2, '__none__'), ...runs(7, 'A')]);
+  });
+
+  it('records the new field on a bridge model only', () => {
+    assert.equal(resolveTrainConfig({ ...base, linkPolicy: 'legacy' }).linkRescueLookaheadSec, undefined);
+    assert.equal(resolveTrainConfig(base).linkRescueLookaheadSec, 0);
+    assert.equal(
+      resolveTrainConfig({ ...base, linkPolicy: 'bridge', linkRescueLookaheadSec: 12 })
+        .linkRescueLookaheadSec,
+      12
+    );
   });
 });

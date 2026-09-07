@@ -102,6 +102,10 @@ Options:
   --link-rescue-rank <float>   Mean span rank at which an unlabelled span is
                                given to a neighbouring song (bridge only;
                                default: 5; -1 disables the pass)
+  --link-rescue-lookahead <float>  Seconds of lookahead the rescue tests instead
+                               of the whole span at once, so a song keeps only the
+                               part its evidence covers (bridge only; default: 12;
+                               0 restores the whole-span test)
   --trusted-none         Train __none__ only on files marked complete, instead of
                          on every annotated file (default: off — it helps only at
                          a small --prototype-budget; see ml/CHANGELOG.md v2.10)
@@ -143,6 +147,7 @@ async function main() {
     linkPolicy: parseLinkPolicy(readArg('--link-policy')),
     linkTailSec: optionalNum('--link-tail-sec', 0),
     linkRescueRank: optionalNum('--link-rescue-rank', -1),
+    linkRescueLookaheadSec: optionalNum('--link-rescue-lookahead', 0),
     noneFromCompleteFilesOnly: hasFlag('--trusted-none') ? true : undefined
   };
 

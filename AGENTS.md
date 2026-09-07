@@ -95,6 +95,14 @@ Core frontend routes:
   rather than the model, and moves less than a point across changes that move
   the honest number by three. See `experiments-2026-09-03-addendum.md`, under
   the gitignored `data/ml/notes/`.
+- **Bridge linking is the training default, and an absent `linkPolicy` still
+  decodes as legacy.** `resolveTrainConfig` fills `linkPolicy: 'bridge'` (with
+  `linkTailSec: 2`, `linkRescueRank: 5`) so every model built from 2026-09-07
+  records the policy in its own config; `anchorLinkDecode` treats a *missing*
+  policy as `legacy`, which is what keeps a model saved before then decoding the
+  way it was built. Do not "tidy" that asymmetry into one default — it is the
+  v2.3 rule that a default must never move an existing model, and both halves
+  are asserted by tests in `ml/songSegmentation.linking.test.ts`.
 - **`__none__` training windows come only from files marked complete**
   (`TrainConfig.noneFromCompleteFilesOnly`, on by default). An unannotated
   window asserts "no song" only where the user declared the file finished;

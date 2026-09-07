@@ -179,6 +179,8 @@ Options:
   --link-policy <legacy|bridge>  Ambiguous-window linking rule
   --link-tail-sec <n>            Seconds an unvouched tail may run (bridge only)
   --link-rescue-rank <n>        Mean-rank span rescue; -1 disables (bridge default 5)
+  --link-rescue-lookahead <n>   Seconds of lookahead for the rescue's mean rank;
+                                0 tests the whole span at once (bridge default)
   --quiet                        Reduce per-file logging
   --help                         Show this help
 `);
@@ -377,7 +379,8 @@ async function main() {
     ['--fill-topk', 'fillTopK', -1, Infinity, true],
     ['--link-max-silence', 'linkMaxSilenceRatio', 0, 1, false],
     ['--link-tail-sec', 'linkTailSec', 0, Infinity, false],
-    ['--link-rescue-rank', 'linkRescueRank', -1, Infinity, false]
+    ['--link-rescue-rank', 'linkRescueRank', -1, Infinity, false],
+    ['--link-rescue-lookahead', 'linkRescueLookaheadSec', 0, Infinity, false]
   ] as const;
   for (const [flag, key, min, max, integer] of numericOverrides) {
     const raw = readArg(flag);

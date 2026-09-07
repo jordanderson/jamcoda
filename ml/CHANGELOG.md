@@ -18,6 +18,168 @@ How to read the numbers:
 
 ---
 
+## 2026-09-07 — v2.11: bridge linking is the default (accepted)
+
+### Context
+
+The 2026-09-06 entry measured bridge linking on a frozen snapshot and left it
+opt-in, with three open questions: does it hold on a larger annotated library,
+are its thresholds right, and can the 14 files it regressed be fixed or
+explained. This entry answers all three and turns it on.
+
+Population: snapshot `data/ml/bridge-default-20260907/annotations.db`, 145 files,
+1,007 annotations, dataset SHA-256
+`90836c7f78419cf304311739d16d354e3aa5a8fb634da6bad46e57ba31267d8d`. All numbers
+are leave-one-file-out over the **103 complete files**. Every run below was
+pinned with `--expect-dataset`; every decoder variant reuses the same fold
+scores, so they differ only in decoding.
+
+### What changed
+
+- `resolveTrainConfig` now resolves `linkPolicy` to `bridge`. Every model built
+  from here on records `bridge`, `linkTailSec: 2` and `linkRescueRank: 5` in its
+  own config. `--link-policy legacy` still builds the old model and records no
+  thresholds.
+- **The decoder still reads an *absent* policy as legacy.** A model saved before
+  today decodes exactly as it was built; only a new fit gets the new default.
+  This is the v2.3 rule — a default must never move an existing model — and a
+  test asserts both halves of it.
+- `--link-rescue-lookahead <seconds>` (`linkRescueLookaheadSec`, decode-only,
+  default 0/off) is a new experimental knob: instead of testing a whole
+  unlabelled span's mean rank at once, each end creeps inwards while its own
+  local mean holds. Measured below; **not** enabled.
+- The sidebar `Rebuild Model` button and `POST /api/prediction-reviews/rebuild-model`
+  send no policy, so they now build a bridge model too.
+
+### Numbers
+
+| complete files, LOO | legacy | **bridge (new default)** |
+| --- | ---: | ---: |
+| Segment F1 | 91.16% | **93.33%** |
+| recall / precision | 92.49 / 89.87 | 92.58 / **94.09** |
+| Matched takes | 393 | **397** |
+| Predicted segments | 531 | 517 |
+| Median end error | +5.85s | **+0.81s** |
+| Mean absolute end error | 21.50s | **16.67s** |
+| p90 absolute end error | 55.2s | **48.4s** |
+| End within 2s | 21.6% | **40.6%** |
+| Start within 2s | 38.2% | **61.7%** |
+| Start more than 2s early | 24.2% | **21.2%** |
+
+Paired over the 383 annotations both runs matched: **F1 +2.167 points, file
+bootstrap 95% [+1.403, +3.084]** (3,000 resamples, seed 42). Endings improve on
+206 and worsen on 49; starts improve on 166 and worsen on 82. Per file, 58 of 103
+improve, 11 worsen, 34 are unchanged — against 54/14/34 on the smaller snapshot,
+so both the gain and the regression count moved the right way as annotation grew.
+
+Median end error by what follows the take (the classification the 2026-09-06
+entry introduced):
+
+| what follows | n | legacy | bridge |
+| --- | ---: | ---: | ---: |
+| a different song after a gap | 210 | +8.09s | **+0.75s** |
+| a different song within 2s | 52 | +3.23s | **+0.11s** |
+| end of recording | 73 | +1.13s | +1.12s |
+| the same song after a gap | 53 | +31.34s | +38.72s |
+| the same song within 2s | 10 | +82.18s | **+36.39s** |
+
+### Thresholds: re-swept, all defaults kept
+
+Every knob was re-swept under bridge on this larger population. The 2026-09-06
+values are still the best or statistically indistinguishable from it, so nothing
+was re-fitted to this dataset:
+
+| knob | swept | best | kept |
+| --- | --- | --- | --- |
+| `linkRescueRank` | -1, 2–12 | 6 (93.535) | **5** (93.329) |
+| `linkTailSec` | 0–6 | **2** (93.329) | 2 |
+| `anchorMargin` | 0.08–0.25 | **0.15** (93.329) | 0.15 |
+| `minAnchorRun` | 2–5 | **3** (93.329) | 3 |
+| `linkMaxSilenceRatio` | 0.4–1.0 | 0.6 (93.376) | **0.7** (93.329) |
+
+Rank 6 scores +0.205 with a bootstrap interval of [-0.037, +0.545] — it crosses
+zero, and 5 is the value that sits in the measured gap between the rank
+distributions inside a take (p75 = 4.0) and outside one (p25 = 7.2) rather than
+at the top of a curve fitted to this library. Same reasoning for silence 0.6.
+**Every default here was chosen on prior evidence and survived re-measurement;
+none was moved to chase a tenth of a point.**
+
+### Rejected: a lookahead on the rescue pass
+
+The 2026-09-06 entry's open item #2. A span's mean rank is only a fair statement
+about the span when the span is one thing, and often it is not — the ambiguous
+middle of a take runs straight into the dead air after it, and averaging the two
+together rejects both. Creeping inwards from each end while a *local* mean holds
+fixes that in the individual files where it was diagnosed, and is a wash overall:
+
+| | bridge | +lookahead 10s, rank 8 |
+| --- | ---: | ---: |
+| Segment F1 | 93.329 | 93.349 |
+| Matched takes | 397 | **401** |
+| End within 2s | 40.6% | **42.6%** |
+| p90 absolute end error | 48.4s | **46.6s** |
+| same song after a gap, median end error | +38.7s | **+30.0s** |
+| Start within 2s | **61.7%** | 59.6% |
+| Start more than 2s early | **21.2%** | 24.4% |
+
+**+0.020 points, 95% [-0.526, +0.403]** — the interval straddles zero. It trades
+start accuracy for end accuracy and recognizes four more takes. Kept as a flag,
+off, because the diagnosis behind it is sound and the trade may be worth taking
+once repeated takes are handled; not made a default on a wash.
+
+Also **rejected: letting the rescue claim a span with the same song on both
+sides.** Measured twice. Whole-span it scores F1 93.506 but pushes the
+back-to-back same-song ending error from +36.4s to +76.3s — worse than legacy, in
+the error class that is already the worst — and loses 5 matched takes. With the
+lookahead it is inert (93.496 against 93.349, every error class identical to two
+decimal places). The flag was implemented, measured, and removed rather than
+left in the config surface.
+
+### The files that regress, and why
+
+11 of 103 complete files get worse; 4 by more than 1.5 F1 points. Every one was
+read window by window against its own MIDI. They fall into two kinds, and
+neither is a reason to withhold the change.
+
+**Lenient annotation (the model is right, the label is not).** File 143
+(`Jmx-A00494-Aug-24-2026`) is four consecutive `The Entertainer` annotations
+covering 73s–602s. Legacy predicts 62.8–602.4; bridge predicts 0.5–602.4 and
+loses 9.8 points of precision for it. The disputed span is the first 73 seconds,
+where the model says The Entertainer and the annotation says nothing. Legacy also
+over-predicts there, by 11 seconds — bridge is scored worse for doing more of the
+same thing. Tightening the decoder until this file scores well would be fitting
+to an annotation boundary that was never drawn.
+
+**Weak middles, which the leash then truncates (a real cost).** Files 503, 43 and
+446 all have a take whose anchors stop well before the annotated ending — the
+model half-recognizes the middle of the take and the rescue's whole-span mean,
+diluted by the dead air that follows, refuses to give it back. File 503's second
+`Ashokan Farewell` take keeps 14 seconds of a 78-second annotation. This is the
+honest cost of the change, it is the exact failure the rejected lookahead
+addresses (503 recovers to -10.4 from -29.0 under it), and it is bounded: these
+three files are 3% of the population, against 58 that improve.
+
+The two are told apart by direction. Lenient-annotation regressions lose
+*precision* while recall stays put; leash regressions lose *recall*. Across the
+11 regressing files, 4 are the first kind and 7 the second.
+
+### What is still wrong
+
+**Repeated takes of one song remain the dominant error**, unchanged from
+2026-09-06: +38.7s median end error after a gap, and the class is now *worse*
+than legacy there (+31.3s) even though it is much better back-to-back (+36.4s
+against +82.2s). Two takes of one song vouch for each other and merge. Neither
+the rescue's same-song refusal nor a lookahead fixes it; it needs a stop/restart
+cue — a silence run, a bookmark, a compressed JMX pause — used as a barrier that
+blocks *vouching*, which is the one bridge rule that still has no right-hand
+bound. That is the next target, and `files.skips_json` already holds the cue.
+
+Reports, sweeps and the per-file reads are under
+`data/ml/bridge-default-20260907/`, which is gitignored; the tables above are the
+record.
+
+---
+
 ## 2026-09-06 — bridge linking: a finished song no longer runs long (experimental, opt-in)
 
 ### Context

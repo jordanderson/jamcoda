@@ -15,7 +15,7 @@ export const NO_SONG_LABEL = '__none__';
  * to name its report files, so runs stay referable without manual renaming.
  * Keep `ml/CHANGELOG.md` in sync with each bump.
  */
-export const MODEL_VERSION = 'v2.10';
+export const MODEL_VERSION = 'v2.11';
 
 /**
  * Version 2 features (v2.8 boundary snapping & cadence/flourish trimming, v2.7 acoustic sustain decay).
@@ -218,8 +218,12 @@ export interface TrainConfig {
    * outwards until a barrier, so the earlier song owns the dead zone after it
    * stops playing. `bridge` links ambiguous windows only when a second anchor
    * run of the same song closes the span; past the last anchor a run advances
-   * only while the model itself still ranks that song first. Absent preserves
-   * legacy linking.
+   * only while the model itself still ranks that song first.
+   *
+   * `resolveTrainConfig` defaults this to `bridge`, so every model built from
+   * 2026-09-07 records it. The *decoder* still reads an absent value as
+   * `legacy`, which is what keeps a model saved before that date decoding the
+   * way it was built.
    */
   linkPolicy?: 'legacy' | 'bridge';
   /**
@@ -243,6 +247,19 @@ export interface TrainConfig {
    * disabled otherwise, so legacy decoding is unchanged.
    */
   linkRescueRank?: number;
+  /**
+   * Rescue pass: seconds of lookahead used to test the mean rank, instead of
+   * the whole span at once. 0 keeps the all-or-nothing span test.
+   *
+   * A span's mean is only a fair statement about the span when the span is one
+   * thing. An unlabelled region often is not: a take whose middle the model
+   * half-recognizes runs straight into the dead air after it, and averaging the
+   * two together rejects both. With a lookahead the span is claimed by creeping
+   * inwards from each end while the *local* mean holds, so a song keeps the
+   * part of the span its evidence actually covers and abandons the rest. The
+   * two ends advance in lockstep, as unvouched tails do.
+   */
+  linkRescueLookaheadSec?: number;
   /** Anchor-link decoder: minimum margin for a window to be linked into a run (default 0). */
   fillMinMargin?: number;
   /** Anchor-link decoder: a linked window must rank the run's label within its
@@ -412,7 +429,7 @@ export const TRAIN_CONFIG_DEFAULTS = {
 export const DECODE_ONLY_CONFIG_KEYS = [
   'decoder', 'viterbiChangePenalty', 'temperature', 'anchorMargin', 'minAnchorRun',
   'fillMinMargin', 'fillTopK', 'linkConfidence', 'linkMaxSilenceRatio', 'anchorGapPolicy',
-  'linkPolicy', 'linkTailSec', 'linkRescueRank'
+  'linkPolicy', 'linkTailSec', 'linkRescueRank', 'linkRescueLookaheadSec'
 ] as const;
 
 export type DecodeOnlyConfig = Partial<Pick<TrainConfig, typeof DECODE_ONLY_CONFIG_KEYS[number]>>;
@@ -431,7 +448,7 @@ export type ResolvedTrainConfig = Required<
     | 'fillMinMargin' | 'fillTopK' | 'linkConfidence' | 'temperature'
     | 'viterbiChangePenalty' | 'kernelScale' | 'registerDivide'
     | 'handMaskAugmentFraction' | 'noneFromCompleteFilesOnly'
-    | 'linkMaxSilenceRatio'
+    | 'linkMaxSilenceRatio' | 'linkPolicy'
   >
 > & TrainConfig;
 
@@ -455,16 +472,23 @@ export function resolveTrainConfig(config: TrainConfig): ResolvedTrainConfig {
     linkConfidence: config.linkConfidence ?? 0.5,
     temperature: config.temperature ?? 1,
     viterbiChangePenalty: config.viterbiChangePenalty ?? 1,
-    kernelScale: config.kernelScale ?? 0
+    kernelScale: config.kernelScale ?? 0,
+    linkPolicy: config.linkPolicy ?? 'bridge'
   };
 
-  // Bridge linking's two thresholds are resolved only when that policy is on.
-  // What they mean depends on `linkPolicy`, so writing them into a model built
-  // with legacy linking would freeze values the decoder never used, and would
-  // then quietly disagree with it if that model's policy were changed later.
+  // Bridge linking's thresholds are resolved only when that policy is on. What
+  // they mean depends on `linkPolicy`, so writing them into a model built with
+  // legacy linking would freeze values the decoder never used, and would then
+  // quietly disagree with it if that model's policy were changed later.
+  //
+  // The default is `bridge` here, at fit time, and nowhere else: the decoder
+  // still reads an *absent* policy as legacy, so a model saved before this
+  // change keeps decoding exactly as it did. Only a model built from here on
+  // records `bridge`, and it records it explicitly.
   if (resolved.linkPolicy === 'bridge') {
     resolved.linkTailSec = resolved.linkTailSec ?? 2;
     resolved.linkRescueRank = resolved.linkRescueRank ?? 5;
+    resolved.linkRescueLookaheadSec = resolved.linkRescueLookaheadSec ?? 0;
   }
 
   return resolved;
@@ -1646,6 +1670,11 @@ function anchorLinkDecode(
   const rescueRank = config.linkRescueRank ?? (config.linkPolicy === 'bridge' ? 5 : -1);
   if (rescueRank >= 0) {
     const rescueConfidence = clamp(config.linkConfidence ?? 0.5, 0, 1);
+    // A lookahead of 0 tests the whole span at once, which is the original rule.
+    const lookahead = Math.max(0, config.linkRescueLookaheadSec ?? 0);
+    const reach = lookahead > 0
+      ? Math.max(1, Math.round(lookahead / Math.max(1e-9, config.stepSec)))
+      : 0;
     const meanRank = (from: number, to: number, label: number): number => {
       let sum = 0;
       for (let i = from; i < to; i++) {
@@ -1673,8 +1702,41 @@ function anchorLinkDecode(
       // between two takes of one song, not a passage inside one. Absorbing it
       // would merge the takes, which is already the largest error left.
       const betweenTakesOfOneSong = left >= 0 && left === right && left !== noneLabelIndex;
-      for (const neighbour of betweenTakesOfOneSong ? [] : [left, right]) {
-        if (neighbour < 0 || neighbour === noneLabelIndex || neighbour === best) continue;
+      const claimable = (label: number) => label >= 0 && label !== noneLabelIndex
+        && !betweenTakesOfOneSong;
+
+      if (reach > 0) {
+        // Creep inwards from each end while that side's own lookahead holds.
+        // Where both sides qualify they meet in the middle, and where neither
+        // does the span stays unlabelled — the same arbitration the leash uses.
+        let lo = i;
+        let hi = j;
+        let leftAlive = claimable(left);
+        let rightAlive = claimable(right);
+        while (hi > lo && (leftAlive || rightAlive)) {
+          if (leftAlive) {
+            leftAlive = meanRank(lo, Math.min(lo + reach, hi), left) <= rescueRank;
+            if (leftAlive) {
+              labels[lo] = left;
+              confidence[lo] = rescueConfidence;
+              lo++;
+            }
+          }
+          if (rightAlive && hi > lo) {
+            rightAlive = meanRank(Math.max(hi - reach, lo), hi, right) <= rescueRank;
+            if (rightAlive) {
+              labels[hi - 1] = right;
+              confidence[hi - 1] = rescueConfidence;
+              hi--;
+            }
+          }
+        }
+        i = j;
+        continue;
+      }
+
+      for (const neighbour of [left, right]) {
+        if (!claimable(neighbour) || neighbour === best) continue;
         const rank = meanRank(i, j, neighbour);
         if (rank <= bestRank) {
           bestRank = rank;

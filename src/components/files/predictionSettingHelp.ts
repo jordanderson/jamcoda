@@ -56,8 +56,8 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
       'How the ambiguous stretches between takes — warm-up, noodling, talking — get attached to a song.',
       'legacy: any window that is not confidently something else joins whichever song reaches it first, with no limit. Runs extend in recording order, so the earlier song claims the whole gap. This is why a finished take tends to run past its ending and the next one starts late.',
       'bridge: a stretch is linked freely only when the same song is anchored on both sides of it, which means it sits inside one take. Past a song’s outermost anchor the run gets a short leash, and two competing songs advance in step so they meet in the middle instead of the earlier one taking everything. A second pass then hands leftover stretches back to a neighbouring song when the evidence across the whole stretch supports it.',
-      'Measured over 103 fully annotated files: the median ending error falls from +6.09s to +1.20s and complete-file F1 rises 1.64 points, recognizing the same number of takes.',
-      'Empty means whatever this model was trained with.'
+      'bridge is the default a new model is trained with. Measured over 103 fully annotated files: the median ending error falls from +5.85s to +0.81s and complete-file F1 rises 2.17 points, recognizing four more takes.',
+      'Empty means whatever this model was trained with — legacy for a model built before 2026-09-07.'
     ]
   },
   anchorMargin: {

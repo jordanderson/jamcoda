@@ -136,7 +136,12 @@ test('a completed file refuses a committed run but allows a preview', () => {
 
 test('decoder overrides change the decode and are reported back', () => {
   const base = run({ dryRun: true });
-  assert.equal(base.decodeConfig.linkPolicy, undefined);
+  // The fixture model is trained with the current default, and the preview
+  // reports the policy it actually decoded with rather than leaving it blank.
+  assert.equal(base.decodeConfig.linkPolicy, 'bridge');
+
+  const legacy = run({ dryRun: true, decoderOverrides: { linkPolicy: 'legacy' } });
+  assert.equal(legacy.decodeConfig.linkPolicy, 'legacy');
 
   const bridged = run({ dryRun: true, decoderOverrides: { linkPolicy: 'bridge', linkTailSec: 4 } });
   assert.equal(bridged.decodeConfig.linkPolicy, 'bridge');

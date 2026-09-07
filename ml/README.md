@@ -11,7 +11,8 @@ Goal:
 
 ## Model Summary
 
-Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v2):
+Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v2,
+release stamp `v2.11`):
 
 - extracts windowed MIDI features (split-register pitch-class profiles —
   chroma separated into low and high register at `registerDivide`, default
@@ -46,6 +47,14 @@ Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v
      always has a low margin, and a low margin is exactly what makes a window
      fillable, so without it one recognisable phrase could claim the silence
      after it and carry on into whatever followed
+  3. bounds that linking on the right with **bridge** linking (the default since
+     v2.11): a span is linked freely only when an anchor run of the *same* song
+     closes it, an unvouched tail runs `linkTailSec` and then only while the song
+     is still the model's own top choice, competing tails advance in lockstep,
+     and a rescue pass hands a leftover span to a neighbour whose mean rank
+     across it is at most `linkRescueRank`. Without it the earlier song owns
+     every ambiguous window until the next one anchors, and a finished take ran a
+     median 5.85s long
 - converts window runs into segments. Boundaries come from window **centres**,
   because a window label applies at its centre. Training uses the same rule.
 - filters and merges the segments with confidence and duration limits
@@ -104,7 +113,9 @@ npm run ml:train -- \
   --min-anchor-run 3 \
   --fill-topk -1 \
   --link-max-silence 0.7 \
-  --link-policy legacy
+  --link-policy bridge \
+  --link-tail-sec 2 \
+  --link-rescue-rank 5
 ```
 
 Notes:
@@ -126,14 +137,19 @@ Notes:
   budget. See the model summary above.
 - `--link-max-silence` sets the `silence_ratio` at which a window stops being
   linkable into an anchor run (default 0.7; 1 disables the rule).
-- `--link-policy bridge` trains a model that stops a finished song running into
-  the next one. Default `legacy`. `--link-tail-sec` (default 2) and
-  `--link-rescue-rank` (default 5, `-1` off) tune it and are only read under
-  `bridge`. A model trained with the policy records all three, so the CLI, the
-  import pipeline and the API all decode it the same way and a later change to a
-  default cannot move an existing model. Measured at +1.64 complete-file F1 with
-  the median ending error down from +6.09s to +1.20s — read the 2026-09-06 entry
-  in [`CHANGELOG.md`](CHANGELOG.md) for what it costs before turning it on.
+- `--link-policy` is `bridge` by default, which stops a finished song running
+  into the next one; `--link-policy legacy` builds the pre-v2.11 model.
+  `--link-tail-sec` (default 2) and `--link-rescue-rank` (default 5, `-1` off)
+  tune it and are only read under `bridge`. A model trained with the policy
+  records all three, so the CLI, the import pipeline and the API all decode it
+  the same way. **The decoder reads an *absent* policy as `legacy`**, so a model
+  saved before 2026-09-07 keeps decoding the way it was built — a default must
+  never move an existing model.
+- `--link-rescue-lookahead <seconds>` is experimental and off (0). It makes the
+  rescue pass creep in from each end of a span while a *local* mean rank holds,
+  instead of testing the whole span at once. It recognizes more takes and places
+  endings better, at the cost of starts, and is a wash on F1 — see the 2026-09-07
+  entry in [`CHANGELOG.md`](CHANGELOG.md).
 - `--scaling` is the per-feature normalization (`minmax`, `zscore`, or `none`).
 - `--score-neighbors` is the number of nearest prototypes to average per label
   (default 1, the single nearest). The fit clamps this value to the smallest
@@ -259,23 +275,24 @@ keeps individual errors for paired comparisons. A lower error among fewer matche
 takes is not automatically an improvement: compare overlap F1, matched coverage,
 and the same matched annotations across variants.
 
-`--link-policy legacy|bridge` is an **experimental**, eval-only override that
-changes how ambiguous windows join an anchor run, and is the largest measured
-improvement to boundary placement so far. Legacy links any window that is not
-confidently something else, without limit and in recording order, so a finished
-song owns the warm-up and noodling until the next song anchors — the median take
-ended 6.09s late. `bridge` links a span freely when an anchor run of the *same*
-song closes it, leashes an unvouched tail to `--link-tail-sec` (default 2),
-advances competing tails in lockstep, and then gives leftover spans to a
-neighbouring song when that song's mean rank across the whole span is at most
-`--link-rescue-rank` (default 5; `-1` disables the pass). Median end error falls
-to +1.20s, complete-file F1 rises 1.64 points, and the same number of takes is
-recognized. It costs a little annotation recall and does not fix repeated takes
-of the same song. See
-the 2026-09-06 entry in [`CHANGELOG.md`](CHANGELOG.md) for the committed
-summary, and `experiments-2026-09-06-linking.md` under the gitignored
-`data/ml/notes/` for the full method, the held-out check and the rejected
-alternatives.
+`--link-policy legacy|bridge` overrides the linking rule without retraining, so
+a bridge model can be scored as if it were legacy and vice versa. `bridge` is the
+default a model is now built with; `legacy` reproduces any report written before
+2026-09-07. Over 103 complete files it is worth **+2.167 F1, bootstrap 95%
+[+1.403, +3.084]**, with the median ending error down from +5.85s to +0.81s and
+four more takes recognized. It costs nothing in recall on this population and
+does not fix repeated takes of the same song, which are now the dominant error.
+See the 2026-09-07 and 2026-09-06 entries in [`CHANGELOG.md`](CHANGELOG.md), and
+`experiments-2026-09-06-linking.md` under the gitignored `data/ml/notes/` for the
+original method, the held-out check and the rejected alternatives.
+
+`--link-rescue-lookahead <seconds>` is an experimental, eval-only override, off
+at 0. The rescue pass normally judges an unlabelled span by its mean rank as a
+whole; a lookahead makes each end creep inwards while its own local mean holds,
+so a song keeps the part of a span its evidence covers. It fixes the specific
+files where a take's weak middle gets truncated, and is a wash overall
+(+0.020 F1, 95% [-0.526, +0.403]) — better endings and more matched takes for
+worse starts. Read the 2026-09-07 entry before turning it on.
 
 `--anchor-gap-policy legacy|midpoint|evidence` is an **experimental**, eval-only
 override. Legacy is the existing behavior: the earlier anchor claims ambiguous
@@ -394,8 +411,8 @@ You do not need terminal commands for routine iteration:
   as `ml:train`, including `linkPolicy`, `linkTailSec` and `linkRescueRank`.
   Anything the request omits is left undefined so `resolveTrainConfig` supplies
   it, which is what keeps the button and the CLI building the same model. The
-  sidebar sends none of them, so the button trains a `legacy` model until that
-  changes.
+  sidebar sends none of them, so the button trains whatever `resolveTrainConfig`
+  defaults to — a `bridge` model since v2.11.
 - The sidebar `Rebuild Model` button shows a badge when annotations have changed
   since the last build: the count of annotations created or edited after the
   model's `createdAt`, plus any song names the model has never seen, from

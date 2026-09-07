@@ -197,7 +197,9 @@ describe('hand-mask augmentation', () => {
 });
 
 describe('anchor-link decoder', () => {
-  function makeModelForDecoding(): ReturnType<typeof trainModelFromSamples> {
+  function makeModelForDecoding(
+    overrides: Partial<TrainConfig> = {}
+  ): ReturnType<typeof trainModelFromSamples> {
     // Two song labels with distinct feature clusters plus silence windows.
     // Hand-mask augmentation is off so the decoder is measured in isolation.
     const samples: WindowSample[] = [];
@@ -214,11 +216,14 @@ describe('anchor-link decoder', () => {
     push(1, 'Song A', songA, 40);
     push(1, NO_SONG_LABEL, none, 40);
     push(1, 'Song B', songB, 40);
-    return trainModelFromSamples(samples, { ...config, handMaskAugmentFraction: 0 });
+    return trainModelFromSamples(samples, { ...config, handMaskAugmentFraction: 0, ...overrides });
   }
 
   it('links a contiguous run through low-confidence windows and stops at silence', () => {
-    const model = makeModelForDecoding();
+    // Legacy linking, explicitly: this describes the unbounded fill rule, and
+    // three labels are too few for the bridge rescue's rank test to mean
+    // anything (a song is always near the top of a list of three).
+    const model = makeModelForDecoding({ linkPolicy: 'legacy' });
     const songA = [0.7, 0.1, ...new Array(36).fill(0.15)];
     const none = [0, ...new Array(37).fill(0)];
     const windows = [
@@ -238,6 +243,15 @@ describe('anchor-link decoder', () => {
     const tail = predicted.filter((p) => p.startTime >= 25);
     assert.ok(tail.length > 0);
     assert.ok(tail.every((p) => p.label === NO_SONG_LABEL));
+  });
+
+  it('records bridge linking on a newly trained model', () => {
+    // The training default, so every model built from here on decodes with it
+    // and says so in its own config rather than relying on a default.
+    const model = makeModelForDecoding();
+    assert.equal(model.config.linkPolicy, 'bridge');
+    assert.equal(model.config.linkTailSec, 2);
+    assert.equal(model.config.linkRescueRank, 5);
   });
 });
 
