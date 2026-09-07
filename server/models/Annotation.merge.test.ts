@@ -76,9 +76,10 @@ test('merges overlap left-to-right keeping earlier start and later end', () => {
 
   const merged = AnnotationModel.mergeOverlappingSameSong(leftId);
   assert.ok(merged);
-  assert.equal(merged.id, leftId);
-  assert.equal(merged.start_time, 10);
-  assert.equal(merged.end_time, 40);
+  assert.equal(merged.annotation.id, leftId);
+  assert.equal(merged.annotation.start_time, 10);
+  assert.equal(merged.annotation.end_time, 40);
+  assert.equal(merged.absorbedIds.length, 1);
 
   const remaining = AnnotationModel.findByFileId(fileId);
   assert.equal(remaining.length, 1);
@@ -107,9 +108,9 @@ test('merges overlap right-to-left keeping earlier start and later end', () => {
 
   const merged = AnnotationModel.mergeOverlappingSameSong(rightId);
   assert.ok(merged);
-  assert.equal(merged.id, rightId);
-  assert.equal(merged.start_time, 10);
-  assert.equal(merged.end_time, 40);
+  assert.equal(merged.annotation.id, rightId);
+  assert.equal(merged.annotation.start_time, 10);
+  assert.equal(merged.annotation.end_time, 40);
 
   const remaining = AnnotationModel.findByFileId(fileId);
   assert.equal(remaining.length, 1);
@@ -147,8 +148,8 @@ test('absorbing a promoted annotation re-points its review at the survivor', () 
   AnnotationModel.update(survivorId, { endTime: 25 });
   const merged = AnnotationModel.mergeOverlappingSameSong(survivorId);
   assert.ok(merged);
-  assert.equal(merged.id, survivorId);
-  assert.equal(merged.end_time, 30);
+  assert.equal(merged.annotation.id, survivorId);
+  assert.equal(merged.annotation.end_time, 30);
   assert.equal(AnnotationModel.findById(annotationId), undefined);
 
   // The promotion follows the merge instead of being nulled by the foreign key.
@@ -182,8 +183,12 @@ test('absorbing several promoted annotations re-points every review', () => {
   AnnotationModel.update(survivorId, { startTime: 5 });
   const merged = AnnotationModel.mergeOverlappingSameSong(survivorId);
   assert.ok(merged);
-  assert.equal(merged.start_time, 0);
-  assert.equal(merged.end_time, 50);
+  assert.equal(merged.annotation.start_time, 0);
+  assert.equal(merged.annotation.end_time, 50);
+  assert.deepEqual(
+    [...merged.absorbedIds].sort((a, b) => a - b),
+    [first.annotationId, second.annotationId].sort((a, b) => a - b)
+  );
 
   for (const { reviewId } of [first, second]) {
     const review = PredictionReviewModel.findById(reviewId);
@@ -206,8 +211,8 @@ test('a promoted annotation that survives the merge keeps its own review link', 
   AnnotationModel.update(annotationId, { endTime: 25 });
   const merged = AnnotationModel.mergeOverlappingSameSong(annotationId);
   assert.ok(merged);
-  assert.equal(merged.id, annotationId);
-  assert.equal(merged.end_time, 30);
+  assert.equal(merged.annotation.id, annotationId);
+  assert.equal(merged.annotation.end_time, 30);
 
   const review = PredictionReviewModel.findById(reviewId);
   assert.ok(review);
@@ -321,4 +326,51 @@ test('re-promoting a narrowed review leaves its wider annotation alone', () => {
   assert.ok(annotation);
   assert.equal(annotation.start_time, 10);
   assert.equal(annotation.end_time, 40);
+});
+
+test('an edit that absorbs nothing reports no absorbed ids', () => {
+  const fileId = createTestFile();
+  const id = AnnotationModel.create({
+    fileId,
+    songName: 'Song A',
+    startTime: 10,
+    endTime: 20
+  });
+  AnnotationModel.create({
+    fileId,
+    songName: 'Song B',
+    startTime: 30,
+    endTime: 40
+  });
+
+  // A plain resize that reaches no same-song neighbour. The empty list is what
+  // lets the detail page patch its cache instead of refetching the file.
+  AnnotationModel.update(id, { endTime: 25 });
+  const merged = AnnotationModel.mergeOverlappingSameSong(id);
+  assert.ok(merged);
+  assert.equal(merged.annotation.end_time, 25);
+  assert.deepEqual(merged.absorbedIds, []);
+  assert.equal(AnnotationModel.findByFileId(fileId).length, 2);
+});
+
+test('an overlapping neighbour of a different song is not absorbed', () => {
+  const fileId = createTestFile();
+  const id = AnnotationModel.create({
+    fileId,
+    songName: 'Song A',
+    startTime: 10,
+    endTime: 20
+  });
+  AnnotationModel.create({
+    fileId,
+    songName: 'Song B',
+    startTime: 22,
+    endTime: 40
+  });
+
+  AnnotationModel.update(id, { endTime: 30 });
+  const merged = AnnotationModel.mergeOverlappingSameSong(id);
+  assert.ok(merged);
+  assert.deepEqual(merged.absorbedIds, []);
+  assert.equal(AnnotationModel.findByFileId(fileId).length, 2);
 });

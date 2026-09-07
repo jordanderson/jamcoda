@@ -5,7 +5,7 @@ import * as AnnotationModel from '@models/Annotation';
 import * as PredictionReviewModel from '@models/PredictionReview';
 import * as FileModel from '@models/File';
 import { loadModel, suggestSongsForRange } from '../../ml/songSegmentation';
-import type { RenameSongNameResult } from '@server/types';
+import type { Annotation, RenameSongNameResult } from '@server/types';
 
 const router = express.Router();
 
@@ -180,15 +180,30 @@ router.put('/:id', async (req, res) => {
       || startTime !== undefined
       || endTime !== undefined
     );
-    const annotation = shouldMergeSameSongOverlaps
-      ? AnnotationModel.mergeOverlappingSameSong(id)
-      : AnnotationModel.findById(id);
+
+    let annotation: Annotation | undefined;
+    let absorbedIds: number[] = [];
+    if (shouldMergeSameSongOverlaps) {
+      const merged = AnnotationModel.mergeOverlappingSameSong(id);
+      annotation = merged?.annotation;
+      absorbedIds = merged?.absorbedIds ?? [];
+    } else {
+      annotation = AnnotationModel.findById(id);
+    }
 
     if (!annotation) {
       return res.status(404).json({ error: 'Annotation not found' });
     }
 
-    res.json(annotation);
+    // `absorbedIds` rides along on the annotation so a client can tell an
+    // ordinary edit (nothing else moved -- patch the one row) from a merge
+    // (other rows are gone -- refetch). An empty array is the common case.
+    //
+    // `notes` is normalised the way `GET /api/files/:id` does it, so the same
+    // annotation serialises identically on both routes. A client patching its
+    // cache from this response has to end up deep-equal to what the file
+    // refetch returns, or it pays for a redundant re-render of the roll.
+    res.json({ ...annotation, notes: annotation.notes ?? undefined, absorbedIds });
   } catch (error) {
     console.error('Error updating annotation:', error);
     res.status(500).json({ error: 'Failed to update annotation' });

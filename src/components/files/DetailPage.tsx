@@ -37,8 +37,9 @@ import {
   type BoundaryNote
 } from '@core/boundaries';
 import {
+  buildSoundingSpans,
   getGapAction,
-  getLargeAnnotationGaps,
+  getSoundingGaps,
   LARGE_ANNOTATION_GAP_SECONDS,
   type AnnotationGap
 } from './annotationGaps';
@@ -127,6 +128,15 @@ export function DetailPage({ fileId }: DetailPageProps) {
   const bookmarks: RollBookmark[] = file?.bookmarks ?? EMPTY_BOOKMARKS;
   const skips: RollSkip[] = file?.skips ?? EMPTY_SKIPS;
 
+  // Pedal-extended note spans for the whole file. Built once per sequence, not
+  // once per annotation: this is the expensive half of gap detection, and
+  // rebuilding it inside the loop below made a resize freeze the page for over
+  // a second on an hour-long file.
+  const soundingSpans = useMemo(
+    () => (sequence?.notes ? buildSoundingSpans(sequence.notes, sequence.sustainEvents) : []),
+    [sequence?.notes, sequence?.sustainEvents]
+  );
+
   const annotationGapsById = useMemo(() => {
     const gapMap = new Map<number, AnnotationGap[]>();
     if (!sequence?.notes) {
@@ -136,18 +146,17 @@ export function DetailPage({ fileId }: DetailPageProps) {
     for (const annotation of annotations) {
       gapMap.set(
         annotation.id,
-        getLargeAnnotationGaps(
+        getSoundingGaps(
+          soundingSpans,
           annotation.start_time,
           annotation.end_time,
-          sequence.notes,
-          LARGE_ANNOTATION_GAP_SECONDS,
-          sequence.sustainEvents
+          LARGE_ANNOTATION_GAP_SECONDS
         )
       );
     }
 
     return gapMap;
-  }, [annotations, sequence?.notes, sequence?.sustainEvents]);
+  }, [annotations, sequence?.notes, soundingSpans]);
 
   const acousticNotes = useMemo((): BoundaryNote[] => {
     if (!sequence?.notes) return [];

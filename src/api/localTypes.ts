@@ -241,6 +241,25 @@ export interface FileDetailAnnotation {
   updated_at: number;
 }
 
+/** Fields a client may change on an annotation. */
+export interface UpdateAnnotationRequest {
+  songName?: string;
+  startTime?: number;
+  endTime?: number;
+  notes?: string;
+}
+
+/**
+ * The saved annotation, plus the rows a same-song merge absorbed into it.
+ *
+ * `absorbedIds` is empty for an ordinary edit. When it is not, other rows no
+ * longer exist and any prediction review promoted into them now points at this
+ * annotation -- a client holding those rows has to refetch rather than patch.
+ */
+export interface UpdateAnnotationResponse extends FileDetailAnnotation {
+  absorbedIds: number[];
+}
+
 /** One model-ranked song suggestion for a time range. */
 export interface SongSuggestion {
   songName: string;

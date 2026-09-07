@@ -40,8 +40,12 @@ export const MODEL_VERSION = 'v2.10';
  *
  * (tempo_bpm was ablated in v2.6: practice sessions have variable tempo
  * between slow practice and full speed, which added false-negative noise).
+ *
+ * `loadModel` rejects a model whose own `featureNames` disagree with this
+ * list, so it is part of the saved model's contract and is exported for
+ * callers that build or check one.
  */
-const FEATURE_NAMES = [
+export const FEATURE_NAMES = [
   'pcLow_C', 'pcLow_C#', 'pcLow_D', 'pcLow_D#', 'pcLow_E', 'pcLow_F',
   'pcLow_F#', 'pcLow_G', 'pcLow_G#', 'pcLow_A', 'pcLow_A#', 'pcLow_B',
   'pcHigh_C', 'pcHigh_C#', 'pcHigh_D', 'pcHigh_D#', 'pcHigh_E', 'pcHigh_F',

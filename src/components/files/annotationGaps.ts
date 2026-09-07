@@ -43,26 +43,35 @@ export interface AnnotationGap {
 export type GapAction = 'split' | 'trim-start' | 'trim-end' | 'none'
 
 /**
- * Gaps of at least `minGapSec` between `start` and `end` where no note sounds.
+ * A note's sounding span, with pedal sustain already applied.
  *
- * `notes` may cover the whole file. Only the parts overlapping the window are
- * considered. When `sustainEvents` are provided, notes held by the damper pedal
- * (CC 64) are extended acoustically until the pedal lifts or natural decay ends.
+ * Spans are a property of the file, not of any one annotation, so they are
+ * built once and reused across every annotation on the page --
+ * `buildSoundingSpans` is the expensive half of gap detection and it does not
+ * depend on the window being measured.
  */
-export function getLargeAnnotationGaps(
-  start: number,
-  end: number,
-  notes: GapNote[],
-  minGapSec: number = LARGE_ANNOTATION_GAP_SECONDS,
-  sustainEvents?: SustainPedalEvent[]
-): AnnotationGap[] {
-  if (!(end > start)) return []
+export interface SoundingSpan {
+  start: number
+  end: number
+}
 
+/**
+ * Every note's sounding span for a file, sorted by start, with damper pedal
+ * (CC 64) sustain applied: a note released while the pedal is down rings on
+ * until the pedal lifts or natural decay ends, whichever comes first.
+ *
+ * Sorted so that `getSoundingGaps` can binary-search the window it needs
+ * instead of rescanning the whole file per annotation.
+ */
+export function buildSoundingSpans(
+  notes: GapNote[],
+  sustainEvents?: SustainPedalEvent[]
+): SoundingSpan[] {
   const intervals = sustainEvents && sustainEvents.length > 0
     ? buildPedalIntervals(sustainEvents)
     : []
 
-  const overlaps: Array<{ start: number; end: number }> = []
+  const spans: SoundingSpan[] = []
   for (const note of notes) {
     const noteStart = note.startTime ?? 0
     let noteEnd = note.endTime ?? noteStart
@@ -76,35 +85,72 @@ export function getLargeAnnotationGaps(
       }
     }
 
-    if (noteEnd <= start || noteStart >= end) {
-      continue
-    }
-    overlaps.push({
-      start: Math.max(start, noteStart),
-      end: Math.min(end, noteEnd)
-    })
+    spans.push({ start: noteStart, end: noteEnd })
   }
 
-  if (overlaps.length === 0) {
+  spans.sort((a, b) => a.start - b.start || a.end - b.end)
+  return spans
+}
+
+/** Index of the first span that could reach into `start`. */
+function firstSpanIndexFrom(spans: SoundingSpan[], start: number): number {
+  // Spans are sorted by start, but a long earlier note can still cover the
+  // window, so walk back over any span whose end reaches past `start`.
+  let low = 0
+  let high = spans.length
+  while (low < high) {
+    const mid = (low + high) >> 1
+    if (spans[mid].start < start) {
+      low = mid + 1
+    } else {
+      high = mid
+    }
+  }
+
+  let index = low
+  while (index > 0 && spans[index - 1].end > start) {
+    index--
+  }
+  return index
+}
+
+/**
+ * Gaps of at least `minGapSec` in `[start, end]` where no span sounds.
+ *
+ * `spans` may cover the whole file; only the part overlapping the window is
+ * walked.
+ */
+export function getSoundingGaps(
+  spans: SoundingSpan[],
+  start: number,
+  end: number,
+  minGapSec: number = LARGE_ANNOTATION_GAP_SECONDS
+): AnnotationGap[] {
+  if (!(end > start)) return []
+
+  // Clipped to the window and merged. Clipping before merging is equivalent to
+  // merging before clipping, so the result matches a whole-file union.
+  const merged: Array<{ start: number; end: number }> = []
+  for (let i = firstSpanIndexFrom(spans, start); i < spans.length; i++) {
+    const span = spans[i]
+    if (span.start >= end) break
+    if (span.end <= start) continue
+
+    const clippedStart = Math.max(start, span.start)
+    const clippedEnd = Math.min(end, span.end)
+    const last = merged[merged.length - 1]
+    if (last && clippedStart <= last.end) {
+      if (clippedEnd > last.end) last.end = clippedEnd
+      continue
+    }
+    merged.push({ start: clippedStart, end: clippedEnd })
+  }
+
+  if (merged.length === 0) {
     const fullGap = end - start
     return fullGap >= minGapSec
       ? [{ startTime: start, endTime: end, durationSec: fullGap }]
       : []
-  }
-
-  overlaps.sort((a, b) => a.start - b.start || a.end - b.end)
-  const merged: Array<{ start: number; end: number }> = [overlaps[0]]
-
-  for (let i = 1; i < overlaps.length; i++) {
-    const current = overlaps[i]
-    const last = merged[merged.length - 1]
-    if (current.start > last.end) {
-      merged.push(current)
-      continue
-    }
-    if (current.end > last.end) {
-      last.end = current.end
-    }
   }
 
   const gaps: AnnotationGap[] = []
@@ -122,6 +168,27 @@ export function getLargeAnnotationGaps(
   addGapIfLarge(merged[merged.length - 1].end, end)
 
   return gaps
+}
+
+/**
+ * Gaps of at least `minGapSec` between `start` and `end` where no note sounds.
+ *
+ * `notes` may cover the whole file. Only the parts overlapping the window are
+ * considered. When `sustainEvents` are provided, notes held by the damper pedal
+ * (CC 64) are extended acoustically until the pedal lifts or natural decay ends.
+ *
+ * One-shot convenience wrapper. A caller measuring several windows over the
+ * same file should hoist `buildSoundingSpans` and call `getSoundingGaps`.
+ */
+export function getLargeAnnotationGaps(
+  start: number,
+  end: number,
+  notes: GapNote[],
+  minGapSec: number = LARGE_ANNOTATION_GAP_SECONDS,
+  sustainEvents?: SustainPedalEvent[]
+): AnnotationGap[] {
+  if (!(end > start)) return []
+  return getSoundingGaps(buildSoundingSpans(notes, sustainEvents), start, end, minGapSec)
 }
 
 /**

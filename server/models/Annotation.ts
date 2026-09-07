@@ -75,7 +75,20 @@ export function update(id: number, data: UpdateAnnotationData): boolean {
   return result.changes > 0;
 }
 
-export function mergeOverlappingSameSong(id: number): Annotation | undefined {
+/**
+ * Outcome of a same-song merge pass.
+ *
+ * `absorbedIds` is what the caller cannot infer from `annotation` alone: which
+ * rows the survivor swallowed, and therefore no longer exist. The API returns
+ * it so a client can patch its cache exactly instead of refetching the file to
+ * discover what vanished.
+ */
+export interface MergeSameSongResult {
+  annotation: Annotation;
+  absorbedIds: number[];
+}
+
+export function mergeOverlappingSameSong(id: number): MergeSameSongResult | undefined {
   const db = getDb();
   const current = findById(id);
   if (!current) {
@@ -117,7 +130,7 @@ export function mergeOverlappingSameSong(id: number): Annotation | undefined {
     && mergedStart === current.start_time
     && mergedEnd === current.end_time
   ) {
-    return current;
+    return { annotation: current, absorbedIds: [] };
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -147,7 +160,8 @@ export function mergeOverlappingSameSong(id: number): Annotation | undefined {
   });
 
   tx();
-  return findById(current.id);
+  const annotation = findById(current.id);
+  return annotation ? { annotation, absorbedIds: [...idsToDelete] } : undefined;
 }
 
 export function remove(id: number): boolean {

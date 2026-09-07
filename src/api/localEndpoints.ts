@@ -17,6 +17,8 @@ import type {
   SongPlayHistoryResponse,
   SongSuggestionsResponse,
   SetFileCompletionRequest,
+  UpdateAnnotationRequest,
+  UpdateAnnotationResponse,
   SetFileCompletionResponse,
   RunPredictionForFileRequest,
   RunPredictionForFileResponse
@@ -121,7 +123,10 @@ export const annotationsApi = {
     return response.json();
   },
 
-  update: async (id: number, data: Partial<{ songName: string; startTime: number; endTime: number; notes: string }>) => {
+  update: async (
+    id: number,
+    data: UpdateAnnotationRequest
+  ): Promise<UpdateAnnotationResponse> => {
     const response = await fetch(`/api/annotations/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

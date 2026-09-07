@@ -241,13 +241,32 @@ export function buildPedalIntervals(events: SustainPedalEvent[]): PedalInterval[
  * The pedal span holding a note released at `endTime`, or null when the pedal
  * was up (the key's own release stands). A key lifted on the same instant the
  * pedal lifts is not sustained: the damper has already fallen.
+ *
+ * `buildPedalIntervals` emits spans sorted by `down` and never overlapping, so
+ * at most one can contain `endTime` and it is found by binary search. This is
+ * called once per note by several callers -- a linear scan from the file's
+ * first pedal press made those callers quadratic, and an hour-long recording
+ * with 1600 pedal spans spent over a second there.
  */
 export function heldByPedal(intervals: PedalInterval[], endTime: number): PedalInterval | null {
-  for (const interval of intervals) {
-    if (interval.down > endTime) break;
-    if (interval.up === null || endTime < interval.up) return interval;
+  let low = 0;
+  let high = intervals.length - 1;
+  let candidate: PedalInterval | null = null;
+
+  // Last span pressed at or before `endTime`; no earlier span can still be
+  // holding, because spans do not overlap.
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (intervals[mid].down <= endTime) {
+      candidate = intervals[mid];
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
   }
-  return null;
+
+  if (!candidate) return null;
+  return candidate.up === null || endTime < candidate.up ? candidate : null;
 }
 
 /**
