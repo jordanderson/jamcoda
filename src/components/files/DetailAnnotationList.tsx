@@ -3,14 +3,11 @@ import { Pencil, Sparkles, Trash2 } from 'lucide-react'
 import { formatTime } from '@/utils/format'
 import { getGapAction, type AnnotationGap, type GapAction } from './annotationGaps'
 import type { RollAnnotation } from '@/components/midi/pianoRollTypes'
-import type { CadenceFlourishInfo } from '@core/boundaries'
 
 interface DetailAnnotationListProps {
   annotations: RollAnnotation[]
   /** Precomputed silent stretches, keyed by annotation id. */
   gapsById: Map<number, AnnotationGap[]>
-  /** Precomputed trailing flourishes, keyed by annotation id. */
-  flourishesById?: Map<number, CadenceFlourishInfo>
   /** `${annotationId}:${gapIndex}` of the edit currently in flight. */
   splittingGapKey: string | null
   onSeek: (time: number) => void
@@ -18,7 +15,6 @@ interface DetailAnnotationListProps {
   onDelete: (annotationId: number) => void
   onSplitGap: (annotation: RollAnnotation, gap: AnnotationGap, gapIndex: number) => void
   onTrimGap: (annotation: RollAnnotation, gap: AnnotationGap, gapIndex: number) => void
-  onTrimFlourish?: (annotation: RollAnnotation, trimmedEnd: number) => void
   onSnapBounds?: (annotation: RollAnnotation) => void
 }
 
@@ -45,14 +41,12 @@ const GAP_ACTION_TITLE: Record<GapAction, string> = {
 export const DetailAnnotationList = memo(function DetailAnnotationList({
   annotations,
   gapsById,
-  flourishesById,
   splittingGapKey,
   onSeek,
   onEdit,
   onDelete,
   onSplitGap,
   onTrimGap,
-  onTrimFlourish,
   onSnapBounds
 }: DetailAnnotationListProps) {
   if (annotations.length === 0) {
@@ -68,7 +62,6 @@ export const DetailAnnotationList = memo(function DetailAnnotationList({
     <div className="space-y-3">
       {annotations.map((annotation) => {
         const gaps = gapsById.get(annotation.id) ?? []
-        const flourish = flourishesById?.get(annotation.id)
 
         return (
           <div
@@ -111,27 +104,6 @@ export const DetailAnnotationList = memo(function DetailAnnotationList({
                   </>
                 )}
               </div>
-
-              {flourish && (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-1">
-                    <button
-                      onClick={() => onSeek(flourish.trimmedEndTime)}
-                      className="text-xs font-semibold text-purple-900 hover:text-purple-950 underline-offset-2 hover:underline"
-                      title={`Cadence chord ends at ${formatTime(flourish.trimmedEndTime)}. Followed by ${flourish.flourishNoteCount} flourish notes.`}
-                    >
-                      Trailing Flourish: +{(annotation.end_time - flourish.trimmedEndTime).toFixed(1)}s ({flourish.flourishNoteCount} notes)
-                    </button>
-                    <button
-                      onClick={() => onTrimFlourish?.(annotation, flourish.trimmedEndTime)}
-                      className="rounded bg-purple-200 px-1.5 py-0.5 text-[11px] font-semibold text-purple-900 hover:bg-purple-300 transition-colors"
-                      title="Trim extraneous ending flourish back to cadence chord"
-                    >
-                      Trim Flourish
-                    </button>
-                  </div>
-                </div>
-              )}
 
               {gaps.length > 0 && (
                 <div className="mt-2 flex flex-wrap items-center gap-2">

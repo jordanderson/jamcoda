@@ -101,6 +101,41 @@ describe('SpanRow', () => {
   })
 })
 
+describe('FileOverview annotation resize', () => {
+  it('renders grab handles on each annotation edge', () => {
+    render(
+      <FileOverview currentTime={0} durationSec={240} annotations={annotations} predictions={[]} onSeek={vi.fn()} />
+    )
+    expect(screen.getByRole('button', { name: 'Resize start of Bethena' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Resize end of Bethena' })).toBeInTheDocument()
+  })
+
+  it('commits the dragged edge back through onAnnotationResize', async () => {
+    const user = userEvent.setup()
+    const onAnnotationResize = vi.fn().mockResolvedValue(undefined)
+    render(
+      <FileOverview
+        currentTime={0}
+        durationSec={240}
+        annotations={[{ id: 5, song_name: 'Blip', start_time: 0, end_time: 60 }]}
+        predictions={[]}
+        onSeek={vi.fn()}
+        onAnnotationResize={onAnnotationResize}
+      />
+    )
+    const endHandle = screen.getByRole('button', { name: 'Resize end of Blip' })
+    await user.pointer([
+      { keys: '[PointerLeft>]', target: endHandle, coords: { x: 120 } },
+      { keys: '[PointerLeft]', target: endHandle, coords: { x: 180 } },
+      { keys: '[/PointerLeft]', target: endHandle, coords: { x: 180 } }
+    ])
+    expect(onAnnotationResize).toHaveBeenCalled()
+    const [id, times] = onAnnotationResize.mock.calls[0]
+    expect(id).toBe(5)
+    expect(times.endTime).toBeGreaterThan(60)
+  })
+})
+
 describe('FileOverview playhead', () => {
   const props = {
     durationSec: 240,

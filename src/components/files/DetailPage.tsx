@@ -31,9 +31,7 @@ import { formatTime, formatTimeHms } from '@/utils/format'
 import { resolveReviewFields } from '@core/predictionReview';
 import { buildPedalIntervals, heldByPedal } from '@core/midi/noteSequence';
 import {
-  detectCadenceAndFlourish,
   snapSegmentBoundaries,
-  type CadenceFlourishInfo,
   type BoundaryNote
 } from '@core/boundaries';
 import {
@@ -45,7 +43,6 @@ import {
 } from './annotationGaps';
 import { DetailAnnotationList } from './DetailAnnotationList';
 import { DetailDeviceMarkers, type DeviceMarker } from './DetailDeviceMarkers';
-import { DetailPredictionList } from './DetailPredictionList';
 import { PredictionLab } from './PredictionLab';
 import { FileOverview } from './FileOverview';
 import type { CandidateRun } from './predictionCandidates';
@@ -191,35 +188,12 @@ export function DetailPage({ fileId }: DetailPageProps) {
     });
   }, [sequence?.notes, sequence?.sustainEvents]);
 
-  const annotationFlourishesById = useMemo(() => {
-    const flourishMap = new Map<number, CadenceFlourishInfo>();
-    if (acousticNotes.length === 0) return flourishMap;
-
-    for (const annotation of annotations) {
-      const flourish = detectCadenceAndFlourish(
-        annotation.start_time,
-        annotation.end_time,
-        acousticNotes
-      );
-      if (flourish) {
-        flourishMap.set(annotation.id, flourish);
-      }
-    }
-
-    return flourishMap;
-  }, [annotations, acousticNotes]);
-
   // Whether any gap pill is shown at all, gating the helper copy above the
   // annotation list. Memoised: this component re-renders every frame during
   // playback.
   const hasGapPills = useMemo(
     () => [...annotationGapsById.values()].some((gaps) => gaps.length > 0),
     [annotationGapsById]
-  );
-
-  const hasFlourishPills = useMemo(
-    () => annotationFlourishesById.size > 0,
-    [annotationFlourishesById]
   );
 
 
@@ -248,54 +222,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
       (review) => review.id === selectedPredictionReviewId
     ) ?? null;
   }, [reviewListResponse?.reviews, selectedPredictionReviewId]);
-
-  const unpromotedReviews = useMemo(() => {
-    return (reviewListResponse?.reviews ?? [])
-      .filter((review) => review.status !== 'invalid' && review.promoted_annotation_id === null)
-      .sort((a, b) => getPredictionDisplayStart(a) - getPredictionDisplayStart(b) || a.id - b.id);
-  }, [reviewListResponse?.reviews]);
-
-  const predictionFlourishesById = useMemo(() => {
-    const map = new Map<number, CadenceFlourishInfo>();
-    if (acousticNotes.length === 0 || !reviewListResponse?.reviews) return map;
-
-    for (const review of reviewListResponse.reviews) {
-      if (review.status === 'invalid' || review.promoted_annotation_id !== null) continue;
-      const start = getPredictionDisplayStart(review);
-      const end = getPredictionDisplayEnd(review);
-      const flourish = detectCadenceAndFlourish(start, end, acousticNotes);
-      if (flourish) {
-        map.set(review.id, flourish);
-      }
-    }
-    return map;
-  }, [acousticNotes, reviewListResponse?.reviews]);
-
-  const predictionSnappedBoundsById = useMemo(() => {
-    const map = new Map<number, { startTime: number; endTime: number }>();
-    if (acousticNotes.length === 0 || !reviewListResponse?.reviews) return map;
-
-    for (const review of reviewListResponse.reviews) {
-      if (review.status === 'invalid' || review.promoted_annotation_id !== null) continue;
-      const start = getPredictionDisplayStart(review);
-      const end = getPredictionDisplayEnd(review);
-      const snapped = snapSegmentBoundaries(start, end, acousticNotes, { trimFlourish: false });
-      if (Math.abs(snapped.startTime - start) > 0.05 || Math.abs(snapped.endTime - end) > 0.05) {
-        map.set(review.id, snapped);
-      }
-    }
-    return map;
-  }, [acousticNotes, reviewListResponse?.reviews]);
-
-  const selectedPredictionFlourish = useMemo(() => {
-    if (!selectedPredictionReview) return null;
-    return predictionFlourishesById.get(selectedPredictionReview.id) ?? null;
-  }, [predictionFlourishesById, selectedPredictionReview]);
-
-  const selectedPredictionSnappedBounds = useMemo(() => {
-    if (!selectedPredictionReview) return null;
-    return predictionSnappedBoundsById.get(selectedPredictionReview.id) ?? null;
-  }, [predictionSnappedBoundsById, selectedPredictionReview]);
 
   /** The sequence's own end, used as a clamp for overlay times when valid. */
   const timelineEndLimit = useMemo(() => {
@@ -781,27 +707,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
     }
   }, [updateAnnotation.mutateAsync, showToast]);
 
-  const handleTrimFlourish = useCallback(async (
-    annotation: RollAnnotation,
-    trimmedEnd: number
-  ) => {
-    try {
-      await updateAnnotation.mutateAsync({
-        id: annotation.id,
-        data: { endTime: trimmedEnd }
-      });
-      showToast({
-        type: 'success',
-        message: `Trimmed flourish for "${annotation.song_name}" to ${formatTime(trimmedEnd)}.`
-      });
-    } catch (error) {
-      showToast({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to trim flourish.'
-      });
-    }
-  }, [updateAnnotation.mutateAsync, showToast]);
-
   const handleSnapBounds = useCallback(async (
     annotation: RollAnnotation
   ) => {
@@ -904,69 +809,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
       showToast({
         type: 'error',
         message: error instanceof Error ? error.message : 'Failed to promote prediction.'
-      });
-    }
-  }, [promotePredictionReview.mutateAsync, selectedPredictionReviewId, showToast, updatePredictionReview.mutateAsync]);
-
-  const handleTrimFlourishAndPromoteReview = useCallback(async (
-    review: PredictionReview,
-    trimmedEnd: number
-  ) => {
-    try {
-      const { songName, startTime } = resolveReviewFields(review);
-      await updatePredictionReview.mutateAsync({
-        id: review.id,
-        data: {
-          status: 'edited',
-          reviewedSongName: songName,
-          reviewedStartTime: startTime,
-          reviewedEndTime: trimmedEnd
-        }
-      });
-      await promotePredictionReview.mutateAsync(review.id);
-      showToast({
-        type: 'success',
-        message: `Trimmed flourish and promoted "${songName}" to annotations.`
-      });
-      if (selectedPredictionReviewId === review.id) {
-        setSelectedPredictionReviewId(null);
-      }
-    } catch (error) {
-      showToast({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to trim and promote prediction.'
-      });
-    }
-  }, [promotePredictionReview.mutateAsync, selectedPredictionReviewId, showToast, updatePredictionReview.mutateAsync]);
-
-  const handleSnapBoundsAndPromoteReview = useCallback(async (
-    review: PredictionReview,
-    snappedStart: number,
-    snappedEnd: number
-  ) => {
-    try {
-      const { songName } = resolveReviewFields(review);
-      await updatePredictionReview.mutateAsync({
-        id: review.id,
-        data: {
-          status: 'edited',
-          reviewedSongName: songName,
-          reviewedStartTime: snappedStart,
-          reviewedEndTime: snappedEnd
-        }
-      });
-      await promotePredictionReview.mutateAsync(review.id);
-      showToast({
-        type: 'success',
-        message: `Snapped bounds and promoted "${songName}" to annotations.`
-      });
-      if (selectedPredictionReviewId === review.id) {
-        setSelectedPredictionReviewId(null);
-      }
-    } catch (error) {
-      showToast({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to snap and promote prediction.'
       });
     }
   }, [promotePredictionReview.mutateAsync, selectedPredictionReviewId, showToast, updatePredictionReview.mutateAsync]);
@@ -1137,57 +979,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
                   End ({formatTime(getPredictionDisplayEnd(selectedPredictionReview))})
                 </button>
               </div>
-
-              {/* Flourish Detection & 1-click Trim */}
-              {selectedPredictionFlourish && (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3.5 space-y-2">
-                  <div className="text-xs text-purple-950">
-                    <span className="font-semibold text-purple-900">Trailing flourish detected:</span> Cadence chord ends at{' '}
-                    <span className="font-semibold text-purple-900">{formatTime(selectedPredictionFlourish.trimmedEndTime)}</span> ({selectedPredictionFlourish.trimmedEndTime.toFixed(2)}s).
-                    Extraneous arpeggio run extends by +{(getPredictionDisplayEnd(selectedPredictionReview) - selectedPredictionFlourish.trimmedEndTime).toFixed(1)}s
-                    ({selectedPredictionFlourish.flourishNoteCount} notes across {selectedPredictionFlourish.flourishPitchSpan} semitones).
-                  </div>
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleSeek(selectedPredictionFlourish.trimmedEndTime)}
-                      className="text-xs text-purple-800 hover:underline font-medium cursor-pointer"
-                    >
-                      Jump to cadence chord
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleTrimFlourishAndPromoteReview(selectedPredictionReview, selectedPredictionFlourish.trimmedEndTime)}
-                      disabled={isPredictionActionPending}
-                      className="rounded bg-purple-700 hover:bg-purple-800 disabled:bg-purple-300 text-white px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Trim Flourish & Promote
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Loose Bounds Detection & 1-click Snap */}
-              {!selectedPredictionFlourish && selectedPredictionSnappedBounds && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-xs text-amber-950">
-                    <span className="font-semibold text-amber-900">Loose bounds:</span> First note onset at{' '}
-                    <span className="font-semibold text-amber-900">{formatTime(selectedPredictionSnappedBounds.startTime)}</span> ({selectedPredictionSnappedBounds.startTime.toFixed(2)}s),
-                    acoustic release at{' '}
-                    <span className="font-semibold text-amber-900">{formatTime(selectedPredictionSnappedBounds.endTime)}</span> ({selectedPredictionSnappedBounds.endTime.toFixed(2)}s).
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleSnapBoundsAndPromoteReview(selectedPredictionReview, selectedPredictionSnappedBounds.startTime, selectedPredictionSnappedBounds.endTime)}
-                    disabled={isPredictionActionPending}
-                    className="rounded bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white px-3.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-sm"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Snap & Promote
-                  </button>
-                </div>
-              )}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t bg-gray-50">
@@ -1413,45 +1204,9 @@ export function DetailPage({ fileId }: DetailPageProps) {
               candidates={candidateRuns}
               isFileComplete={Boolean(file.isComplete)}
               onSeek={handleSeek}
+              onAnnotationResize={handleAnnotationResize}
             />
             <DetailDeviceMarkers markers={deviceMarkers} onSeek={handleSeek} />
-          </div>
-        </div>
-      )}
-
-      {/* Predictions to Review */}
-      {unpromotedReviews.length > 0 && (
-        <div className="border border-indigo-200 rounded-lg shadow-sm bg-white overflow-hidden">
-          <div className="p-6 border-b">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-indigo-600" />
-                  Predictions to Review ({unpromotedReviews.length})
-                </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">
-                  Piano Roll Guide
-                </span>
-              </div>
-              <p className="text-sm text-gray-600 mt-1">
-                Review model predictions against the piano roll above. Click times to jump the playhead, trim flourishes, or promote.
-              </p>
-            </div>
-          </div>
-
-          <div className="p-6">
-            <DetailPredictionList
-              predictions={unpromotedReviews}
-              flourishesById={predictionFlourishesById}
-              snappedBoundsById={predictionSnappedBoundsById}
-              isPending={isPredictionActionPending}
-              onSeek={handleSeek}
-              onConfirmAndPromote={handleConfirmAndPromoteReview}
-              onTrimFlourishAndPromote={handleTrimFlourishAndPromoteReview}
-              onSnapBoundsAndPromote={handleSnapBoundsAndPromoteReview}
-              onEditAndPromote={handleEditAndPromoteReview}
-              onMarkInvalid={handleMarkInvalidReview}
-            />
           </div>
         </div>
       )}
@@ -1511,24 +1266,20 @@ export function DetailPage({ fileId }: DetailPageProps) {
         </div>
 
         <div className="p-6">
-          {(hasGapPills || hasFlourishPills) && (
+          {hasGapPills && (
             <p className="mb-4 text-xs text-gray-500">
-              {hasGapPills && `Gap pills show pauses of ${LARGE_ANNOTATION_GAP_SECONDS}s or longer. `}
-              {hasFlourishPills && 'Flourish pills detect trailing arpeggios after cadence chords. '}
-              Click a pill to jump, then use Trim or Snap to refine bounds.
+              Gap pills show pauses of {LARGE_ANNOTATION_GAP_SECONDS}s or longer. Click a pill to jump, then use Trim or Snap to refine bounds.
             </p>
           )}
           <DetailAnnotationList
             annotations={annotations}
             gapsById={annotationGapsById}
-            flourishesById={annotationFlourishesById}
             splittingGapKey={splittingGapKey}
             onSeek={handleSeek}
             onEdit={handleEditAnnotation}
             onDelete={handleDeleteAnnotation}
             onSplitGap={handleSplitAnnotationGap}
             onTrimGap={handleTrimAnnotationGap}
-            onTrimFlourish={handleTrimFlourish}
             onSnapBounds={handleSnapBounds}
           />
         </div>
