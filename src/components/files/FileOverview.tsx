@@ -7,8 +7,8 @@ import type { AnnotationResizeEdge } from '../midi/PianoRollTimelines'
 
 /**
  * Minimum rendered width for a resizable annotation span. The two resize
- * handles sit at the edges; below this width they would overlap into a single
- * grabbable dot and the user could not tell start from end.
+ * handles sit just inside its edges; below this width they would overlap, so
+ * spans narrower than this hide their handles and can only be clicked.
  */
 const MIN_RESIZE_SPAN_PX = 28
 
@@ -31,20 +31,45 @@ export interface OverviewSpan {
   end: number
 }
 
+/**
+ * Left edge, in percent of the row, of the closest span that begins at or
+ * after `span` ends — the nearest neighbour to the right that its rendered
+ * width must stop short of. A span that begins earlier is either behind it or
+ * genuinely overlapping it, and places no limit: only a real overlap in time
+ * may render as an overlap.
+ */
+function nextNonOverlappingLeftPercent(
+  spans: OverviewSpan[],
+  span: OverviewSpan,
+  durationSec: number
+): number | null {
+  let closest: number | null = null
+  for (const other of spans) {
+    if (other.key === span.key || other.start < span.end) continue
+    const otherLeft = (other.start / durationSec) * 100
+    if (closest === null || otherLeft < closest) closest = otherLeft
+  }
+  return closest
+}
+
 export const SpanRow = memo(function SpanRow({ spans, durationSec, onSeek, emptyLabel, minSpanPercent = 0.4, onResizePointerDown, resizingKey, containerRef }: {
   spans: OverviewSpan[]
   durationSec: number
   onSeek: (time: number) => void
   emptyLabel?: string
-  /** Floor on the rendered width, so sub-second spans stay hittable/grabbable. */
+  /**
+   * Floor on the rendered width, so sub-second spans stay hittable/grabbable.
+   * A resizable span narrower than this hides its handles and cannot be resized.
+   */
   minSpanPercent?: number
   onResizePointerDown?: (event: React.PointerEvent<HTMLButtonElement>, span: OverviewSpan, edge: AnnotationResizeEdge) => void
   resizingKey?: string | null
   containerRef?: React.Ref<HTMLDivElement>
 }) {
   if (durationSec <= 0) return null
+
   return (
-    <div ref={containerRef} className="relative h-7 bg-gray-100 rounded overflow-hidden">
+    <div ref={containerRef} className="relative h-10 bg-gray-100 rounded overflow-hidden">
       {spans.length === 0 && emptyLabel && (
         <span className="absolute inset-0 flex items-center px-2 text-xs text-gray-400">
           {emptyLabel}
@@ -52,9 +77,19 @@ export const SpanRow = memo(function SpanRow({ spans, durationSec, onSeek, empty
       )}
       {spans.map((span) => {
         const left = (span.start / durationSec) * 100
-        // Sub-second spans still need to be clickable, so clamp the width. A
-        // resizable row uses a wider floor so its start/end handles stay apart.
-        const width = Math.max(minSpanPercent, ((span.end - span.start) / durationSec) * 100)
+        const naturalWidth = ((span.end - span.start) / durationSec) * 100
+        // Sub-second spans still need to be clickable, so clamp the width up —
+        // but never past the start of the next span, or a span that merely
+        // abuts its neighbour would be drawn overlapping it. Only the clamp is
+        // capped: a span already wide enough keeps every pixel it earned, and
+        // the white right border is what separates two that touch.
+        const neighbourLeft = nextNonOverlappingLeftPercent(spans, span, durationSec)
+        const roomToGrow = neighbourLeft === null ? Infinity : neighbourLeft - left
+        const width = Math.max(0, naturalWidth, Math.min(minSpanPercent, roomToGrow))
+        // Too narrow to hold two handles inside it: click-only, and resized
+        // from the piano roll instead. This asks the span's own width, never
+        // its rendered one, so a neighbour can never revoke resizability.
+        const showHandles = onResizePointerDown !== undefined && naturalWidth >= minSpanPercent
         const handleClasses = resizingKey === span.key ? 'opacity-100' : 'opacity-60 hover:opacity-100'
         return (
           <Fragment key={span.key}>
@@ -62,16 +97,18 @@ export const SpanRow = memo(function SpanRow({ spans, durationSec, onSeek, empty
               type="button"
               onClick={() => onSeek(span.start)}
               title={`${span.label} — ${formatClock(span.start)} to ${formatClock(span.end)}`}
-              className="absolute top-0 h-full border-r border-white/60 overflow-hidden text-[10px] leading-7 px-1 text-gray-900 whitespace-nowrap hover:brightness-95"
+              className="absolute top-0 h-full flex items-center justify-center overflow-hidden border-r border-white/60 px-1 text-[10px] leading-tight text-gray-900 hover:brightness-95"
               style={{
                 left: `${left}%`,
                 width: `${width}%`,
                 backgroundColor: stringToTimelineColor(span.label)
               }}
             >
-              {span.label}
+              {/* Clipped at a line boundary rather than mid-glyph, and broken
+                  mid-word so a narrow span still shows the start of the name. */}
+              <span className="line-clamp-2 break-words">{span.label}</span>
             </button>
-            {onResizePointerDown && (
+            {showHandles && (
               <>
                 <button
                   type="button"
@@ -81,11 +118,11 @@ export const SpanRow = memo(function SpanRow({ spans, durationSec, onSeek, empty
                     event.stopPropagation()
                   }}
                   aria-label={`Resize start of ${span.label}`}
-                  className={`absolute inset-y-0 w-2.5 -translate-x-1/2 cursor-ew-resize flex items-center justify-center rounded-l transition-opacity ${handleClasses}`}
+                  className={`absolute inset-y-0 w-2.5 cursor-ew-resize flex items-center justify-center rounded-l transition-opacity ${handleClasses}`}
                   style={{ left: `${left}%` }}
                   title="Drag to adjust start time"
                 >
-                  <span className="pointer-events-none block h-4 w-[2px] rounded-full bg-black/40" />
+                  <span className="pointer-events-none block h-5 w-[2px] rounded-full bg-black/40" />
                 </button>
                 <button
                   type="button"
@@ -95,11 +132,11 @@ export const SpanRow = memo(function SpanRow({ spans, durationSec, onSeek, empty
                     event.stopPropagation()
                   }}
                   aria-label={`Resize end of ${span.label}`}
-                  className={`absolute inset-y-0 w-2.5 -translate-x-1/2 cursor-ew-resize flex items-center justify-center rounded-r transition-opacity ${handleClasses}`}
+                  className={`absolute inset-y-0 w-2.5 -translate-x-full cursor-ew-resize flex items-center justify-center rounded-r transition-opacity ${handleClasses}`}
                   style={{ left: `${left + width}%` }}
                   title="Drag to adjust end time"
                 >
-                  <span className="pointer-events-none block h-4 w-[2px] rounded-full bg-black/40" />
+                  <span className="pointer-events-none block h-5 w-[2px] rounded-full bg-black/40" />
                 </button>
               </>
             )}
@@ -228,6 +265,9 @@ export function FileOverview({
   const annotationRowRef = useRef<HTMLDivElement | null>(null)
   const [annotationRowWidth, setAnnotationRowWidth] = useState(0)
 
+  // Keyed on `durationSec` because the row is not rendered at all until there
+  // is a duration: a mount-time-only measurement would read a missing element
+  // and leave the drag calibrated to one pixel per second for good.
   useEffect(() => {
     const el = annotationRowRef.current
     if (!el) return
@@ -237,7 +277,7 @@ export function FileOverview({
     const ro = new ResizeObserver(update)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [durationSec])
 
   const pixelsPerTimeStep = durationSec > 0 && annotationRowWidth > 0
     ? annotationRowWidth / durationSec

@@ -49,10 +49,18 @@ interface PianoRollVisualizerProps {
   ) => void | Promise<void>
 }
 
-/** Horizontal scale and note geometry. Fixed, so it lives outside the component. */
+/**
+ * Horizontal scale and note geometry. Fixed, so it lives outside the component.
+ *
+ * `noteHeight` is 2 rather than Magenta's 3: the roll is already sized to the
+ * pitch range the day actually used, but a day that touches both ends of the
+ * keyboard still spans ~90 semitones, and at 3px that pushed the whole
+ * recording overview below the fold on a laptop. Two pixels a semitone costs a
+ * third of the height and no pitch fidelity.
+ */
 const ROLL_CONFIG = {
   pixelsPerTimeStep: 50,
-  noteHeight: 3,
+  noteHeight: 2,
   noteSpacing: 1,
   noteRGB: '148, 152, 229' // Matches theme color #9198E5.
 } as const

@@ -99,6 +99,142 @@ describe('SpanRow', () => {
     )
     expect(screen.queryByText('Nothing here')).not.toBeInTheDocument()
   })
+
+  it('keeps resize handles inside a wide enough span', () => {
+    render(
+      <SpanRow
+        durationSec={1000}
+        onSeek={vi.fn()}
+        onResizePointerDown={vi.fn()}
+        minSpanPercent={5}
+        spans={[{ key: 'wide', label: 'Wide', start: 0, end: 100 }]}
+      />
+    )
+    // The handles are flush inside the span's edges, not straddling them.
+    expect(screen.getByRole('button', { name: 'Resize start of Wide' })).toHaveStyle({ left: '0%' })
+    expect(screen.getByRole('button', { name: 'Resize end of Wide' })).toHaveClass('-translate-x-full')
+  })
+
+  it('hides resize handles when a span is too narrow to hold them inside', () => {
+    render(
+      <SpanRow
+        durationSec={1000}
+        onSeek={vi.fn()}
+        onResizePointerDown={vi.fn()}
+        minSpanPercent={5}
+        spans={[{ key: 'narrow', label: 'Narrow', start: 0, end: 10 }]}
+      />
+    )
+    // 1% of the row is below the 5% floor, so it is click-only.
+    expect(screen.queryByRole('button', { name: 'Resize start of Narrow' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resize end of Narrow' })).not.toBeInTheDocument()
+  })
+
+  it('leaves a span that merely touches the next one at its true width', () => {
+    render(
+      <SpanRow
+        durationSec={100}
+        onSeek={vi.fn()}
+        spans={[
+          { key: 'a', label: 'First', start: 0, end: 50 },
+          { key: 'b', label: 'Second', start: 50, end: 100 }
+        ]}
+      />
+    )
+    // Abutting spans are separated by each span's white right border, so
+    // neither has to give up any of the time it actually covers.
+    expect(screen.getByRole('button', { name: 'First' })).toHaveStyle({ left: '0%', width: '50%' })
+    expect(screen.getByRole('button', { name: 'Second' })).toHaveStyle({ left: '50%', width: '50%' })
+  })
+
+  it('stops the narrow-span clamp at the start of the next span', () => {
+    render(
+      <SpanRow
+        durationSec={100}
+        onSeek={vi.fn()}
+        spans={[
+          { key: 'a', label: 'Blip', start: 10, end: 10.2 },
+          { key: 'b', label: 'Next', start: 10.25, end: 20 }
+        ]}
+      />
+    )
+    // The 0.4% floor would put Blip's right edge at 10.4s, across Next's start
+    // at 10.25s. It grows into the room it has and stops there.
+    expect(screen.getByRole('button', { name: 'Blip' })).toHaveStyle({ left: '10%', width: '0.25%' })
+    expect(screen.getByRole('button', { name: 'Next' })).toHaveStyle({ left: '10.25%' })
+  })
+
+  it('still draws a short span that abuts the next one', () => {
+    render(
+      <SpanRow
+        durationSec={3600}
+        onSeek={vi.fn()}
+        spans={[
+          { key: 'a', label: 'Short', start: 100, end: 104 },
+          { key: 'b', label: 'Next', start: 104, end: 400 }
+        ]}
+      />
+    )
+    // There is no room to clamp into, but a span never renders narrower than
+    // the time it covers: a four-second song is still on the bar, and still
+    // clickable, rather than collapsing to nothing against its neighbour.
+    const short = screen.getByRole('button', { name: 'Short' })
+    const width = Number.parseFloat(short.style.width)
+    expect(width).toBeGreaterThan(0)
+    expect(width).toBeCloseTo((4 / 3600) * 100, 6)
+  })
+
+  it('renders spans that genuinely overlap as overlapping', () => {
+    render(
+      <SpanRow
+        durationSec={100}
+        onSeek={vi.fn()}
+        spans={[
+          { key: 'a', label: 'First', start: 10, end: 20 },
+          { key: 'b', label: 'Second', start: 15, end: 25 }
+        ]}
+      />
+    )
+    // Second begins before First ends, so the overlap is real and neither
+    // span is squeezed.
+    expect(screen.getByRole('button', { name: 'First' })).toHaveStyle({ left: '10%', width: '10%' })
+    expect(screen.getByRole('button', { name: 'Second' })).toHaveStyle({ left: '15%', width: '10%' })
+  })
+
+  it('keeps the handles on a wide span that abuts a neighbour', () => {
+    render(
+      <SpanRow
+        durationSec={1000}
+        onSeek={vi.fn()}
+        onResizePointerDown={vi.fn()}
+        minSpanPercent={5}
+        spans={[
+          { key: 'a', label: 'Abutting', start: 0, end: 50 },
+          { key: 'b', label: 'Next', start: 50, end: 100 }
+        ]}
+      />
+    )
+    // Whether a span can be resized is about the span, not about who it sits
+    // next to: Abutting is exactly at the 5% floor and keeps its handles.
+    expect(screen.getByRole('button', { name: 'Abutting' })).toHaveStyle({ width: '5%' })
+    expect(screen.getByRole('button', { name: 'Resize end of Abutting' })).toBeInTheDocument()
+  })
+
+  it('wraps a long label instead of pushing the row taller', () => {
+    render(
+      <SpanRow
+        durationSec={100}
+        onSeek={vi.fn()}
+        spans={[{ key: 'a', label: 'Christmas Time Is Here', start: 0, end: 10 }]}
+      />
+    )
+    // The span is absolutely positioned at the row's full height, so a second
+    // line is clipped at a line boundary rather than growing the bar.
+    const span = screen.getByRole('button', { name: 'Christmas Time Is Here' })
+    expect(span).toHaveClass('h-full', 'overflow-hidden')
+    expect(span).not.toHaveClass('whitespace-nowrap')
+    expect(screen.getByText('Christmas Time Is Here')).toHaveClass('line-clamp-2')
+  })
 })
 
 describe('FileOverview annotation resize', () => {
@@ -125,9 +261,9 @@ describe('FileOverview annotation resize', () => {
     )
     const endHandle = screen.getByRole('button', { name: 'Resize end of Blip' })
     await user.pointer([
-      { keys: '[PointerLeft>]', target: endHandle, coords: { x: 120 } },
-      { keys: '[PointerLeft]', target: endHandle, coords: { x: 180 } },
-      { keys: '[/PointerLeft]', target: endHandle, coords: { x: 180 } }
+      { keys: '[MouseLeft>]', target: endHandle, coords: { x: 120, y: 0 } },
+      { target: endHandle, coords: { x: 180, y: 0 } },
+      { keys: '[/MouseLeft]' }
     ])
     expect(onAnnotationResize).toHaveBeenCalled()
     const [id, times] = onAnnotationResize.mock.calls[0]

@@ -27,7 +27,7 @@ import { AnnotationModal } from '@/components/annotations/AnnotationModal';
 import { ToastStack } from '@/components/ui/ToastStack';
 import { useToasts } from '@/hooks/useToasts';
 import type { PredictionReview } from '@/api/localTypes';
-import { formatTime, formatTimeHms } from '@/utils/format'
+import { formatDate, formatTime, formatTimeHms } from '@/utils/format'
 import { resolveReviewFields } from '@core/predictionReview';
 import { buildPedalIntervals, heldByPedal } from '@core/midi/noteSequence';
 import {
@@ -1026,17 +1026,17 @@ export function DetailPage({ fileId }: DetailPageProps) {
         </div>
       )}
 
-      {/* File Info Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{file.filename}</h1>
-        <div className="flex items-center gap-2 mt-1">
-          <p className="text-gray-600">Recorded: {file.dateRecorded}</p>
-          {file.isComplete && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-              Complete
-            </span>
-          )}
-        </div>
+      {/* File Info Header. One recording per day, so the date is the identity
+          of the file; the filename adds nothing but is kept, quietly, because
+          it is what the device and the logs call this recording. */}
+      <div className="mb-3 flex items-baseline gap-2 flex-wrap">
+        <h1 className="text-xl font-bold text-gray-900">{formatDate(file.dateRecorded)}</h1>
+        {file.isComplete && (
+          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+            Complete
+          </span>
+        )}
+        <span className="text-xs text-gray-400 font-mono truncate">{file.filename}</span>
       </div>
 
       {showError && (
@@ -1057,53 +1057,94 @@ export function DetailPage({ fileId }: DetailPageProps) {
       {rollReady && (
         <div className="border rounded-lg overflow-hidden shadow-sm">
           <div className="bg-white p-4 border-b border-gray-200">
-            {/* First Row: Title and Main Controls */}
-            <div className="flex justify-between items-center mb-3">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handlePlayPause}
-                    className="w-10 h-10 rounded-full bg-gray-900 hover:bg-gray-800 text-white flex items-center justify-center transition-all"
-                    title={isPlaying ? 'Pause (P)' : 'Play (P)'}
-                    aria-label={isPlaying ? 'Pause' : 'Play'}
-                  >
-                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-                  </button>
+            {/* Transport, checkpoints and view controls on one row: the
+                keyboard shortcuts each button carries in its `title` are what
+                the legend under this row used to say. */}
+            <div className="flex justify-between items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handlePlayPause}
+                  className="w-8 h-8 rounded-full bg-gray-900 hover:bg-gray-800 text-white flex items-center justify-center transition-all"
+                  title={isPlaying ? 'Pause (P)' : 'Play (P)'}
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
+                >
+                  {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                </button>
 
-                  <button
-                    onClick={stop}
-                    className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-700 flex items-center justify-center transition-all"
-                    title="Stop"
-                    aria-label="Stop"
-                  >
-                    <Square className="w-4 h-4" />
-                  </button>
+                <button
+                  onClick={stop}
+                  className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-700 flex items-center justify-center transition-all"
+                  title="Stop"
+                  aria-label="Stop"
+                >
+                  <Square className="w-4 h-4" />
+                </button>
 
-                  <div className="text-sm text-gray-600 font-medium min-w-[170px]">
-                    {duration > 0
-                      ? `${formatTime(currentTime)} (${currentTime.toFixed(1)}s) / ${formatTime(duration)}`
-                      : '0:00 (0.0s) / 0:00'}
-                  </div>
-                  <div className="text-xs text-gray-500 min-w-[140px]">
-                    {hoveredRollTime !== null
-                      ? `Hover ${formatTime(hoveredRollTime)} (${hoveredRollTime.toFixed(1)}s)`
-                      : 'Hover --'}
-                  </div>
-
-                  {isPlaying && (
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded text-xs">
-                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                      Playing
-                    </div>
-                  )}
+                <div className="text-sm text-gray-600 font-medium min-w-[170px]">
+                  {duration > 0
+                    ? `${formatTime(currentTime)} (${currentTime.toFixed(1)}s) / ${formatTime(duration)}`
+                    : '0:00 (0.0s) / 0:00'}
                 </div>
+                <div className="text-xs text-gray-500 min-w-[140px]">
+                  {hoveredRollTime !== null
+                    ? `Hover ${formatTime(hoveredRollTime)} (${hoveredRollTime.toFixed(1)}s)`
+                    : 'Hover --'}
+                </div>
+
+                {isPlaying && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded text-xs">
+                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                    Playing
+                  </div>
+                )}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                <button
+                  onClick={handleMarkStart}
+                  disabled={!isLoaded}
+                  className="px-3 py-1.5 bg-green-500 hover:bg-green-600 disabled:bg-green-300 disabled:cursor-not-allowed text-white rounded text-sm font-medium transition-colors flex items-center gap-1.5"
+                  title="Mark start checkpoint (S)"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  Start
+                  {startCheckpoint !== null && (
+                    <span className="text-xs bg-white/30 px-1.5 py-0.5 rounded">
+                      {formatTime(startCheckpoint)}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleMarkEnd}
+                  disabled={!isLoaded}
+                  className="px-3 py-1.5 bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed text-white rounded text-sm font-medium transition-colors flex items-center gap-1.5"
+                  title="Mark end checkpoint (E)"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  End
+                  {endCheckpoint !== null && (
+                    <span className="text-xs bg-white/30 px-1.5 py-0.5 rounded">
+                      {formatTime(endCheckpoint)}
+                    </span>
+                  )}
+                </button>
+
+                {(startCheckpoint !== null || endCheckpoint !== null) && (
+                  <button
+                    onClick={handleClearCheckpoints}
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm font-medium transition-colors flex items-center gap-1.5"
+                    title="Clear checkpoints (C)"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Clear
+                  </button>
+                )}
+
                 <button
                   onClick={() => setSnapToPlayback(true)}
                   disabled={snapToPlayback}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-all flex items-center gap-2 ${
                     snapToPlayback
                       ? 'bg-gray-900 text-white cursor-default'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1115,7 +1156,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
                 </button>
                 <button
                   onClick={() => setIsAnnotationMode(!isAnnotationMode)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`px-4 py-1.5 rounded text-sm font-medium transition-all ${
                     isAnnotationMode
                       ? 'bg-gray-900 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1126,53 +1167,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
               </div>
             </div>
 
-            {/* Second Row: Checkpoint Controls */}
-            <div className="flex gap-2 items-center">
-              <button
-                onClick={handleMarkStart}
-                disabled={!isLoaded}
-                className="px-3 py-1.5 bg-green-500 hover:bg-green-600 disabled:bg-green-300 disabled:cursor-not-allowed text-white rounded text-sm font-medium transition-colors flex items-center gap-1.5"
-                title="Mark start checkpoint (S)"
-              >
-                <Flag className="w-3.5 h-3.5" />
-                Start
-                {startCheckpoint !== null && (
-                  <span className="text-xs bg-white/30 px-1.5 py-0.5 rounded">
-                    {formatTime(startCheckpoint)}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={handleMarkEnd}
-                disabled={!isLoaded}
-                className="px-3 py-1.5 bg-red-500 hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed text-white rounded text-sm font-medium transition-colors flex items-center gap-1.5"
-                title="Mark end checkpoint (E)"
-              >
-                <Flag className="w-3.5 h-3.5" />
-                End
-                {endCheckpoint !== null && (
-                  <span className="text-xs bg-white/30 px-1.5 py-0.5 rounded">
-                    {formatTime(endCheckpoint)}
-                  </span>
-                )}
-              </button>
-
-              {(startCheckpoint !== null || endCheckpoint !== null) && (
-                <button
-                  onClick={handleClearCheckpoints}
-                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm font-medium transition-colors flex items-center gap-1.5"
-                  title="Clear checkpoints (C)"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  Clear
-                </button>
-              )}
-
-              <div className="ml-auto text-xs text-gray-500">
-                <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">P</kbd> play/pause · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">S</kbd> start · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">E</kbd> end · <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-gray-700 font-mono">C</kbd> clear
-              </div>
-            </div>
           </div>
           <div className="bg-white p-4">
             <PianoRollVisualizer
