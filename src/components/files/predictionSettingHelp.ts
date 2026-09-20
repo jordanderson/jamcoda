@@ -46,7 +46,8 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
     title: 'Min segment confidence',
     body: [
       'A finished segment whose average window confidence falls below this is dropped. Default 0.3.',
-      'Confidence here is the anchor margin — how far the winning song outscored the runner-up — so this removes spans the model was never really sure about. Raise it for fewer, safer predictions; lower it to see everything the model produced.'
+      'Confidence here is the anchor margin — how far the winning song outscored the runner-up — so this removes spans the model was never really sure about. Raise it for fewer, safer predictions; lower it to see everything the model produced.',
+      'This is not the percentage shown on a prediction chip. That one is calibrated against past review verdicts and rises with segment length; the raw margin does not, and a long correct take routinely scores near 0.4 on this scale. Set this threshold by the raw margin, not by what the chip reads.'
     ]
   },
 

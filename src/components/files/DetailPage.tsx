@@ -28,6 +28,7 @@ import { ToastStack } from '@/components/ui/ToastStack';
 import { useToasts } from '@/hooks/useToasts';
 import type { PredictionReview } from '@/api/localTypes';
 import { formatDate, formatTime, formatTimeHms } from '@/utils/format'
+import { BAND_DESCRIPTIONS, calibratedConfidence, type ConfidenceBand } from '@/utils/predictionConfidence'
 import { resolveReviewFields } from '@core/predictionReview';
 import { buildPedalIntervals, heldByPedal } from '@core/midi/noteSequence';
 import {
@@ -65,6 +66,13 @@ const MIN_SKIP_DISPLAY_SEC = 8;
 const EMPTY_ANNOTATIONS: RollAnnotation[] = [];
 const EMPTY_BOOKMARKS: RollBookmark[] = [];
 const EMPTY_SKIPS: RollSkip[] = [];
+
+/** Badge colour per calibrated confidence band. */
+const CONFIDENCE_BADGE_CLASS: Record<ConfidenceBand, string> = {
+  strong: 'bg-emerald-100 text-emerald-800',
+  likely: 'bg-amber-100 text-amber-800',
+  uncertain: 'bg-gray-200 text-gray-700'
+};
 
 // Thin adapters over the shared resolver so call sites stay readable.
 const getPredictionDisplaySongName = (review: PredictionReview): string => resolveReviewFields(review).songName
@@ -940,11 +948,27 @@ export function DetailPage({ fileId }: DetailPageProps) {
             <div className="border-b px-6 py-4 bg-gray-50">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900">Review Prediction</h2>
-                {selectedPredictionReview.predicted_confidence !== null && (
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-semibold">
-                    {Math.round(selectedPredictionReview.predicted_confidence * 100)}% conf
-                  </span>
-                )}
+                {(() => {
+                  // Calibrated against the bounds the model predicted, not any
+                  // edited bounds -- those are the reviewer's answer, and the
+                  // fit was trained on the prediction's own duration.
+                  const calibrated = calibratedConfidence(
+                    selectedPredictionReview.predicted_confidence,
+                    selectedPredictionReview.predicted_end_time
+                      - selectedPredictionReview.predicted_start_time
+                  )
+                  if (!calibrated) return null
+                  return (
+                    <span
+                      className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${
+                        CONFIDENCE_BADGE_CLASS[calibrated.band]
+                      }`}
+                      title={`${calibrated.label} estimated chance you confirm this, from the segment's evidence margin and length`}
+                    >
+                      {BAND_DESCRIPTIONS[calibrated.band]} &middot; {calibrated.label}
+                    </span>
+                  )
+                })()}
               </div>
               <p className="mt-1 text-base font-semibold text-gray-900">
                 {getPredictionDisplaySongName(selectedPredictionReview)}

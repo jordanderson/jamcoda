@@ -8,6 +8,7 @@ import {
   stringToTimelineColor
 } from './pianoRollColors'
 import type { RollAnnotation, RollPrediction } from './pianoRollTypes'
+import { BAND_DESCRIPTIONS, calibratedConfidence } from '../../utils/predictionConfidence'
 
 /**
  * The two chip rows below the notes: annotations and predictions.
@@ -173,9 +174,14 @@ export const PredictionTimeline = memo(function PredictionTimeline({
         const startX = prediction.startTime * pixelsPerTimeStep
         const width = Math.max(22, (prediction.endTime - prediction.startTime) * pixelsPerTimeStep)
         const labelOffsets = buildRepeatingLabelOffsets(width)
-        const confidencePct = prediction.confidence !== null
-          ? `${Math.round(prediction.confidence * 100)}%`
-          : null
+        // The stored confidence is a decoder margin that runs backwards
+        // against review verdicts, so the chip shows the calibrated estimate
+        // instead. See src/utils/predictionConfidence.ts.
+        const calibrated = calibratedConfidence(
+          prediction.confidence,
+          prediction.endTime - prediction.startTime
+        )
+        const confidencePct = calibrated?.label ?? null
 
         return (
           <button
@@ -192,13 +198,18 @@ export const PredictionTimeline = memo(function PredictionTimeline({
             style={{
               left: `${startX}px`,
               width: `${width}px`,
-              backgroundColor: stringToPredictionTimelineColor(prediction.songName, prediction.confidence),
+              backgroundColor: stringToPredictionTimelineColor(
+                prediction.songName,
+                calibrated?.probability ?? null
+              ),
               color: stringToTextColor(prediction.songName)
             }}
             aria-label={`Predicted ${prediction.songName} (${prediction.startTime.toFixed(1)} to ${prediction.endTime.toFixed(1)} seconds)${
-              confidencePct ? ` at ${confidencePct}` : ''
+              calibrated ? `, ${BAND_DESCRIPTIONS[calibrated.band]} at ${calibrated.label} confidence` : ''
             }`}
-            title={`Predicted ${prediction.songName}${confidencePct ? ` (${confidencePct})` : ''} (${prediction.startTime.toFixed(1)}s - ${prediction.endTime.toFixed(1)}s)`}
+            title={`Predicted ${prediction.songName}${
+              calibrated ? ` -- ${BAND_DESCRIPTIONS[calibrated.band]}, ${calibrated.label} confidence` : ''
+            } (${prediction.startTime.toFixed(1)}s - ${prediction.endTime.toFixed(1)}s)`}
           >
             {labelOffsets.map((offset) => (
               <span

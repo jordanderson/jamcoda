@@ -28,7 +28,14 @@ export function stringToTimelineColor(str: string): string {
   return `hsla(${hashString(str) % 360}, 70%, 62%, 0.7)`
 }
 
-/** Chip fill on the prediction row, with confidence carried in the alpha. */
+/**
+ * Chip fill on the prediction row, with confidence carried in the alpha.
+ *
+ * Pass the *calibrated* probability from `utils/predictionConfidence`, not the
+ * raw stored margin. The raw margin is anti-correlated with whether a reviewer
+ * confirms the prediction, so feeding it here rendered the most reliable
+ * segments faintest.
+ */
 export function stringToPredictionTimelineColor(
   str: string,
   confidence: number | null
