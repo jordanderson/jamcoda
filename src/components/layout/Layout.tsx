@@ -3,7 +3,7 @@ import Sidebar from './Sidebar'
 
 interface LayoutProps {
   children: ReactNode
-  onStartSync: (full?: boolean) => void
+  onStartSync: (full?: boolean) => Promise<void>
   isSyncStarting: boolean
 }
 

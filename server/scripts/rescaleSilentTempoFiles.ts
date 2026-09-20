@@ -5,6 +5,7 @@ import { hasFlag, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import { parseNoteSequence } from '@core/midi/noteSequence';
 import { closeDatabase, getDb, initializeDatabase } from '../config/database';
 import { parseJmxMetadata } from '../utils/jmxParser';
+import { nowUnix } from '@utils/time';
 
 /**
  * Rescale times stored against recordings that never declared a tempo.
@@ -289,7 +290,7 @@ async function main() {
     // `Math.floor(Date.now() / 1000)`, and `rebuildStatus` compares the column
     // against a model's `createdAt` in seconds. A millisecond value here dates
     // the row to the year 58000, so the rebuild badge can never clear.
-    const now = Math.floor(Date.now() / 1000);
+    const now = nowUnix();
     db.transaction(() => {
       const scaleAnnotation = db.prepare(
         'UPDATE annotations SET start_time = start_time / ?, end_time = end_time / ?, updated_at = ? WHERE file_id = ?'

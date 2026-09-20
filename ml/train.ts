@@ -7,7 +7,7 @@ import {
   saveModel,
   trainModel,
   type TrainConfig
-} from './songSegmentation.js';
+} from './songSegmentation';
 
 /**
  * Read an optional numeric flag. Absent means `undefined`, so

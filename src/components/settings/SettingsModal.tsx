@@ -1,8 +1,8 @@
 import { RefreshCw, X } from 'lucide-react'
 import { useSyncStatus } from '../../hooks/useSyncStatus'
-import { useSoundfontCacheStatus } from '../../hooks/useSoundfontCacheStatus'
 import { useRebuildPredictionModel } from '../../hooks/usePredictionReviews'
 import type { Toast } from '../../hooks/useToasts'
+import { errorMessage } from '@core/errors'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -31,13 +31,6 @@ function formatLastSync(timestamp: number | null): string {
 
 export function SettingsModal({ isOpen, isSyncStarting, onStartSync, onClose, showToast }: SettingsModalProps) {
   const { data: syncStatus } = useSyncStatus()
-  const {
-    isSupported: isSoundfontCacheSupported,
-    isRegistered: isSoundfontCacheRegistered,
-    cachedAssetCount,
-    isChecking: isCheckingSoundfontCache,
-    refresh: refreshSoundfontCache
-  } = useSoundfontCacheStatus()
   const rebuildModel = useRebuildPredictionModel()
 
   const handleRebuildWithRescore = () => {
@@ -56,7 +49,7 @@ export function SettingsModal({ isOpen, isSyncStarting, onStartSync, onClose, sh
         onError: (error) => {
           showToast({
             type: 'error',
-            message: error instanceof Error ? error.message : 'Failed to rebuild model'
+            message: errorMessage(error, 'Failed to rebuild model')
           })
         }
       }
@@ -141,29 +134,6 @@ export function SettingsModal({ isOpen, isSyncStarting, onStartSync, onClose, sh
             Rebuilds the segmentation model from annotations, then re-runs predictions over
             files whose unpromoted queue is entirely 'unsure'. Can take a long time.
           </p>
-        </section>
-
-        <section className="mt-6 border-t border-gray-100 pt-6">
-          <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Soundfont cache</h3>
-          <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
-            <span>
-              {isSoundfontCacheSupported
-                ? `${cachedAssetCount} asset${cachedAssetCount === 1 ? '' : 's'}${isSoundfontCacheRegistered ? '' : ' (worker inactive)'}`
-                : 'unsupported'}
-            </span>
-            {isSoundfontCacheSupported && (
-              <button
-                type="button"
-                onClick={() => {
-                  void refreshSoundfontCache()
-                }}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-                title="Refresh soundfont cache status"
-              >
-                <RefreshCw className={`w-3 h-3 ${isCheckingSoundfontCache ? 'animate-spin' : ''}`} />
-              </button>
-            )}
-          </div>
         </section>
       </div>
     </div>

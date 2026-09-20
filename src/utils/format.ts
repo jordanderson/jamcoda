@@ -1,11 +1,4 @@
-/**
- * Display formatting shared across the UI.
- *
- * `formatTime` previously existed as five identical copies (DetailPage,
- * SongsPage, AnnotationModal, DateBrowser) and
- * `formatDate` as three. One of the `formatTime` copies was re-created on
- * every render rather than hoisted to module scope.
- */
+/** Display formatting shared across the UI. */
 
 /** Seconds as `m:ss`, for playback positions and segment bounds. */
 export function formatTime(seconds: number): string {
@@ -34,20 +27,12 @@ export function formatDate(dateStr: string): string {
   })
 }
 
-/**
- * Seconds as `m:ss`.
- *
- * Durations and playback positions render identically. DateBrowser had a
- * separate `formatDuration` whose body was byte-identical to `formatTime`,
- * so this is an alias rather than a second implementation.
- */
+/** Durations render the same as playback positions. */
 export const formatDuration = formatTime
 
 /**
- * Seconds as `Nh Nm`, for totals across many files.
- *
- * `formatDuration` is `m:ss`, which stops reading once a value runs to
- * hundreds of hours -- a library total renders there as `11640:00`.
+ * Seconds as `Nh Nm`, for totals across many files, where `m:ss` stops being
+ * readable -- a whole library renders there as `11640:00`.
  */
 export function formatHoursMinutes(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds))

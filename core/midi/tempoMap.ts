@@ -3,9 +3,8 @@ import type { MidiData, MidiEvent } from 'midi-file';
 /**
  * Tick-to-seconds conversion for Standard MIDI Files.
  *
- * `@tonejs/midi` used to do this for us. Decoding notes ourselves (so that
- * All Notes Off is honoured -- see `noteSequence.ts`) means owning the time
- * base too.
+ * We decode notes ourselves so All Notes Off is honoured (see
+ * `noteSequence.ts`), which means owning the time base too.
  */
 
 /** 120 BPM. What the SMF spec says to assume when a file declares no tempo. */

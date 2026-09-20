@@ -25,14 +25,9 @@ import {
  * Run the segmentation model over one file and import the results as
  * prediction reviews.
  *
- * This is the single implementation of that pipeline. It previously
- * existed twice — once in `POST /api/prediction-reviews/run` against the
- * model layer, and once in `ml/predictAndImport.ts` against string-
- * interpolated SQL run through the `sqlite3` CLI, complete with its own
- * `CREATE TABLE IF NOT EXISTS` that was a third source of schema truth
- * beside the migrations. Both callers now come through here, so the
- * exclusion rules, the model version string, and the insert shape cannot
- * drift, and the CLI no longer needs the `sqlite3` binary.
+ * The single implementation of that pipeline. `POST /api/prediction-reviews/run`
+ * and `ml:predict-import` both call it, so the exclusion rules, the model
+ * version string and the insert shape cannot drift apart.
  */
 
 export interface RunPredictionOptions {

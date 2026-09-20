@@ -15,6 +15,7 @@ import {
   PredictionImportError,
   runPredictionImport
 } from '../server/services/predictionImport';
+import { errorMessage } from '@core/errors';
 
 /**
  * Run predictions for every file that is incomplete, has notes, and has no
@@ -167,7 +168,7 @@ async function main() {
           errors.push({ file: candidate.filename, error: error.message });
           continue;
         }
-        const message = error instanceof Error ? error.message : 'Unknown error';
+        const message = errorMessage(error, 'Unknown error');
         console.error(`  #${candidate.id} ${candidate.filename}: ${message}`);
         errors.push({ file: candidate.filename, error: message });
       }

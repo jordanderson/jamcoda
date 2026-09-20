@@ -13,6 +13,9 @@ export interface Toast {
   action?: ToastAction;
 }
 
+/** Raises one toast. Hooks that report their own results take this. */
+export type ShowToast = (toast: Omit<Toast, 'id'>) => void;
+
 /**
  * Older toasts are dropped rather than stacking off the top of the screen.
  * Three is enough to see a burst of related results (split, then trim, then

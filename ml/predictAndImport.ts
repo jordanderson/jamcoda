@@ -24,11 +24,8 @@ import {
  * reviews.
  *
  * The pipeline lives in `server/services/predictionImport`, shared with
- * `POST /api/prediction-reviews/run`. This file is argument parsing and
- * reporting. It previously reimplemented the whole thing against the
- * `sqlite3` CLI with interpolated SQL and its own `CREATE TABLE IF NOT
- * EXISTS`, which could leave a table shaped differently from what migrations
- * produce. Schema is now solely the migration runner's job.
+ * `POST /api/prediction-reviews/run`; this file is argument parsing and
+ * reporting only. Schema is the migration runner's job, never this one's.
  */
 
 function usage() {

@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deserialize, serialize } from 'node:v8';
-import { DECODE_ONLY_CONFIG_KEYS, type AnnotatedMidiFile, type TrainConfig } from './songSegmentation.js';
+import { DECODE_ONLY_CONFIG_KEYS, type AnnotatedMidiFile, type TrainConfig } from './songSegmentation';
 
 export function digest(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');

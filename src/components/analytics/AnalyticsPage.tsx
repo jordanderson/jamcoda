@@ -17,6 +17,7 @@ import {
 import { TopSongsChart } from './TopSongsChart';
 import { TrendChart } from './TrendChart';
 import { AnalyticsTable } from './AnalyticsTable';
+import { errorMessage } from '@core/errors';
 
 const PRESET_DAYS: Record<Exclude<DatePreset, 'all' | 'custom'>, number> = {
   '30d': 30,
@@ -140,7 +141,7 @@ export function AnalyticsPage() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
           <AlertCircle className="w-5 h-5 text-red-700 flex-shrink-0" />
           <p className="text-red-700 text-sm">
-            {error instanceof Error ? error.message : 'Failed to load analytics'}
+            {errorMessage(error, 'Failed to load analytics')}
           </p>
         </div>
       )}

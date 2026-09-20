@@ -3,6 +3,7 @@ import path from 'node:path';
 import { hasFlag, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import { closeDatabase, getDb, initializeDatabase } from '../config/database';
 import { parseJmxMetadata } from '../utils/jmxParser';
+import { errorMessage } from '@core/errors';
 
 /**
  * Remove already-synced empty recordings — assets the Jamcorder opened and
@@ -74,7 +75,7 @@ function verifyEmptyOnDisk(localPath: string): { empty: boolean; reason: string 
   try {
     jmx = parseJmxMetadata(readFileSync(localPath));
   } catch (error) {
-    return { empty: false, reason: `unreadable (${error instanceof Error ? error.message : 'unknown'})` };
+    return { empty: false, reason: `unreadable (${errorMessage(error, 'unknown')})` };
   }
   if (jmx.totalNotes === 0 && jmx.totalMillis === 0) {
     return { empty: true, reason: 'JMX trailer reports 0 notes' };

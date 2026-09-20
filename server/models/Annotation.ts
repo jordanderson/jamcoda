@@ -5,10 +5,11 @@ import type {
   SongPlayHistoryRow,
   UpdateAnnotationData
 } from '@server/types';
+import { nowUnix } from '@utils/time';
 
 export function create(data: CreateAnnotationData): number {
   const db = getDb();
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowUnix();
 
   const stmt = db.prepare(`
     INSERT INTO annotations (file_id, song_name, start_time, end_time, notes, created_at, updated_at)
@@ -66,7 +67,7 @@ export function update(id: number, data: UpdateAnnotationData): boolean {
   }
 
   updates.push('updated_at = ?');
-  values.push(Math.floor(Date.now() / 1000));
+  values.push(nowUnix());
   values.push(id);
 
   const query = `UPDATE annotations SET ${updates.join(', ')} WHERE id = ?`;
@@ -133,7 +134,7 @@ export function mergeOverlappingSameSong(id: number): MergeSameSongResult | unde
     return { annotation: current, absorbedIds: [] };
   }
 
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowUnix();
   const tx = db.transaction(() => {
     db.prepare(`
       UPDATE annotations
@@ -166,7 +167,7 @@ export function mergeOverlappingSameSong(id: number): MergeSameSongResult | unde
 
 export function remove(id: number): boolean {
   const db = getDb();
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowUnix();
 
   const tx = db.transaction(() => {
     // Deleting the annotation a review was promoted into un-promotes that
@@ -267,7 +268,7 @@ export function getSongPlayHistory(): SongPlayHistoryRow[] {
 
 export function renameSongName(oldSongName: string, newSongName: string): number {
   const db = getDb();
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowUnix();
   const result = db.prepare(`
     UPDATE annotations
     SET song_name = ?, updated_at = ?
@@ -299,7 +300,7 @@ export function split(
     );
   }
 
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowUnix();
   const tx = db.transaction(() => {
     db.prepare(`
       UPDATE annotations

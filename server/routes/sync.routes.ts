@@ -1,19 +1,15 @@
 import express from 'express';
 import * as syncService from '@server/services/sync.service';
 import * as FileModel from '@models/File';
+import { route } from '@utils/route';
 
 const router = express.Router();
 
-router.post('/start', async (req, res) => {
-  try {
-    const full = req.query.full === '1' || req.body?.full === true;
-    const syncId = await syncService.startSync(full);
-    res.json({ syncId, status: 'in_progress' });
-  } catch (error) {
-    console.error('Error starting sync:', error);
-    res.status(500).json({ error: 'Failed to start sync' });
-  }
-});
+router.post('/start', route('start sync', async (req, res) => {
+  const full = req.query.full === '1' || req.body?.full === true;
+  const syncId = await syncService.startSync(full);
+  res.json({ syncId, status: 'in_progress' });
+}));
 
 router.get('/progress/:syncId', (req, res) => {
   const progress = syncService.getSyncProgress(req.params.syncId);

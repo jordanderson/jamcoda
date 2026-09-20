@@ -21,13 +21,3 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 )
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/soundfont-cache-sw.js')
-      .catch((error) => {
-        console.warn('Failed to register soundfont cache service worker:', error)
-      })
-  })
-}

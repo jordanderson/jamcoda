@@ -5,9 +5,10 @@ import { useToasts } from '../../hooks/useToasts'
 import { SettingsModal } from '../settings/SettingsModal'
 import { ToastStack } from '../ui/ToastStack'
 import type { RebuildStatusResponse } from '../../api/localTypes'
+import { errorMessage } from '@core/errors'
 
 interface SidebarProps {
-  onStartSync: (full?: boolean) => void
+  onStartSync: (full?: boolean) => Promise<void>
   isSyncStarting: boolean
 }
 
@@ -44,8 +45,14 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
     window.location.hash = path
   }
 
-  const handleSyncClick = (full = false) => {
-    onStartSync(full)
+  /** Closes Settings once the sync is running, so the two modals never stack. */
+  const handleSyncClick = async (full = false) => {
+    try {
+      await onStartSync(full)
+      setIsSettingsOpen(false)
+    } catch (error) {
+      showToast({ type: 'error', message: errorMessage(error, 'Failed to start sync') })
+    }
   }
 
   const handleRebuildModel = () => {
@@ -64,7 +71,7 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
         onError: (error) => {
           showToast({
             type: 'error',
-            message: error instanceof Error ? error.message : 'Failed to rebuild model'
+            message: errorMessage(error, 'Failed to rebuild model')
           })
         }
       }

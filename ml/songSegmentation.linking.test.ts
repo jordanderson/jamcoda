@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { decodeWindowScores, resolveTrainConfig, type TrainConfig } from './songSegmentation.js';
+import { decodeWindowScores, resolveTrainConfig, type TrainConfig } from './songSegmentation';
 
 const options = { minWindowConfidence: 0, smoothingWindows: 1 };
 const base: TrainConfig = {

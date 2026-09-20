@@ -4,6 +4,7 @@ import { hasFlag, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import { resolveReviewFields } from '@core/predictionReview';
 import { closeDatabase, getDb, initializeDatabase } from '../config/database';
 import type { PredictionReview } from '@server/types';
+import { nowUnix } from '@utils/time';
 
 /**
  * Repair prediction reviews whose promotion was silently undone.
@@ -196,7 +197,7 @@ async function main() {
     db.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`);
     console.log(`Backup written to ${backupPath}`);
 
-    const now = Math.floor(Date.now() / 1000);
+    const now = nowUnix();
     const relinkStmt = db.prepare(`
       UPDATE prediction_reviews
       SET promoted_annotation_id = ?, updated_at = ?

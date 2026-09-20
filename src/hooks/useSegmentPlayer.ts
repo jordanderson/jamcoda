@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMidiPlayer } from '@/hooks/useMidiPlayer'
+import { errorMessage } from '@core/errors'
 
 /**
  * Playback scoped to one time range of the loaded file.
@@ -71,7 +72,7 @@ export function useSegmentPlayer(bounds: SegmentBounds | null): UseSegmentPlayer
       await action()
       setPlaybackError(null)
     } catch (err) {
-      setPlaybackError(err instanceof Error ? err.message : fallback)
+      setPlaybackError(errorMessage(err, fallback))
     }
   }
 

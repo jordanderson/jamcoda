@@ -8,7 +8,7 @@ import {
   stringToTimelineColor
 } from './pianoRollColors'
 import type { RollAnnotation, RollPrediction } from './pianoRollTypes'
-import { BAND_DESCRIPTIONS, calibratedConfidence } from '../../utils/predictionConfidence'
+import { BAND_DESCRIPTIONS, calibratedConfidence } from '@core/predictionConfidence'
 
 /**
  * The two chip rows below the notes: annotations and predictions.

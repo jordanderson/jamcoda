@@ -2,14 +2,12 @@ import { parseMidi } from 'midi-file';
 import { buildTempoMap, ticksToSeconds } from './tempoMap';
 
 /**
- * The one MIDI decode path for the whole app.
+ * The one MIDI decode path for the whole app: browser, server and ML
+ * pipeline all come through here, so they cannot disagree about a file's
+ * notes.
  *
- * The browser used to decode via `@magenta/music`'s `midiToSequenceProto`
- * while the server and ML pipeline used `@tonejs/midi` directly, so the two
- * could disagree about the notes in a file. Both now come through here.
- *
- * Isomorphic: takes bytes, touches no filesystem, and is typechecked against
- * both the DOM and Node libs.
+ * Isomorphic -- takes bytes, touches no filesystem, and is typechecked
+ * against both the DOM and Node libs.
  */
 
 /** A single sounding note. Times are seconds from the start of the file. */

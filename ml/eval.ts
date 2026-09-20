@@ -20,9 +20,10 @@ import {
   type AnnotatedMidiFile,
   type PredictConfig,
   type TrainConfig
-} from './songSegmentation.js';
-import { datasetIdentity, digest, EvalScoreCache, scoringConfig, scoringSourceIdentity } from './evalCache.js';
-import { matchBoundaries, summarizeBoundaries, type BoundaryMatch } from './boundaryEvaluation.js';
+} from './songSegmentation';
+import { datasetIdentity, digest, EvalScoreCache, scoringConfig, scoringSourceIdentity } from './evalCache';
+import { matchBoundaries, summarizeBoundaries, type BoundaryMatch } from './boundaryEvaluation';
+import { errorMessage } from '@core/errors';
 
 interface FileEvalRow {
   fileId: number;
@@ -855,6 +856,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Eval failed:', error instanceof Error ? error.message : error);
+  console.error('Eval failed:', errorMessage(error));
   process.exitCode = 1;
 });

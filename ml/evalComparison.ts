@@ -1,5 +1,5 @@
-import type { BoundaryMatch } from './boundaryEvaluation.js';
-import type { AnnotationInterval } from './songSegmentation.js';
+import type { BoundaryMatch } from './boundaryEvaluation';
+import type { AnnotationInterval } from './songSegmentation';
 
 /**
  * Paired comparison of two `ml:eval` reports.

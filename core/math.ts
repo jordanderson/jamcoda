@@ -1,10 +1,8 @@
 /**
- * Small numeric helpers used on both sides of the app.
+ * Numeric helpers for both tiers.
  *
- * These live here rather than in `core/cli/args` because that module is
- * Node-only (it reads `process.argv` and touches the filesystem) and so is
- * excluded from the browser program. The piano roll previously kept its own
- * copy of `clamp` for that reason.
+ * Separate from `core/cli/args`, which is Node-only and so not available to
+ * the browser build.
  */
 
 export function clamp(value: number, min: number, max: number): number {

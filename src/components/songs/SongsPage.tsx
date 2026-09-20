@@ -6,6 +6,7 @@ import { useRebuildPredictionModel } from '@/hooks/usePredictionReviews';
 import { localFilesApi } from '@/api/localEndpoints';
 import type { SongPlayHistoryRow } from '@/api/localTypes';
 import { formatTime, formatDate } from '@/utils/format'
+import { errorMessage } from '@core/errors';
 
 /**
  * Song pre-filter from the `#/songs?song=<name>` query param, so other views
@@ -166,7 +167,7 @@ export function SongsPage() {
       setPreparingPlaybackId(null);
       void playSegment(row.start_time, row.end_time);
     } catch (err) {
-      setPlaybackError(err instanceof Error ? err.message : 'Failed to play selected segment');
+      setPlaybackError(errorMessage(err, 'Failed to play selected segment'));
     } finally {
       setPreparingPlaybackId((current) => (current === row.annotation_id ? null : current));
     }
@@ -183,7 +184,7 @@ export function SongsPage() {
         : segmentCurrentTime;
       void playSegment(startTime, activeSegmentBounds.end);
     } catch (err) {
-      setPlaybackError(err instanceof Error ? err.message : 'Failed to play selected segment');
+      setPlaybackError(errorMessage(err, 'Failed to play selected segment'));
     }
   };
 
@@ -238,13 +239,13 @@ export function SongsPage() {
       } catch (error) {
         setRenameFeedback({
           type: 'error',
-          message: `Renamed "${oldSongName}" to "${newSongName}", but model rebuild failed: ${error instanceof Error ? error.message : 'unknown error'}.`
+          message: `Renamed "${oldSongName}" to "${newSongName}", but model rebuild failed: ${errorMessage(error, 'unknown error')}.`
         });
       }
     } catch (error) {
       setRenameFeedback({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to rename song.'
+        message: errorMessage(error, 'Failed to rename song.')
       });
     }
   };
@@ -371,7 +372,7 @@ export function SongsPage() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
           <AlertCircle className="w-5 h-5 text-red-700 flex-shrink-0" />
           <p className="text-red-700 text-sm">
-            {error instanceof Error ? error.message : 'Failed to load songs'}
+            {errorMessage(error, 'Failed to load songs')}
           </p>
         </div>
       )}

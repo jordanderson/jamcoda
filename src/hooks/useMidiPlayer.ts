@@ -6,6 +6,7 @@ import {
   type NoteSequence
 } from '@core/midi/noteSequence'
 import { PianoSampler } from '@/audio/pianoSampler'
+import { errorMessage } from '@core/errors'
 
 /** Reactive playback state exposed by `useMidiPlayer`. */
 interface PlayerState {
@@ -194,7 +195,7 @@ export function useMidiPlayer(): UseMidiPlayerResult {
   }, [getSampler, haltPlayback, runPlayhead])
 
   const withPlaybackError = useCallback((fallback: string) => (err: unknown) => {
-    const message = err instanceof Error ? err.message : fallback
+    const message = errorMessage(err, fallback)
     haltPlayback()
     setState((prev) => ({ ...prev, error: message, isPlaying: false }))
     console.error(fallback, err)
@@ -223,7 +224,7 @@ export function useMidiPlayer(): UseMidiPlayerResult {
         sequence
       }))
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load MIDI file'
+      const message = errorMessage(err, 'Failed to load MIDI file')
       isLoadedRef.current = false
       sequenceRef.current = null
       setState((prev) => ({

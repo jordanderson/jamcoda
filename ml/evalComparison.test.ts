@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { bootstrapF1DeltaPoints, closeTransitions, compareReports, f1OverFiles } from './evalComparison.js';
-import type { BoundaryMatch } from './boundaryEvaluation.js';
-import type { ComparableFileRow, ComparableReport } from './evalComparison.js';
+import { bootstrapF1DeltaPoints, closeTransitions, compareReports, f1OverFiles } from './evalComparison';
+import type { BoundaryMatch } from './boundaryEvaluation';
+import type { ComparableFileRow, ComparableReport } from './evalComparison';
 
 const file = (fileId: number, matchedSec: number, predictedMatchedSec: number): ComparableFileRow =>
   ({ fileId, annotationSec: 100, matchedSec, predictedSec: 100, predictedMatchedSec });

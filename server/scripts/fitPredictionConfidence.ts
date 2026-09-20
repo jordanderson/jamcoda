@@ -1,23 +1,16 @@
 import { hasFlag, parseInt_, parseNum, pct, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import { closeDatabase, getDb, initializeDatabase } from '../config/database';
+import { confidenceFeatures, logistic } from '@core/predictionConfidence';
 
 /**
  * Refit the display-only confidence calibration in
- * `src/utils/predictionConfidence.ts`.
+ * `core/predictionConfidence.ts`, whose header explains why the raw margin
+ * needs calibrating and why the margin scale itself must not move.
  *
- * The model's stored `predicted_confidence` is a decoder evidence margin, not
- * a probability, and against human review verdicts it runs *backwards*: long
- * correct takes average toward a modest margin while short spurious segments
- * keep a high one. This script fits a logistic over `[1, margin,
- * log10(durationSec)]` against the reviewed rows so the UI can show a number
- * that moves with reliability instead of against it.
- *
- * It reads the database and prints weights. It writes nothing -- paste the
- * printed block into `CONFIDENCE_WEIGHTS` and update the fit-quality comment
- * beside it, so the shipped constants always name the population they came
- * from. Nothing here touches the model: see the header of
- * `src/utils/predictionConfidence.ts` for why the raw margin scale must not
- * move.
+ * Reads the database and prints weights; it writes nothing. Paste the printed
+ * block into `CONFIDENCE_WEIGHTS`, and record the fit quality in
+ * `ml/CHANGELOG.md` so the shipped constants name the population they came
+ * from.
  */
 
 interface ReviewRow {
@@ -44,13 +37,8 @@ Options:
 `);
 }
 
-/** `[1, margin, log10(seconds)]`, matching the shipped scorer exactly. */
 function features(row: Pick<ReviewRow, 'margin' | 'durationSec'>): number[] {
-  return [1, row.margin, Math.log10(Math.max(1, row.durationSec))];
-}
-
-function logistic(z: number): number {
-  return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
+  return confidenceFeatures(row.margin, row.durationSec);
 }
 
 function predict(weights: number[], row: Pick<ReviewRow, 'margin' | 'durationSec'>): number {
@@ -185,7 +173,7 @@ async function main() {
 
     reportCalibration(rows, weights);
 
-    console.log('\nPaste into CONFIDENCE_WEIGHTS in src/utils/predictionConfidence.ts:');
+    console.log('\nPaste into CONFIDENCE_WEIGHTS in core/predictionConfidence.ts:');
     console.log('export const CONFIDENCE_WEIGHTS = {');
     console.log(`  bias: ${weights[0].toFixed(4)},`);
     console.log(`  margin: ${weights[1].toFixed(4)},`);

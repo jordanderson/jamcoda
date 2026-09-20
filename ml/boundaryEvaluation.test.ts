@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchBoundaries, summarizeBoundaries } from './boundaryEvaluation.js';
-import type { SongSegment } from './songSegmentation.js';
+import { matchBoundaries, summarizeBoundaries } from './boundaryEvaluation';
+import type { SongSegment } from './songSegmentation';
 
 const segment = (songName: string, startTime: number, endTime: number): SongSegment => ({
   songName, startTime, endTime, durationSec: endTime - startTime, confidence: 0.5

@@ -8,6 +8,7 @@ import {
 } from './predictionCandidates'
 import type { PredictionDecoderOverrides } from '@/api/localTypes'
 import type { RollAnnotation, RollPrediction } from '../midi/pianoRollTypes'
+import { errorMessage } from '@core/errors'
 
 /**
  * Try prediction settings on one recording and compare the results.
@@ -207,7 +208,7 @@ export function PredictionLab({
           ])
           setNextId((id) => id + 1)
         },
-        onError: (error) => onError(error instanceof Error ? error.message : 'Preview failed')
+        onError: (error) => onError(errorMessage(error, 'Preview failed'))
       }
     )
   }
@@ -221,7 +222,7 @@ export function PredictionLab({
       },
       {
         onSuccess: () => onRunsChange(() => []),
-        onError: (error) => onError(error instanceof Error ? error.message : 'Failed to apply settings')
+        onError: (error) => onError(errorMessage(error, 'Failed to apply settings'))
       }
     )
   }

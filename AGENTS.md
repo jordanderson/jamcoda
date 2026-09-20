@@ -14,6 +14,7 @@ Use this file for repo-specific execution guidance. For product and ML details, 
 behaviour that exists on more than one side of a boundary:
 - `core/types.ts`, `core/predictionReview.ts`, `core/timeRanges.ts`
 - `core/midi/noteSequence.ts`, `core/cli/args.ts`
+- `core/errors.ts`, `core/predictionConfidence.ts`
 
 Then:
 - `src/App.tsx`
@@ -27,7 +28,7 @@ Then:
 - `server/routes/annotations.routes.ts`
 - `server/routes/predictionReviews.routes.ts`
 - `server/models/PredictionReview.ts`
-- `ml/songSegmentation.ts`
+- `ml/songSegmentation.ts` (public surface; implementation in `ml/segmentation/`)
 
 ## Quick Start
 
@@ -64,6 +65,32 @@ Core frontend routes:
 - `#/detail/:id`
 - `#/songs`
 - `#/analytics`
+
+## Shared Helpers
+
+Reach for these before writing a local copy:
+
+- `core/errors.ts` -- `errorMessage(error, fallback)`. `catch` binds `unknown`,
+  so never re-inline the `instanceof Error` check.
+- `core/predictionConfidence.ts` -- the display-only calibration *and*
+  `confidenceFeatures`, which `ml:fit-confidence` also calls so the fit and the
+  scorer cannot disagree about what the weights multiply.
+- `core/timeRanges.ts`, `core/predictionReview.ts`, `core/math.ts` -- domain
+  rules that exist on both sides of the HTTP boundary.
+- `server/utils/route.ts` -- `route(action, handler)` wraps a route so a throw
+  becomes one logged 500. Routes that return the underlying error to the client
+  keep their own `try`/`catch`.
+- `server/utils/requestParams.ts` -- parsers for untrusted query/body values.
+- `server/utils/time.ts` -- `nowUnix()`, the unit every `*_at` column stores.
+- `src/utils/format.ts` -- all display formatting.
+
+## Import Conventions
+
+- Use the path aliases (`@core/*`, `@/*`, `@server/*`, `@models/*`,
+  `@utils/*`, `@config/*`) rather than long relative chains.
+- **No `.js` extension on relative imports.** `moduleResolution` is `bundler`
+  and neither `tsc` (`noEmit`) nor `tsx` needs it; the extension is only
+  required when TypeScript emits Node ESM, which this project never does.
 
 ## Invariants To Preserve
 
@@ -147,8 +174,8 @@ Core frontend routes:
   `jmxEof` trailer's `totalMillis`, which is the device's own statement of how
   long it recorded. `npm run db:rescale-silent-tempo -- --verify` asserts it
   across the library.
-- Playback is normalized to grand piano (`src/audio/pianoSampler.ts` loads no
-  other instrument), and soundfont cache worker stores piano assets only.
+- Playback is normalized to grand piano: `src/audio/pianoSampler.ts` loads no
+  other instrument.
 - Sync uses a cheap filesystem walk over the detailed file listing (real sizes → skip-unchanged), falls back to the library API when the walk fails, skips unchanged assets by size, and records a high-water mark so a library-API fallback is fast. `POST /api/sync/start?full=1` forces a full pass. The library API is crash-prone on low-power firmware, so it is never the primary discovery source.
 - A device file that is smaller than the synced copy is skipped with a warning (device-side truncation hazard); do not overwrite local data with it.
 - A *new* device asset with no notes is not imported at all — skipped on reported size before download, and again on the JMX trailer's `totalNotes`/`totalMillis` after. The device produces these in bursts (hundreds in a minute); importing them hides real recordings. Never infer emptiness from a local parse failure. See `API_NOTES.md`.

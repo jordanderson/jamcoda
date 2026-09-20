@@ -9,6 +9,7 @@ import {
   type BrowseSort,
   type BrowseView
 } from './browseView';
+import { errorMessage } from '@core/errors'
 
 interface DateBrowserProps {
   onFileSelect: (fileId: number, startTime?: number) => void;
@@ -64,7 +65,7 @@ export function DateBrowser({ onFileSelect, view, onViewChange }: DateBrowserPro
       <div className="p-8 text-center">
         <div className="text-red-600 font-medium">Error loading files</div>
         <div className="text-sm text-gray-600 mt-2">
-          {error instanceof Error ? error.message : 'Unknown error'}
+          {errorMessage(error, 'Unknown error')}
         </div>
       </div>
     );

@@ -1,6 +1,7 @@
 import { getDb } from '@config/database';
 import { getMidiDuration } from '@utils/midiUtils';
 import type { FileRecord, CreateFileData, UpdateSyncedFileData } from '@server/types';
+import { nowUnix } from '@utils/time';
 
 export function create(data: CreateFileData): number {
   const db = getDb();
@@ -17,7 +18,7 @@ export function create(data: CreateFileData): number {
     data.filename,
     data.fileSize,
     data.jamcorderModified,
-    Math.floor(Date.now() / 1000),
+    nowUnix(),
     data.dateRecorded,
     data.midiDuration ?? null,
     data.assetUuid ?? null,
@@ -113,7 +114,7 @@ export function updateSyncMetadata(fileCount: number) {
     SET last_sync_at = ?, last_sync_file_count = ?
     WHERE id = 1
   `);
-  stmt.run(Math.floor(Date.now() / 1000), fileCount);
+  stmt.run(nowUnix(), fileCount);
 }
 
 export function getSyncMetadata() {
@@ -138,7 +139,7 @@ export function updateSyncHighWater(assetIdx: number | null, jamcorderUuid: stri
 
 export function setCompletion(id: number, isComplete: boolean): boolean {
   const db = getDb();
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowUnix();
   const result = db.prepare(`
     UPDATE files
     SET is_complete = ?, completed_at = ?

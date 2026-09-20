@@ -8,6 +8,7 @@ import { parseJmxMetadata, jmxTimeToDate } from '../utils/jmxParser';
 import type { SyncProgress, JamcorderFileEntry } from '../types/index';
 import { getMidiDuration } from '../utils/midiUtils';
 import { sleep } from '@core/cli/args';
+import { errorMessage } from '@core/errors';
 
 const MIDI_DIR = process.env.JAMCODA_MIDI_DIR || 'data/midi';
 // Pause between individual file downloads to keep low-power firmware happy.
@@ -159,7 +160,7 @@ async function performSync(progress: SyncProgress, full = false) {
         await sleep(DOWNLOAD_PACE_MS);
       } catch (error) {
         hadErrors = true;
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        const errorMsg = errorMessage(error, 'Unknown error');
         console.error(`Error syncing ${entry.name}:`, errorMsg);
         progress.errors.push({ file: entry.name, error: errorMsg });
       }
@@ -190,7 +191,7 @@ async function performSync(progress: SyncProgress, full = false) {
     progress.currentFile = null;
     console.log('Sync completed successfully');
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    const errorMsg = errorMessage(error, 'Unknown error');
     console.error('Sync failed:', errorMsg);
     progress.status = 'error';
     progress.errors.push({ file: 'sync', error: errorMsg });
@@ -457,7 +458,7 @@ async function runPredictionsForBookmarkedFiles(importedIds: number[]): Promise<
         + `(bookmarks=${result.bookmarks.length}, splits=${result.bookmarkSplitCount})`
       );
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      const errorMsg = errorMessage(error, 'Unknown error');
       console.error(`Auto-predict failed for file ${fileId}: ${errorMsg}`);
     }
   }

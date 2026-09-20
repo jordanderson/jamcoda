@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { datasetIdentity, EvalScoreCache, scoringConfig } from './evalCache.js';
-import type { AnnotatedMidiFile, TrainConfig } from './songSegmentation.js';
+import { datasetIdentity, EvalScoreCache, scoringConfig } from './evalCache';
+import type { AnnotatedMidiFile, TrainConfig } from './songSegmentation';
 
 describe('evaluation score cache', () => {
   it('round-trips nonfinite absent-label scores and isolates folds and identities', () => {

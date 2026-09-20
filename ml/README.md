@@ -554,7 +554,14 @@ snapshots it cites. `CHANGELOG.md` is the committed record and stands on its own
 the notes are the long-form working detail behind each entry. A changelog entry
 naming a file you do not have is expected, not a broken link.
 
-- `ml/songSegmentation.ts`: feature extraction, prototype training, anchor-link decoding, segmentation
+- `ml/songSegmentation.ts`: the public surface -- orchestration plus re-exports
+- `ml/segmentation/types.ts`: shared shapes and tuning constants
+- `ml/segmentation/config.ts`: training defaults and config resolution
+- `ml/segmentation/dataset.ts`: loading annotated recordings and their notes
+- `ml/segmentation/vectors.ts`: feature-vector maths
+- `ml/segmentation/features.ts`: recording -> labelled feature windows
+- `ml/segmentation/model.ts`: fitting, saving and loading a prototype model
+- `ml/segmentation/decode.ts`: scoring windows and joining them into segments
 - `ml/songSegmentation.test.ts`: co-located tests for feature extraction, prototype training, and decoding
 - `ml/prototypeScorer.ts`: packed nearest-prototype scoring for the default `min`/single-neighbour mode
 - `ml/evalCache.ts`: dataset/config/source fingerprints and the persistent per-fold score cache

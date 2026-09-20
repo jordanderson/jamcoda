@@ -13,9 +13,8 @@ import {
  * TensorFlow.js, protobufjs and Tone.js -- roughly 40 MB of dependencies with
  * nine unfixable advisories -- to play back a single instrument.
  *
- * It deliberately fetches the *same* sample URLs Magenta used, so the existing
- * soundfont service-worker cache (see `public/soundfont-cache-sw.js`) keeps
- * serving already-downloaded audio with no re-download and no changes.
+ * Samples are fetched from the same URLs Magenta used and kept in memory for
+ * the session; repeat visits rely on the browser's own HTTP cache.
  *
  * Sample layout, from the soundfont's own `instrument.json`:
  *   {BASE}/p{pitch}_v{velocity}.mp3   pitch 21-108, velocity in VELOCITY_LAYERS
@@ -161,7 +160,7 @@ export class PianoSampler {
 
   /**
    * Fetch every sample a sequence needs, so playback starts without gaps.
-   * Samples already in the service-worker cache resolve immediately.
+   * Samples already loaded this session resolve immediately.
    */
   async preload(sequence: NoteSequence): Promise<void> {
     this.ensureContext()

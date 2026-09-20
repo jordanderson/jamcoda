@@ -3,11 +3,19 @@ import { RefreshCw } from 'lucide-react'
 interface WelcomeModalProps {
   isOpen: boolean
   isSyncing: boolean
+  /** Why the last attempt never started, or null. */
+  syncError: string | null
   onSync: () => void
   onDismiss: () => void
 }
 
-export function WelcomeModal({ isOpen, isSyncing, onSync, onDismiss }: WelcomeModalProps) {
+export function WelcomeModal({
+  isOpen,
+  isSyncing,
+  syncError,
+  onSync,
+  onDismiss
+}: WelcomeModalProps) {
   if (!isOpen) {
     return null
   }
@@ -39,6 +47,12 @@ export function WelcomeModal({ isOpen, isSyncing, onSync, onDismiss }: WelcomeMo
             Not now
           </button>
         </div>
+
+        {syncError && (
+          <p className="mt-4 text-sm text-red-700">
+            {syncError}. Check that the device is on the same network.
+          </p>
+        )}
       </div>
     </div>
   )

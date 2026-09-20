@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Pause, Square, Plus, AlertCircle, Navigation, Flag, Sparkles, X, Check, Edit3 } from 'lucide-react';
+import { Play, Pause, Square, Plus, AlertCircle, Navigation, Flag, Sparkles, X } from 'lucide-react';
 import { useFileDetail, useSetFileCompletion } from '@/hooks/useFileDetail';
 import { useLocalFileDownload } from '@/hooks/useLocalFileDownload';
 import { useMidiPlayer } from '@/hooks/useMidiPlayer';
 import {
   useCreateAnnotation,
   useDeleteAnnotation,
-  useSplitAnnotation,
   useUpdateAnnotation,
   useUniqueSongNames
 } from '@/hooks/useAnnotations';
+import { useAnnotationActions } from '@/hooks/useAnnotationActions';
 import {
   usePredictionReviews,
   usePromotePredictionReview,
@@ -20,33 +20,36 @@ import { PianoRollVisualizer } from '@/components/midi/PianoRollVisualizer';
 import type {
   RollAnnotation,
   RollBookmark,
-  RollPrediction,
   RollSkip
 } from '@/components/midi/pianoRollTypes';
 import { AnnotationModal } from '@/components/annotations/AnnotationModal';
 import { ToastStack } from '@/components/ui/ToastStack';
 import { useToasts } from '@/hooks/useToasts';
+import { useDetailShortcuts } from '@/hooks/useDetailShortcuts';
 import type { PredictionReview } from '@/api/localTypes';
-import { formatDate, formatTime, formatTimeHms } from '@/utils/format'
-import { BAND_DESCRIPTIONS, calibratedConfidence, type ConfidenceBand } from '@/utils/predictionConfidence'
+import { formatDate, formatTime } from '@/utils/format'
 import { resolveReviewFields } from '@core/predictionReview';
-import { buildPedalIntervals, heldByPedal } from '@core/midi/noteSequence';
-import {
-  snapSegmentBoundaries,
-  type BoundaryNote
-} from '@core/boundaries';
+import { snapSegmentBoundaries } from '@core/boundaries';
 import {
   buildSoundingSpans,
-  getGapAction,
   getSoundingGaps,
   LARGE_ANNOTATION_GAP_SECONDS,
   type AnnotationGap
 } from './annotationGaps';
 import { DetailAnnotationList } from './DetailAnnotationList';
-import { DetailDeviceMarkers, type DeviceMarker } from './DetailDeviceMarkers';
+import { DetailDeviceMarkers } from './DetailDeviceMarkers';
+import {
+  buildAcousticNotes,
+  buildDeviceMarkers,
+  buildPredictionSegments,
+  MIN_SKIP_DISPLAY_SEC,
+  resolveQueueModelVersion
+} from './detailDerived';
 import { PredictionLab } from './PredictionLab';
+import { PredictionReviewModal } from './PredictionReviewModal';
 import { FileOverview } from './FileOverview';
 import type { CandidateRun } from './predictionCandidates';
+import { errorMessage } from '@core/errors';
 
 interface DetailPageProps {
   fileId: number;
@@ -58,26 +61,20 @@ interface AnnotationModalState {
   annotationId?: number;
   initialSongName?: string;
   mode?: 'create' | 'edit';
+  /** Lets the reviewer type the bounds, for a range not marked on the roll. */
+  allowTimeEdit?: boolean;
 }
 
-/** Device silence gaps shorter than this are noise, not passage boundaries. */
-const MIN_SKIP_DISPLAY_SEC = 8;
+/** Default span for an annotation added without marking one on the roll. */
+const NEW_ANNOTATION_SEC = 30;
 
 const EMPTY_ANNOTATIONS: RollAnnotation[] = [];
 const EMPTY_BOOKMARKS: RollBookmark[] = [];
 const EMPTY_SKIPS: RollSkip[] = [];
 
-/** Badge colour per calibrated confidence band. */
-const CONFIDENCE_BADGE_CLASS: Record<ConfidenceBand, string> = {
-  strong: 'bg-emerald-100 text-emerald-800',
-  likely: 'bg-amber-100 text-amber-800',
-  uncertain: 'bg-gray-200 text-gray-700'
-};
-
-// Thin adapters over the shared resolver so call sites stay readable.
-const getPredictionDisplaySongName = (review: PredictionReview): string => resolveReviewFields(review).songName
-const getPredictionDisplayStart = (review: PredictionReview): number => resolveReviewFields(review).startTime
-const getPredictionDisplayEnd = (review: PredictionReview): number => resolveReviewFields(review).endTime
+/** The name shown for a review, honouring a reviewer's edit. */
+const getPredictionDisplaySongName = (review: PredictionReview): string =>
+  resolveReviewFields(review).songName
 
 export function DetailPage({ fileId }: DetailPageProps) {
   const { data: file, isLoading, error } = useFileDetail(fileId);
@@ -99,7 +96,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
   const createAnnotation = useCreateAnnotation();
   const deleteAnnotation = useDeleteAnnotation();
   const updateAnnotation = useUpdateAnnotation();
-  const splitAnnotation = useSplitAnnotation();
   const runPredictionForFile = useRunPredictionForFile();
   const updatePredictionReview = useUpdatePredictionReview();
   const promotePredictionReview = usePromotePredictionReview();
@@ -124,7 +120,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
   const [selectedPredictionReviewId, setSelectedPredictionReviewId] = useState<number | null>(null);
   const [editingPredictionReviewId, setEditingPredictionReviewId] = useState<number | null>(null);
   const [hoveredRollTime, setHoveredRollTime] = useState<number | null>(null);
-  const [splittingGapKey, setSplittingGapKey] = useState<string | null>(null);
   const [loadedFileId, setLoadedFileId] = useState<number | null>(null);
 
   // ---------------------------------------------------------------------------
@@ -170,31 +165,13 @@ export function DetailPage({ fileId }: DetailPageProps) {
     return gapMap;
   }, [annotations, sequence?.notes, soundingSpans]);
 
-  const acousticNotes = useMemo((): BoundaryNote[] => {
-    if (!sequence?.notes) return [];
-    const intervals = sequence.sustainEvents && sequence.sustainEvents.length > 0
-      ? buildPedalIntervals(sequence.sustainEvents)
-      : [];
+  const acousticNotes = useMemo(() => buildAcousticNotes(sequence), [sequence]);
 
-    return sequence.notes.map((n) => {
-      let acousticEnd = n.endTime;
-      if (intervals.length > 0) {
-        const held = heldByPedal(intervals, n.endTime);
-        if (held) {
-          const pitchMax = n.pitch > 72 ? 0.6 : 0.7;
-          const pedalRelease = held.up !== null ? held.up : n.endTime + pitchMax;
-          acousticEnd = Math.min(pedalRelease, n.endTime + pitchMax);
-        }
-      }
-      return {
-        pitch: n.pitch,
-        velocity: n.velocity,
-        startTime: n.startTime,
-        endTime: n.endTime,
-        acousticEndSec: acousticEnd
-      };
-    });
-  }, [sequence?.notes, sequence?.sustainEvents]);
+  const annotationActions = useAnnotationActions({
+    acousticNotes,
+    showToast,
+    onRegionSplitDone: () => setAnnotationModalData(null)
+  });
 
   // Whether any gap pill is shown at all, gating the helper copy above the
   // annotation list. Memoised: this component re-renders every frame during
@@ -205,24 +182,10 @@ export function DetailPage({ fileId }: DetailPageProps) {
   );
 
 
-  const deviceMarkers = useMemo<DeviceMarker[]>(() => {
-    const bookmarkMarkers = bookmarks.map((bookmark) => ({
-      key: `bm-${bookmark.bookmarkIdx}`,
-      timeSec: bookmark.timeSec,
-      kind: 'bookmark' as const,
-      label: `BM ${bookmark.bookmarkIdx} · ${formatTimeHms(bookmark.timeSec)}`
-    }));
-    const skipMarkers = skips
-      .filter((skip) => skip.millis >= MIN_SKIP_DISPLAY_SEC * 1000)
-      .map((skip, index) => ({
-        key: `skip-${skip.timeSec.toFixed(3)}-${index}`,
-        timeSec: skip.timeSec,
-        kind: 'skip' as const,
-        label: formatTimeHms(skip.timeSec),
-        gapSec: Math.round(skip.millis / 1000)
-      }));
-    return [...bookmarkMarkers, ...skipMarkers].sort((a, b) => a.timeSec - b.timeSec);
-  }, [bookmarks, skips]);
+  const deviceMarkers = useMemo(
+    () => buildDeviceMarkers(bookmarks, skips),
+    [bookmarks, skips]
+  );
 
   const selectedPredictionReview = useMemo(() => {
     if (selectedPredictionReviewId === null) return null;
@@ -239,42 +202,15 @@ export function DetailPage({ fileId }: DetailPageProps) {
       : undefined;
   }, [sequence?.totalTime]);
 
-  // The one model behind the queue on screen, when they agree. Mixed versions
-  // mean the queue was built in more than one pass, which is not a baseline
-  // either, so it is reported as such rather than picking one.
-  const queueModelVersion = useMemo<string | undefined>(() => {
-    const versions = new Set(
-      (reviewListResponse?.reviews ?? [])
-        .map((review) => review.model_version)
-        .filter((version): version is string => Boolean(version))
-    );
-    if (versions.size === 0) return undefined;
-    return versions.size === 1 ? [...versions][0] : 'several runs';
-  }, [reviewListResponse?.reviews]);
+  const queueModelVersion = useMemo(
+    () => resolveQueueModelVersion(reviewListResponse?.reviews ?? []),
+    [reviewListResponse?.reviews]
+  );
 
-  const predictionTimelineSegments = useMemo<RollPrediction[]>(() => {
-    return (reviewListResponse?.reviews ?? [])
-      .filter((review) => review.status !== 'invalid')
-      .map((review) => {
-        const { songName, startTime, endTime } = resolveReviewFields(review);
-
-        if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
-          return null;
-        }
-
-        return {
-          id: review.id,
-          songName,
-          startTime: Math.max(0, startTime),
-          endTime: timelineEndLimit !== undefined ? Math.min(timelineEndLimit, endTime) : endTime,
-          confidence: review.predicted_confidence ?? null
-        };
-      })
-      .filter((segment): segment is RollPrediction => (
-        segment !== null && segment.endTime > segment.startTime
-      ))
-      .sort((a, b) => a.startTime - b.startTime || a.id - b.id);
-  }, [reviewListResponse?.reviews, timelineEndLimit]);
+  const predictionTimelineSegments = useMemo(
+    () => buildPredictionSegments(reviewListResponse?.reviews ?? [], timelineEndLimit),
+    [reviewListResponse?.reviews, timelineEndLimit]
+  );
 
 
   // ---------------------------------------------------------------------------
@@ -367,7 +303,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
     setAnnotationModalData(null);
     setHoveredRollTime(null);
     setSelectedPredictionReviewId(null);
-    setSplittingGapKey(null);
     clearToasts();
   }, [fileId, clearToasts]);
 
@@ -389,96 +324,29 @@ export function DetailPage({ fileId }: DetailPageProps) {
     handleClearCheckpoints();
   }, [startCheckpoint, endCheckpoint, handleClearCheckpoints]);
 
-  /**
-   * Latest values for the keyboard handler, read through a ref so the window
-   * listener is subscribed once. Depending on `currentTime` directly would
-   * tear it down and re-add it on every animation frame during playback.
-   */
-  const shortcutsRef = useRef({
+  useDetailShortcuts({
     isLoaded,
-    hasCheckpoint: false,
-    isModalOpen: false,
-    handlePlayPause,
-    handleMarkStart,
-    handleMarkEnd,
-    handleClearCheckpoints
+    hasCheckpoint: startCheckpoint !== null || endCheckpoint !== null,
+    isModalOpen: annotationModalData !== null || selectedPredictionReviewId !== null,
+    onPlayPause: handlePlayPause,
+    onMarkStart: handleMarkStart,
+    onMarkEnd: handleMarkEnd,
+    onClearCheckpoints: handleClearCheckpoints
   });
-  useEffect(() => {
-    shortcutsRef.current = {
-      isLoaded,
-      hasCheckpoint: startCheckpoint !== null || endCheckpoint !== null,
-      isModalOpen: annotationModalData !== null || selectedPredictionReviewId !== null,
-      handlePlayPause,
-      handleMarkStart,
-      handleMarkEnd,
-      handleClearCheckpoints
-    };
-  });
-
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      // Not while typing, and not while a modal owns the screen. Otherwise
-      // these would act on the piano roll hidden behind it.
-      const target = e.target;
-      if (
-        target instanceof HTMLInputElement
-        || target instanceof HTMLTextAreaElement
-        || target instanceof HTMLSelectElement
-        || (target instanceof HTMLElement && target.isContentEditable)
-      ) {
-        return;
-      }
-
-      const shortcuts = shortcutsRef.current;
-      if (shortcuts.isModalOpen) return;
-
-      // Leave browser and OS chords (cmd+P print, ctrl+S save) alone.
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-
-      switch (e.key.toLowerCase()) {
-        case 'p':
-          if (!shortcuts.isLoaded) return;
-          // Space already scrolls the page. P is the unambiguous binding.
-          e.preventDefault();
-          shortcuts.handlePlayPause();
-          return;
-        case 's':
-          shortcuts.handleMarkStart();
-          return;
-        case 'e':
-          shortcuts.handleMarkEnd();
-          return;
-        case 'c':
-          if (shortcuts.hasCheckpoint) shortcuts.handleClearCheckpoints();
-          return;
-        default:
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, []);
 
   // ---------------------------------------------------------------------------
   // Annotation actions
   // ---------------------------------------------------------------------------
 
+  /** Opens the modal on a span at the playhead, with the bounds editable. */
   const handleCreateAnnotation = useCallback(() => {
-    const startTimeStr = prompt('Enter start time (seconds):');
-    const endTimeStr = prompt('Enter end time (seconds):');
+    const startTime = currentTime;
+    const endTime = duration > 0
+      ? Math.min(duration, startTime + NEW_ANNOTATION_SEC)
+      : startTime + NEW_ANNOTATION_SEC;
 
-    if (!startTimeStr || !endTimeStr) return;
-
-    const startTime = parseFloat(startTimeStr);
-    const endTime = parseFloat(endTimeStr);
-
-    if (isNaN(startTime) || isNaN(endTime) || startTime >= endTime) {
-      alert('Invalid time values');
-      return;
-    }
-
-    setAnnotationModalData({ startTime, endTime });
-  }, []);
+    setAnnotationModalData({ startTime, endTime, mode: 'create', allowTimeEdit: true });
+  }, [currentTime, duration]);
 
   const handleDeleteAnnotation = useCallback((annotationId: number) => {
     if (!confirm('Delete this annotation?')) return;
@@ -490,32 +358,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
     setIsAnnotationMode(false);
   }, []);
 
-  const handleAnnotationResize = useCallback(async (
-    annotationId: number,
-    times: { startTime: number; endTime: number }
-  ) => {
-    if (!Number.isFinite(times.startTime) || !Number.isFinite(times.endTime)) {
-      const error = new Error('Resized annotation has invalid time values.');
-      showToast({ type: 'error', message: error.message });
-      throw error;
-    }
-    if (times.startTime >= times.endTime) {
-      const error = new Error('Annotation start time must be less than end time.');
-      showToast({ type: 'error', message: error.message });
-      throw error;
-    }
-
-    try {
-      await updateAnnotation.mutateAsync({
-        id: annotationId,
-        data: { startTime: times.startTime, endTime: times.endTime }
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to resize annotation.';
-      showToast({ type: 'error', message });
-      throw error;
-    }
-  }, [updateAnnotation.mutateAsync, showToast]);
 
   const handleAnnotationSubmit = useCallback((
     songName: string,
@@ -587,43 +429,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
     });
   }, []);
 
-  const handleSplitAnnotationGap = useCallback(async (
-    annotation: RollAnnotation,
-    gap: AnnotationGap,
-    gapIndex: number
-  ) => {
-    if (getGapAction(gap, annotation) !== 'split') {
-      showToast({
-        type: 'error',
-        message: 'This gap is at the edge of the annotation and cannot be split into two segments.'
-      });
-      return;
-    }
-
-    const splitKey = `${annotation.id}:${gapIndex}`;
-    setSplittingGapKey(splitKey);
-
-    try {
-      await splitAnnotation.mutateAsync({
-        id: annotation.id,
-        holeStartTime: gap.startTime,
-        holeEndTime: gap.endTime
-      });
-
-      showToast({
-        type: 'success',
-        message: `Split annotation at gap ${formatTime(gap.startTime)} - ${formatTime(gap.endTime)}.`
-      });
-    } catch (error) {
-      showToast({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to split annotation at this gap.'
-      });
-    } finally {
-      setSplittingGapKey((current) => (current === splitKey ? null : current));
-    }
-  }, [showToast, splitAnnotation]);
-
   const splitCandidateAnnotation = useMemo(() => {
     if (!annotationModalData || annotationModalData.mode === 'edit') return null;
     const { startTime, endTime } = annotationModalData;
@@ -631,126 +436,6 @@ export function DetailPage({ fileId }: DetailPageProps) {
       (ann) => ann.start_time < startTime && ann.end_time > endTime
     ) ?? null;
   }, [annotationModalData, annotations]);
-
-  const handleSplitAnnotationAtRegion = useCallback(async (
-    targetAnnotation: { id: number; song_name: string; start_time: number; end_time: number },
-    splitStartTime: number,
-    splitEndTime: number
-  ) => {
-    const splitStart = Number(splitStartTime.toFixed(3));
-    const splitEnd = Number(splitEndTime.toFixed(3));
-
-    if (splitStart <= targetAnnotation.start_time || splitEnd >= targetAnnotation.end_time || splitStart >= splitEnd) {
-      showToast({
-        type: 'error',
-        message: 'The selected split region must be strictly inside the existing annotation.'
-      });
-      return;
-    }
-
-    try {
-      await splitAnnotation.mutateAsync({
-        id: targetAnnotation.id,
-        holeStartTime: splitStart,
-        holeEndTime: splitEnd
-      });
-
-      showToast({
-        type: 'success',
-        message: `Split "${targetAnnotation.song_name}" into two segments with a hole from ${formatTime(splitStart)} to ${formatTime(splitEnd)}.`
-      });
-      setAnnotationModalData(null);
-    } catch (error) {
-      showToast({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to split annotation.'
-      });
-    }
-  }, [showToast, splitAnnotation]);
-
-  const handleTrimAnnotationGap = useCallback(async (
-    annotation: RollAnnotation,
-    gap: AnnotationGap,
-    gapIndex: number
-  ) => {
-    const action = getGapAction(gap, annotation);
-    if (action !== 'trim-start' && action !== 'trim-end') {
-      showToast({
-        type: 'error',
-        message: 'This gap cannot be trimmed automatically.'
-      });
-      return;
-    }
-
-    const splitKey = `${annotation.id}:${gapIndex}`;
-    setSplittingGapKey(splitKey);
-
-    try {
-      if (action === 'trim-end') {
-        await updateAnnotation.mutateAsync({
-          id: annotation.id,
-          data: { endTime: gap.startTime }
-        });
-        showToast({
-          type: 'success',
-          message: `Trimmed annotation end to ${formatTime(gap.startTime)}.`
-        });
-      } else {
-        await updateAnnotation.mutateAsync({
-          id: annotation.id,
-          data: { startTime: gap.endTime }
-        });
-        showToast({
-          type: 'success',
-          message: `Trimmed annotation start to ${formatTime(gap.endTime)}.`
-        });
-      }
-    } catch (error) {
-      showToast({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to trim annotation at this gap.'
-      });
-    } finally {
-      setSplittingGapKey((current) => (current === splitKey ? null : current));
-    }
-  }, [updateAnnotation.mutateAsync, showToast]);
-
-  const handleSnapBounds = useCallback(async (
-    annotation: RollAnnotation
-  ) => {
-    if (acousticNotes.length === 0) return;
-    const snapped = snapSegmentBoundaries(
-      annotation.start_time,
-      annotation.end_time,
-      acousticNotes,
-      { trimFlourish: false }
-    );
-    if (
-      Math.abs(snapped.startTime - annotation.start_time) < 0.02
-      && Math.abs(snapped.endTime - annotation.end_time) < 0.02
-    ) {
-      showToast({
-        type: 'success',
-        message: 'Annotation is already aligned with played notes.'
-      });
-      return;
-    }
-    try {
-      await updateAnnotation.mutateAsync({
-        id: annotation.id,
-        data: { startTime: snapped.startTime, endTime: snapped.endTime }
-      });
-      showToast({
-        type: 'success',
-        message: `Snapped bounds to ${formatTime(snapped.startTime)} - ${formatTime(snapped.endTime)}.`
-      });
-    } catch (error) {
-      showToast({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to snap bounds.'
-      });
-    }
-  }, [acousticNotes, updateAnnotation.mutateAsync, showToast]);
 
   // ---------------------------------------------------------------------------
   // Prediction and completion actions
@@ -784,7 +469,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
         onError: (error) => {
           showToast({
             type: 'error',
-            message: error instanceof Error ? error.message : 'Failed to run predictions for this file.'
+            message: errorMessage(error, 'Failed to run predictions for this file.')
           });
         }
       }
@@ -816,7 +501,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
     } catch (error) {
       showToast({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to promote prediction.'
+        message: errorMessage(error, 'Failed to promote prediction.')
       });
     }
   }, [promotePredictionReview.mutateAsync, selectedPredictionReviewId, showToast, updatePredictionReview.mutateAsync]);
@@ -846,7 +531,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
     } catch (error) {
       showToast({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to mark prediction invalid.'
+        message: errorMessage(error, 'Failed to mark prediction invalid.')
       });
     }
   }, [selectedPredictionReviewId, showToast, updatePredictionReview.mutateAsync]);
@@ -875,7 +560,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
         onError: (error) => {
           showToast({
             type: 'error',
-            message: error instanceof Error ? error.message : 'Failed to update file completion status.'
+            message: errorMessage(error, 'Failed to update file completion status.')
           });
         }
       }
@@ -898,7 +583,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
     return (
       <div className="p-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-700">Error loading file: {error instanceof Error ? error.message : 'Unknown error'}</p>
+          <p className="text-red-700">Error loading file: {errorMessage(error, 'Unknown error')}</p>
         </div>
       </div>
     );
@@ -930,124 +615,24 @@ export function DetailPage({ fileId }: DetailPageProps) {
         onCancel={handleAnnotationCancel}
         initialSongName={annotationModalData?.initialSongName}
         mode={annotationModalData?.mode ?? 'create'}
-        allowTimeEdit={annotationModalData?.mode === 'edit'}
+        allowTimeEdit={
+          annotationModalData?.mode === 'edit' || annotationModalData?.allowTimeEdit === true
+        }
         onSnapTimes={handleSnapTimes}
         splitTargetAnnotation={splitCandidateAnnotation}
-        onSplitAnnotation={handleSplitAnnotationAtRegion}
+        onSplitAnnotation={annotationActions.splitAtRegion}
       />
 
       {selectedPredictionReview && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={handleClosePredictionActionModal}
-        >
-          <div
-            className="w-full max-w-2xl rounded-lg bg-white shadow-xl overflow-hidden"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="border-b px-6 py-4 bg-gray-50">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Review Prediction</h2>
-                {(() => {
-                  // Calibrated against the bounds the model predicted, not any
-                  // edited bounds -- those are the reviewer's answer, and the
-                  // fit was trained on the prediction's own duration.
-                  const calibrated = calibratedConfidence(
-                    selectedPredictionReview.predicted_confidence,
-                    selectedPredictionReview.predicted_end_time
-                      - selectedPredictionReview.predicted_start_time
-                  )
-                  if (!calibrated) return null
-                  return (
-                    <span
-                      className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${
-                        CONFIDENCE_BADGE_CLASS[calibrated.band]
-                      }`}
-                      title={`${calibrated.label} estimated chance you confirm this, from the segment's evidence margin and length`}
-                    >
-                      {BAND_DESCRIPTIONS[calibrated.band]} &middot; {calibrated.label}
-                    </span>
-                  )
-                })()}
-              </div>
-              <p className="mt-1 text-base font-semibold text-gray-900">
-                {getPredictionDisplaySongName(selectedPredictionReview)}
-              </p>
-              <div className="mt-1 text-xs text-gray-600 flex items-center gap-2">
-                <span>
-                  {formatTime(getPredictionDisplayStart(selectedPredictionReview))} - {formatTime(getPredictionDisplayEnd(selectedPredictionReview))}
-                </span>
-                <span>•</span>
-                <span>
-                  {(getPredictionDisplayEnd(selectedPredictionReview) - getPredictionDisplayStart(selectedPredictionReview)).toFixed(1)}s duration
-                </span>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-3">
-              {/* Quick Jump onto Piano Roll */}
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-gray-500 font-medium">Jump on roll:</span>
-                <button
-                  type="button"
-                  onClick={() => handleSeek(getPredictionDisplayStart(selectedPredictionReview))}
-                  className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 font-medium transition-colors cursor-pointer"
-                >
-                  Start ({formatTime(getPredictionDisplayStart(selectedPredictionReview))})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSeek(getPredictionDisplayEnd(selectedPredictionReview))}
-                  className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 font-medium transition-colors cursor-pointer"
-                >
-                  End ({formatTime(getPredictionDisplayEnd(selectedPredictionReview))})
-                </button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-t bg-gray-50">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleClosePredictionActionModal}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
-                  disabled={isPredictionActionPending}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { void handleMarkInvalidReview(selectedPredictionReview); }}
-                  className="rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  disabled={isPredictionActionPending}
-                >
-                  {isPredictionActionPending ? 'Working...' : 'Mark Invalid'}
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => handleEditAndPromoteReview(selectedPredictionReview)}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                  disabled={isPredictionActionPending}
-                >
-                  <Edit3 className="w-4 h-4" />
-                  Edit & Promote
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { void handleConfirmAndPromoteReview(selectedPredictionReview); }}
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                  disabled={isPredictionActionPending}
-                >
-                  <Check className="w-4 h-4" />
-                  {isPredictionActionPending ? 'Working...' : 'Confirm & Promote'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PredictionReviewModal
+          review={selectedPredictionReview}
+          isPending={isPredictionActionPending}
+          onClose={handleClosePredictionActionModal}
+          onSeek={handleSeek}
+          onConfirmAndPromote={(review) => { void handleConfirmAndPromoteReview(review); }}
+          onEditAndPromote={handleEditAndPromoteReview}
+          onMarkInvalid={(review) => { void handleMarkInvalidReview(review); }}
+        />
       )}
 
       {/* File Info Header. One recording per day, so the date is the identity
@@ -1212,7 +797,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
               onHoverTimeChange={setHoveredRollTime}
               onPredictionClick={handleOpenPredictionActionModal}
               onAnnotationDelete={handleDeleteAnnotation}
-              onAnnotationResize={handleAnnotationResize}
+              onAnnotationResize={annotationActions.resize}
             />
             <FileOverview
               durationSec={duration}
@@ -1222,7 +807,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
               candidates={candidateRuns}
               isFileComplete={Boolean(file.isComplete)}
               onSeek={handleSeek}
-              onAnnotationResize={handleAnnotationResize}
+              onAnnotationResize={annotationActions.resize}
             />
             <DetailDeviceMarkers markers={deviceMarkers} onSeek={handleSeek} />
           </div>
@@ -1292,13 +877,13 @@ export function DetailPage({ fileId }: DetailPageProps) {
           <DetailAnnotationList
             annotations={annotations}
             gapsById={annotationGapsById}
-            splittingGapKey={splittingGapKey}
+            splittingGapKey={annotationActions.splittingGapKey}
             onSeek={handleSeek}
             onEdit={handleEditAnnotation}
             onDelete={handleDeleteAnnotation}
-            onSplitGap={handleSplitAnnotationGap}
-            onTrimGap={handleTrimAnnotationGap}
-            onSnapBounds={handleSnapBounds}
+            onSplitGap={annotationActions.splitAtGap}
+            onTrimGap={annotationActions.trimAtGap}
+            onSnapBounds={annotationActions.snapBounds}
           />
         </div>
       </div>

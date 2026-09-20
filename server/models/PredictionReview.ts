@@ -14,13 +14,10 @@ import type {
   PromotePredictionReviewResult,
   UpdatePredictionReviewData
 } from '@server/types';
+import { nowUnix } from '@utils/time';
 
 /** Type guard for validating untrusted status input. */
 export const isPredictionReviewStatus = isStatus;
-
-function nowUnix(): number {
-  return Math.floor(Date.now() / 1000);
-}
 
 function buildListWhere(filters: ListPredictionReviewsFilters): {
   whereSql: string;

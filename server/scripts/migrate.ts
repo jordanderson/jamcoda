@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { hasFlag, readArg } from '@core/cli/args';
 import { closeDatabase, initializeDatabase } from '../config/database';
+import { errorMessage } from '@core/errors';
 
 function usage() {
   console.log(`
@@ -39,6 +40,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Migration failed:', error instanceof Error ? error.message : error);
+  console.error('Migration failed:', errorMessage(error));
   process.exitCode = 1;
 });

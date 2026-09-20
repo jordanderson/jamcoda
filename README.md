@@ -134,8 +134,6 @@ Main tables:
 - All sounds use acoustic grand piano. The sampler loads no other instrument.
 - Samples come from the `sgm_plus` soundfont
   (`{pitch}_v{velocity}.mp3`, pitches 21-108, 8 velocity layers).
-- The service worker caches only grand piano soundfont assets (`public/soundfont-cache-sw.js`).
-- The sidebar shows cache registration and the cached asset count.
 - The piano roll draws its own SVG note rects (`src/components/midi/pianoRollGeometry.ts`).
 
 ## Development
@@ -252,7 +250,7 @@ Then:
 - `server/models/PredictionReview.ts`
 - `server/services/predictionImport.ts` — the prediction pipeline, shared by the
   API route and `ml:predict-import`
-- `ml/songSegmentation.ts`
+- `ml/songSegmentation.ts` (public surface over `ml/segmentation/`)
 
 Important behavior constraints:
 - File completion is authoritative and blocks `/api/prediction-reviews/run`.
@@ -293,10 +291,9 @@ The package is removed. Its three roles were replaced in place:
 | `SoundFontPlayer` | `src/audio/pianoSampler.ts` (Web Audio) |
 | `PianoRollSVGVisualizer` | `src/components/midi/pianoRollGeometry.ts` (SVG rects) |
 
-The sampler fetches the same soundfont URLs Magenta used, so existing service
-worker caches keep working. Removing the dependency also removed TensorFlow.js,
-protobufjs, and Tone.js from the tree: 361 → 257 packages, 485 MB → 239 MB
-installed.
+The sampler fetches the same soundfont URLs Magenta used. Removing the
+dependency also removed TensorFlow.js, protobufjs, and Tone.js from the tree:
+361 → 257 packages, 485 MB → 239 MB installed.
 
 ## License
 

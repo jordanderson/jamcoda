@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createNearestPrototypeScorer } from './prototypeScorer.js';
+import { createNearestPrototypeScorer } from './prototypeScorer';
 import { decodeWindowScores, predictWindowsFromSamples, scoreWindowsFromSamples, trainModelFromSamples,
-  type TrainConfig, type WindowSample } from './songSegmentation.js';
+  type TrainConfig, type WindowSample } from './songSegmentation';
 
 describe('contiguous nearest-prototype scoring', () => {
   it('exactly matches full-distance reference with interleaved labels, ties and absent labels', () => {

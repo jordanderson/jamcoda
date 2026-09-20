@@ -6,6 +6,7 @@ import { syncHighWaterMarkMigration } from './003-sync-high-water-mark';
 import { bookmarksMigration } from './004-file-bookmarks';
 import { skipsMigration } from './005-file-skips';
 import { dropIgnoredSectionsMigration } from './006-drop-ignored-sections';
+import { nowUnix } from '@utils/time';
 
 /**
  * All migrations, in application order. New migrations should be added as
@@ -19,10 +20,6 @@ const migrations: Migration[] = [
   skipsMigration,
   dropIgnoredSectionsMigration
 ];
-
-function nowUnix(): number {
-  return Math.floor(Date.now() / 1000);
-}
 
 export function runMigrations(db: Database.Database): MigrationResult {
   db.exec(`

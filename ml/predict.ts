@@ -7,7 +7,7 @@ import {
   predictWindows,
   windowsToSegments,
   type PredictConfig
-} from './songSegmentation.js';
+} from './songSegmentation';
 import { writeFileSync } from 'node:fs';
 
 interface OutputPayload {

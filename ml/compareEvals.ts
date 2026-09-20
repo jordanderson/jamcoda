@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { ensureDirForFile, hasFlag, parseInt_, readArg } from '@core/cli/args';
-import { compareReports, type ComparableReport } from './evalComparison.js';
+import { compareReports, type ComparableReport } from './evalComparison';
+import { errorMessage } from '@core/errors';
 
 /**
  * Paired comparison of two `ml:eval` reports.
@@ -91,6 +92,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Compare failed:', error instanceof Error ? error.message : error);
+  console.error('Compare failed:', errorMessage(error));
   process.exitCode = 1;
 });

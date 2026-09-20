@@ -1,4 +1,4 @@
-import type { AnnotationInterval, SongSegment } from './songSegmentation.js';
+import type { AnnotationInterval, SongSegment } from './songSegmentation';
 
 export interface BoundaryMatch {
   fileId: number;
