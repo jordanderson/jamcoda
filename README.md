@@ -23,7 +23,7 @@ Recordings containing no notes are not imported — the device sometimes opens
 and closes assets without recording — and the sync summary reports how many
 were ignored.
 
-Files land in `#/browse` with annotation progress, an unreviewed prediction
+Files are listed in `#/browse` with annotation progress, an unreviewed prediction
 count, and song chips that jump to a timestamp. Sort by date or by most
 unreviewed predictions.
 
@@ -37,10 +37,8 @@ edited, split at a silent gap, trimmed, or snapped to the notes actually played.
 The device's own markers — passage bookmarks and the silence gaps it recorded —
 appear on the roll and as chips below it that jump to their time.
 
-`Mark Complete` declares the remaining unannotated time to be improvisation.
-This matters beyond bookkeeping — training draws its "no song" examples only
-from complete files. Marking a file complete also clears its predictions and
-blocks further prediction runs until it is marked incomplete.
+`Mark Complete` declares the remaining unannotated time to be unusable for song predictions.
+Marking a file complete also clears its predictions and blocks further prediction runs until it is marked incomplete.
 
 ### Review predictions
 
@@ -75,9 +73,7 @@ Month), with top-song bars, a practice-over-time trend, and a sortable table.
 since the model was built, or when songs exist that the model has never seen.
 
 `Rebuild Model + Re-score`, in Settings, also re-runs predictions for files
-whose unpromoted proposals are all still `unsure`. The model never retrains in
-the background: these two buttons and a song rename are the only things that
-rebuild it.
+whose unpromoted proposals are all still `unsure`.
 
 ## Getting started
 
@@ -94,17 +90,15 @@ npm run setup
 ```
 
 `npm run setup` asks where your Jamcorder is and where to keep your data, then
-writes `.env`. Press Enter to accept each default. It checks that the device
-answers, so a typo or an offline device surfaces now rather than at first sync
-— the check is advisory, and you can save an address for a device that is not
-switched on yet. Re-run it any time; your current answers become the defaults.
+writes `.env`. Press Enter to accept each default. Re-run it any time;
+your latest answers become the defaults.
 
 To do it by hand, copy `.env.example` to `.env` and edit. Skipping setup
 entirely also works: the defaults below apply.
 
 > `better-sqlite3` is a native module, and its compiled binary is tied to the
 > Node major version that installed it. Installing under a different major
-> leaves the server failing at startup with `ERR_DLOPEN_FAILED` and a
+> may leave the server failing at startup with `ERR_DLOPEN_FAILED` and a
 > `NODE_MODULE_VERSION` mismatch. Typecheck, build and the client are all
 > unaffected, which makes the cause easy to miss. Fix with
 > `nvm use && npm rebuild better-sqlite3`.
@@ -180,12 +174,10 @@ Run them by hand with `npm run db:migrate`, adding
 
 Playback uses a small Web Audio sampler (`src/audio/pianoSampler.ts`) with no
 audio dependencies. Everything is normalized to acoustic grand piano regardless
-of the MIDI program; the sampler loads no other instrument. Samples come from
-the `sgm_plus` soundfont that Google's Magenta project hosts
-(`p{pitch}_v{velocity}.mp3`, pitches 21-108, eight velocity layers). Before a
-recording plays, the sampler downloads the samples it needs and keeps them in
-memory for the session; the browser's cache serves them after that. The piano
-roll draws its own SVG note rects.
+of the MIDI program. Samples come from the `sgm_plus` soundfont that Google's
+Magenta project hosts (`p{pitch}_v{velocity}.mp3`, pitches 21-108, eight velocity layers).
+Before a recording plays, the sampler downloads the samples it needs and keeps them in
+memory for the session; the browser's cache serves them after that.
 
 ## Architecture
 
@@ -201,22 +193,17 @@ roll draws its own SVG note rects.
   surface over `ml/segmentation/`.
 - `scripts/` — `npm run setup`.
 
-`AGENTS.md` is the working runbook: shared helpers, conventions, and the
-invariants that must hold across tiers. Read it before changing behavior that
-exists on more than one side of a boundary.
-
 ## Documentation
 
 - [JamCoda overview](https://jordanderson.github.io/jamcoda/) — what it does,
   with screenshots ([source](docs/index.html)).
-- [How JamCoda finds the songs](https://jordanderson.github.io/jamcoda/how-jamcoda-works.html)
+- [How JamCoda works](https://jordanderson.github.io/jamcoda/how-jamcoda-works.html)
   — an illustrated walkthrough of the segmentation pipeline
   ([source](docs/how-jamcoda-works.html)).
 - [`ml/README.md`](ml/README.md) — model commands, settings and evaluation.
 - [`ml/CHANGELOG.md`](ml/CHANGELOG.md) — model versions and the experiments
   behind them.
-- [`API_NOTES.md`](API_NOTES.md) — Jamcorder device behavior the official docs
-  do not cover.
+- [`API_NOTES.md`](API_NOTES.md) — Jamcorder device behavior we've learned from experience.
 - [`AGENTS.md`](AGENTS.md) — repo runbook and invariants.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`STYLE_GUIDE.md`](STYLE_GUIDE.md) —
   contribution workflow and UI design rules.
