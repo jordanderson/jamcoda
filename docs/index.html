@@ -4,32 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>JamCoda documentation</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,600;6..96,700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;450;500;600&amp;display=swap">
 <style>
   :root {
-    --ground: #f0efec;
+    --ground: #f3f4f6;
     --surface: #ffffff;
-    --sunk: #e7e5e1;
-    --ink: #1a1e25;
-    --muted: #5e6572;
-    --faint: #868d99;
-    --rule: #d6d4cf;
-    --brass: #a86c17;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ground: #14171c;
-      --surface: #1b1f26;
-      --sunk: #101317;
-      --ink: #e9e7e2;
-      --muted: #99a1af;
-      --faint: #737b88;
-      --rule: #2b3039;
-      --brass: #e0a542;
-    }
+    --sunk: #f9fafb;
+    --ink: #111827;
+    --body: #4b5563;
+    --muted: #6b7280;
+    --faint: #6b7280;
+    --rule: #e5e7eb;
+    --accent: #4f46e5;
+    --accent-hover: #4338ca;
   }
 
   * { box-sizing: border-box; }
@@ -37,60 +23,60 @@
   body {
     margin: 0;
     background: var(--ground);
-    color: var(--ink);
-    font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 16.5px;
-    line-height: 1.62;
+    color: var(--body);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
   }
 
   h1, h2 {
-    font-family: "Bodoni Moda", "Didot", Georgia, serif;
+    font-family: inherit;
     font-weight: 600;
+    color: var(--ink);
     text-wrap: balance;
     margin: 0;
-    letter-spacing: -0.005em;
+    letter-spacing: -0.01em;
   }
-  h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); line-height: 1.04; }
+  h1 { font-size: clamp(2.1rem, 5vw, 3rem); line-height: 1.1; }
   p { margin: 0; }
-  code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .88em; }
-  a { color: var(--brass); text-decoration-thickness: 1px; text-underline-offset: 2px; }
-  :focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; border-radius: 2px; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: .9em; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:hover { color: var(--accent-hover); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
 
   .wrap { width: min(100% - 3rem, 760px); margin-inline: auto; }
 
   .eyebrow {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-size: .715rem;
-    letter-spacing: .12em;
-    text-transform: uppercase;
+    font-size: .8rem;
+    font-weight: 500;
     color: var(--faint);
   }
 
   .mark {
-    font-family: "IBM Plex Mono", monospace; font-size: .76rem;
-    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+    font-size: .85rem;
+    color: var(--muted);
     display: flex; align-items: center; gap: .55rem;
     padding: 1.4rem 0;
   }
   .mark b { color: var(--ink); font-weight: 600; }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brass); flex: none; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 
-  .hero { padding: 3rem 0 2rem; display: grid; gap: 1.1rem; }
+  .hero { padding: 2.5rem 0 2rem; display: grid; gap: 1rem; }
   .standfirst { font-size: 1.1rem; color: var(--muted); }
 
   .card {
     display: block;
     background: var(--surface);
     border: 1px solid var(--rule);
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 1.4rem 1.5rem;
     text-decoration: none;
     color: inherit;
-    transition: border-color .15s ease, transform .15s ease;
+    transition: border-color .15s ease;
   }
-  .card:hover { border-color: var(--brass); transform: translateY(-1px); }
-  .card h2 { font-size: 1.5rem; }
+  .card:hover { border-color: var(--accent); }
+  .card h2 { font-size: 1.35rem; }
   .card p { margin-top: .5rem; color: var(--muted); }
 
   .more {
@@ -112,8 +98,7 @@
   <section class="hero">
     <p class="eyebrow">Documentation</p>
     <h1>How JamCoda works</h1>
-    <p class="standfirst">Standalone write-ups produced alongside the code. Each one opens
-    directly in the browser.</p>
+    <p class="standfirst">Notes on how JamCoda works, kept next to the code.</p>
   </section>
 
   <main>
@@ -127,7 +112,7 @@
       <p>Source and reference material live in the repository:
         <a href="https://github.com/jordanderson/jamcoda">github.com/jordanderson/jamcoda</a>.</p>
       <p>Model commands and settings: <a href="https://github.com/jordanderson/jamcoda/blob/main/ml/README.md">ml/README.md</a>.
-        Device behaviour notes: <a href="https://github.com/jordanderson/jamcoda/blob/main/API_NOTES.md">API_NOTES.md</a>.</p>
+        Device behavior notes: <a href="https://github.com/jordanderson/jamcoda/blob/main/API_NOTES.md">API_NOTES.md</a>.</p>
     </div>
   </main>
 
