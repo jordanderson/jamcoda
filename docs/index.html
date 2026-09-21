@@ -1,122 +1,940 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>JamCoda documentation</title>
-<style>
-  :root {
-    --ground: #f3f4f6;
-    --surface: #ffffff;
-    --sunk: #f9fafb;
-    --ink: #111827;
-    --body: #4b5563;
-    --muted: #6b7280;
-    --faint: #6b7280;
-    --rule: #e5e7eb;
-    --accent: #4f46e5;
-    --accent-hover: #4338ca;
-  }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>JamCoda</title>
+    <meta
+      name="description"
+      content="JamCoda turns a Jamcorder practice recording into a journal of what you played: takes, songs, and the time behind them."
+    />
+    <style>
+      :root {
+        --ground: #f3f4f6;
+        --surface: #ffffff;
+        --sunk: #f9fafb;
+        --ink: #111827;
+        --body: #4b5563;
+        --muted: #6b7280;
+        --faint: #6b7280;
+        --rule: #e5e7eb;
+        --accent: #4f46e5;
+        --accent-hover: #4338ca;
+      }
 
-  * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
 
-  body {
-    margin: 0;
-    background: var(--ground);
-    color: var(--body);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    font-size: 16px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-  }
+      body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--body);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+          sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
 
-  h1, h2 {
-    font-family: inherit;
-    font-weight: 600;
-    color: var(--ink);
-    text-wrap: balance;
-    margin: 0;
-    letter-spacing: -0.01em;
-  }
-  h1 { font-size: clamp(2.1rem, 5vw, 3rem); line-height: 1.1; }
-  p { margin: 0; }
-  code, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: .9em; }
-  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
-  a:hover { color: var(--accent-hover); }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+      #page {
+        --wide: 1080px;
+      }
 
-  .wrap { width: min(100% - 3rem, 760px); margin-inline: auto; }
+      h1,
+      h2,
+      h3 {
+        font-family: inherit;
+        font-weight: 600;
+        color: var(--ink);
+        text-wrap: balance;
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
+      h1 {
+        font-size: clamp(2.2rem, 5vw, 3.2rem);
+        line-height: 1.08;
+      }
+      h2 {
+        font-size: clamp(1.5rem, 3vw, 2rem);
+        line-height: 1.15;
+      }
+      h3 {
+        font-size: 1.1rem;
+        line-height: 1.3;
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+      p {
+        margin: 0;
+      }
 
-  .eyebrow {
-    font-size: .8rem;
-    font-weight: 500;
-    color: var(--faint);
-  }
+      .eyebrow {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--faint);
+        margin: 0;
+      }
+      code,
+      .mono {
+        font-family:
+          ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.9em;
+      }
+      code {
+        background: var(--sunk);
+        padding: 0.09em 0.34em;
+        border-radius: 3px;
+        color: var(--ink);
+      }
+      strong {
+        font-weight: 600;
+      }
+      a {
+        color: var(--accent);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+      }
+      a:hover {
+        color: var(--accent-hover);
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+        border-radius: 2px;
+      }
 
-  .mark {
-    font-size: .85rem;
-    color: var(--muted);
-    display: flex; align-items: center; gap: .55rem;
-    padding: 1.4rem 0;
-  }
-  .mark b { color: var(--ink); font-weight: 600; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+      .wrap {
+        width: min(100% - 3rem, var(--wide));
+        margin-inline: auto;
+      }
+      header.bar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: var(--ground);
+        border-bottom: 1px solid var(--rule);
+      }
+      .bar-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.5rem;
+        padding: 0.68rem 0;
+        flex-wrap: wrap;
+      }
+      .mark {
+        font-size: 0.85rem;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+      }
+      .mark b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        flex: none;
+      }
+      .bar-inner a {
+        font-size: 0.85rem;
+      }
 
-  .hero { padding: 2.5rem 0 2rem; display: grid; gap: 1rem; }
-  .standfirst { font-size: 1.1rem; color: var(--muted); }
+      .hero {
+        padding: 3.5rem 0 2rem;
+      }
+      .hero .col {
+        display: grid;
+        gap: 1.2rem;
+      }
+      .standfirst {
+        font-size: 1.1rem;
+        color: var(--muted);
+      }
+      .standfirst b {
+        color: var(--ink);
+        font-weight: 600;
+      }
 
-  .card {
-    display: block;
-    background: var(--surface);
-    border: 1px solid var(--rule);
-    border-radius: 6px;
-    padding: 1.4rem 1.5rem;
-    text-decoration: none;
-    color: inherit;
-    transition: border-color .15s ease;
-  }
-  .card:hover { border-color: var(--accent); }
-  .card h2 { font-size: 1.35rem; }
-  .card p { margin-top: .5rem; color: var(--muted); }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(152px, 1fr));
+        border-top: 1px solid var(--rule);
+        border-bottom: 1px solid var(--rule);
+        margin-top: 2.4rem;
+      }
+      .stat {
+        padding: 1.05rem 1.2rem 1.15rem;
+        border-right: 1px solid var(--rule);
+      }
+      .stat:last-child {
+        border-right: 0;
+      }
+      .stat b {
+        display: block;
+        font-size: 1.7rem;
+        font-weight: 600;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        color: var(--ink);
+      }
+      .stat span {
+        display: block;
+        margin-top: 0.42rem;
+        font-size: 0.78rem;
+        color: var(--muted);
+        line-height: 1.35;
+      }
 
-  .more {
-    margin-top: 2.4rem;
-    padding-top: 1.4rem;
-    border-top: 1px solid var(--rule);
-    color: var(--muted);
-    font-size: .95rem;
-    display: grid;
-    gap: .5rem;
-  }
-  footer { padding: 3.5rem 0 3rem; color: var(--faint); font-size: .85rem; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="mark"><span class="dot"></span><b>JamCoda</b> docs</div>
+      figure {
+        margin: 0;
+        display: grid;
+        gap: 0.75rem;
+      }
+      .shot {
+        display: block;
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        overflow: hidden;
+        transition: border-color 0.15s ease;
+      }
+      .shot:hover {
+        border-color: var(--accent);
+      }
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .shot.narrow {
+        width: min(100%, 520px);
+        justify-self: center;
+      }
+      figcaption {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 600;
+      }
 
-  <section class="hero">
-    <p class="eyebrow">Documentation</p>
-    <h1>How JamCoda works</h1>
-    <p class="standfirst">Notes on how JamCoda works, kept next to the code.</p>
-  </section>
+      .stages {
+        display: grid;
+        gap: 0;
+      }
+      .stage {
+        padding: 3.1rem 0;
+        border-top: 1px solid var(--rule);
+      }
+      .stage-head {
+        display: grid;
+        gap: 0.55rem;
+        margin-bottom: 1.6rem;
+      }
+      .stage-head .num {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--accent);
+      }
+      .stage-head .num span {
+        color: var(--faint);
+      }
+      .stage-head p.sub {
+        color: var(--muted);
+        font-size: 0.95rem;
+        margin-top: 0.1rem;
+      }
 
-  <main>
-    <a class="card" href="how-jamcoda-works.html">
-      <h2>How JamCoda finds the songs</h2>
-      <p>An illustrated walkthrough of the segmentation pipeline: how a session recording
-      becomes individual songs.</p>
-    </a>
+      .note {
+        border-left: 3px solid var(--accent);
+        padding: 0.1rem 0 0.1rem 1.05rem;
+        color: var(--muted);
+        font-size: 0.93rem;
+      }
+      .note b {
+        color: var(--ink);
+        font-weight: 600;
+      }
 
-    <div class="more">
-      <p>Source and reference material live in the repository:
-        <a href="https://github.com/jordanderson/jamcoda">github.com/jordanderson/jamcoda</a>.</p>
-      <p>Model commands and settings: <a href="https://github.com/jordanderson/jamcoda/blob/main/ml/README.md">ml/README.md</a>.
-        Device behavior notes: <a href="https://github.com/jordanderson/jamcoda/blob/main/API_NOTES.md">API_NOTES.md</a>.</p>
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .cards > article {
+        background: var(--surface);
+        padding: 1.2rem 1.25rem 1.3rem;
+        display: grid;
+        gap: 0.55rem;
+        align-content: start;
+      }
+      .cards h3 {
+        font-size: 1rem;
+      }
+      .cards p {
+        font-size: 0.89rem;
+        color: var(--muted);
+      }
+      .cards .rule-no {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--accent);
+      }
+
+      .loop {
+        display: flex;
+        align-items: stretch;
+        gap: 0.9rem;
+      }
+      .loop > article {
+        flex: 1 1 0;
+        background: var(--surface);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 1.2rem 1.25rem 1.3rem;
+        display: grid;
+        gap: 0.55rem;
+        align-content: start;
+      }
+      .loop h3 {
+        font-size: 1rem;
+      }
+      .loop p {
+        font-size: 0.89rem;
+        color: var(--muted);
+      }
+      .loop .rule-no {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--accent);
+      }
+      .loop .arrow {
+        flex: none;
+        align-self: center;
+        color: var(--accent);
+        font-size: 1.15rem;
+        line-height: 1;
+      }
+      @media (max-width: 720px) {
+        .loop {
+          flex-direction: column;
+          gap: 0.7rem;
+        }
+        .loop .arrow {
+          align-self: center;
+          transform: rotate(90deg);
+        }
+      }
+
+      .prose {
+        display: grid;
+        gap: 1rem;
+      }
+      .stage > figure,
+      .stage > .cards,
+      .stage > .loop,
+      .stage > .note {
+        margin-block: 1.5rem;
+      }
+      .stage > .prose + .prose {
+        margin-top: 1rem;
+      }
+
+      footer {
+        border-top: 1px solid var(--rule);
+        padding: 2.4rem 0 3.4rem;
+        color: var(--faint);
+        font-size: 0.82rem;
+      }
+      footer .col {
+        display: grid;
+        gap: 0.5rem;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="page">
+      <header class="bar">
+        <div class="wrap bar-inner">
+          <p class="mark">
+            <span class="dot"></span><b>JamCoda</b> &nbsp; A practice journal for
+            the Jamcorder
+          </p>
+          <a href="how-jamcoda-works.html">How it finds the songs →</a>
+        </div>
+      </header>
+
+      <main class="wrap">
+        <section class="hero">
+          <div class="col">
+            <p class="eyebrow">Overview</p>
+            <h1>What you actually practiced</h1>
+            <p class="standfirst">
+              A Jamcorder saves a practice session as one long recording: two
+              run-throughs of the piece you are learning, four attempts at the
+              bar that keeps going wrong, and a good deal of playing for its own
+              sake. <b>JamCoda turns that into a list of takes</b> — which song,
+              where it starts, how long it lasted — and then into a picture of
+              what you have been working on.
+            </p>
+            <p>
+              It runs on your own computer. Recordings come off the device over
+              your network into a folder and a small database that belong to
+              you. There is no account, and nothing is uploaded anywhere. The
+              screenshots below are from a real library.
+            </p>
+          </div>
+          <div class="stats">
+            <div class="stat">
+              <b>58h 47m</b><span>Practice time in this library</span>
+            </div>
+            <div class="stat">
+              <b>83</b><span>Pieces it has seen you play</span>
+            </div>
+            <div class="stat">
+              <b>162</b><span>Days with a recording</span>
+            </div>
+            <div class="stat">
+              <b>Local</b
+              ><span>Recordings, labels and model stay on your machine</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="stages">
+          <section class="stage">
+            <div class="stage-head col">
+              <h2>The short version</h2>
+              <p class="sub">
+                New sessions come off the Jamcorder into your library. After
+                that, three things go round.
+              </p>
+            </div>
+            <div class="loop">
+              <article>
+                <p class="rule-no">01</p>
+                <h3>Label</h3>
+                <p>
+                  You mark where a take starts and ends, and give it the name of
+                  the piece.
+                </p>
+              </article>
+              <span class="arrow" aria-hidden="true">→</span>
+              <article>
+                <p class="rule-no">02</p>
+                <h3>Suggest</h3>
+                <p>
+                  JamCoda looks through your other recordings for the pieces it
+                  has learned from you, and proposes where each take begins and
+                  ends.
+                </p>
+              </article>
+              <span class="arrow" aria-hidden="true">→</span>
+              <article>
+                <p class="rule-no">03</p>
+                <h3>Review</h3>
+                <p>
+                  You keep, adjust or reject each suggestion. Everything you keep
+                  becomes a label like any other.
+                </p>
+              </article>
+            </div>
+            <div class="note">
+              <p>
+                <b>↻ And back to labeling.</b> Each round leaves JamCoda knowing
+                your repertoire a little better, so the next one arrives with
+                more of it already named — and a piece it has never been shown
+                stays unnamed until you label a take of it yourself.
+              </p>
+            </div>
+          </section>
+
+          <section class="stage">
+            <div class="stage-head col">
+              <h2>Every session in one list</h2>
+              <p class="sub">
+                The Library is where you land, and where you can see how far
+                through your recordings you are.
+              </p>
+            </div>
+            <div class="prose">
+              <p>
+                Each row is one session: the date the Jamcorder recorded it, the
+                filename it gave it, and how long it runs. The middle columns
+                say where you stand with it. A green <b>Complete</b> badge means
+                you have decided everything worth naming in that recording has
+                been named; before that, a bar shows how much of the session is
+                covered. Beside it is the number of suggestions still waiting
+                for you.
+              </p>
+              <p>
+                On the right, the session itself, one chip per take: the name of
+                the piece and the minute it begins. Click a chip and the
+                recording opens at that moment.
+              </p>
+              <p>
+                A row is readable on its own. The August 1 session runs 52:51
+                and holds twenty-two takes — a couple of passes at Maple Leaf Rag
+                to warm up, a stretch on Etude No 2, five passes at Bethena in
+                the middle, Maple Leaf Rag again at the end. Directly above it,
+                August 2 is four minutes long and contains a single take of
+                Bethena.
+              </p>
+            </div>
+            <figure>
+              <a class="shot" href="images/library.jpg">
+                <img
+                  src="images/library.jpg"
+                  width="2780"
+                  height="1346"
+                  alt="The JamCoda library: a sidebar with Library, Songs and Analytics, and a table of recordings by date, each row showing duration, a Complete badge, an unreviewed count, and colored chips naming the takes found in that session."
+                />
+              </a>
+              <figcaption>
+                <b>Library</b> — one row per session, newest first. The chips are
+                the takes inside it; clicking one opens the recording at that
+                timestamp.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section class="stage">
+            <div class="stage-head col">
+              <h2>Inside a recording</h2>
+              <p class="sub">
+                Where the labeling happens, and where you listen back.
+              </p>
+            </div>
+            <div class="prose">
+              <p>
+                Opening a session shows what was played. Notes run left to right
+                in time and bottom to top in pitch, with the playhead down the
+                left. Press play and you hear it back on a piano, whatever sound
+                the original was recorded with.
+              </p>
+              <p>
+                Naming a take is the main work. Play until you hear a piece
+                begin, press <b>Start</b>, let it run to the end of the take,
+                press <b>End</b>, then give it a name — or drag across the roll
+                and nudge the edges afterward. <code>P</code> plays,
+                <code>S</code> and <code>E</code> set the two edges.
+                <b>Following</b> keeps the view moving with the music, and the
+                colored bar under the roll is the take you are currently inside.
+              </p>
+              <p>
+                Under that, <b>Whole recording</b> is the entire 52:51 at a
+                glance — all twenty-two takes, colored by piece. Click a block
+                to jump to it, drag an edge to change where it starts or ends.
+                The <b>device markers</b> below are the Jamcorder’s own: points
+                you bookmarked while playing, and the long silences it noticed.
+                They are a good way to find the seams between takes.
+              </p>
+              <p>
+                The empty lane reading <b>No predictions</b> is empty on purpose.
+                This session has been marked complete, so JamCoda has cleared its
+                suggestions and won’t make new ones for it. Marking a session
+                complete is worth doing for another reason too: it tells JamCoda
+                that the unlabeled stretches in that file really were you
+                playing around, rather than takes nobody got around to naming —
+                which is how it learns when to stay quiet.
+              </p>
+            </div>
+            <figure>
+              <a class="shot" href="images/annotated_file.jpg">
+                <img
+                  src="images/annotated_file.jpg"
+                  loading="lazy"
+                  width="2230"
+                  height="1298"
+                  alt="A fully labeled session open in JamCoda: transport controls with Start, End and Following buttons, a piano roll of the notes, a pink annotation bar for Maple Leaf Rag, an empty predictions lane, a whole-recording strip of twenty-two colored takes, and clickable device markers."
+                />
+              </a>
+              <figcaption>
+                <b>A labeled session</b> — the piano roll, the take you are
+                inside, and the whole 52-minute recording summarized underneath.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section class="stage">
+            <div class="stage-head col">
+              <h2>Suggestions on a session you haven’t touched</h2>
+              <p class="sub">
+                The same view, on a recording with nothing labeled in it yet.
+              </p>
+            </div>
+            <div class="prose">
+              <p>
+                Here the top lane says <b>No annotations yet</b>, and the lane
+                below it holds fifteen suggestions: Pathetique, Turkish March,
+                Waltz in A, Bethena, Bink’s Waltz, Blue Danube — forty-three
+                minutes of practice, proposed as takes.
+              </p>
+              <p>
+                They come from a model built out of your own labeling. It knows
+                the pieces you have named before and nothing else, so it will
+                recognize Bethena in a recording it has never seen, and stay
+                quiet about something you sight-read for the first time that day.
+              </p>
+              <p>
+                Each suggestion carries a percentage. That number is not the
+                model rating its own cleverness; it is an estimate, based on
+                which suggestions you have accepted in the past, of how likely
+                you are to accept this one. Long, steady spans read high; short
+                scraps read low.
+              </p>
+              <p>
+                Clicking a suggestion opens it for review. Listen to it, then
+                keep it as it stands, fix the name or the edges first, or throw
+                it out. Anything you keep becomes an ordinary label, no different
+                from one you made by hand — and part of what the next rebuild
+                learns from.
+              </p>
+            </div>
+            <figure>
+              <a class="shot" href="images/only_predicted.jpg">
+                <img
+                  src="images/only_predicted.jpg"
+                  loading="lazy"
+                  width="2368"
+                  height="1236"
+                  alt="An unlabeled session in JamCoda: the annotations lane reads No annotations yet, while the predictions lane below shows fifteen proposed takes named Pathetique, Turkish March, Waltz in A, Bethena, Bink's Waltz and Blue Danube, the first labeled Pathetique 89%."
+                />
+              </a>
+              <figcaption>
+                <b>Suggestions</b> — fifteen proposed takes across a
+                forty-three-minute session. The percentage is how likely you are
+                to accept the suggestion, going by the ones you have accepted
+                before.
+              </figcaption>
+            </figure>
+            <div class="note">
+              <p>
+                <b>How does it recognize anything?</b>
+                <a href="how-jamcoda-works.html"
+                  >How JamCoda finds the songs</a
+                >
+                is the illustrated version: how a recording is cut into short
+                windows, what each one is compared against, and how the parts it
+                recognizes are joined back into takes. It is the technical
+                companion to this page.
+              </p>
+            </div>
+          </section>
+
+          <section class="stage">
+            <div class="stage-head col">
+              <h2>If a session comes back wrong</h2>
+              <p class="sub">
+                Prediction Lab, for the cases you can see with your own eyes.
+              </p>
+            </div>
+            <div class="prose">
+              <p>
+                Most of the time there is nothing to adjust. Now and then a
+                session comes back visibly off — one take arriving in three
+                pieces, or a take swallowing the noodling that followed it — and
+                this panel, folded away at the bottom of the same page, lets you
+                try something else before committing to it.
+              </p>
+              <p>
+                The first row tidies up the result after the model has had its
+                say: the shortest span allowed to count as a piece, how close two
+                fragments of the same piece must be before they are treated as
+                one take, how sure it has to be to keep a span at all. The second
+                group changes how the parts it recognized are joined together;
+                it re-reads the same model rather than rebuilding anything, so
+                two runs that differ only here are directly comparable.
+              </p>
+              <p>
+                Each box shows the value currently in use, and typing over one
+                applies only to the next preview. <b>Preview</b> draws the result
+                along the bottom, next to what is stored, and forgets it the
+                moment you leave the page. Nothing here retrains the model, and
+                nothing replaces your suggestions until you ask for a real run.
+              </p>
+            </div>
+            <figure>
+              <a class="shot" href="images/prediction_lab.jpg">
+                <img
+                  src="images/prediction_lab.jpg"
+                  loading="lazy"
+                  width="2274"
+                  height="1184"
+                  alt="The Prediction Lab panel: a Segment shaping row with minimum segment, merge gap and confidence fields, a Decoding group with link policy and related settings, Preview and Reset to defaults buttons, and a strip showing the twenty takes currently in the review queue."
+                />
+              </a>
+              <figcaption>
+                <b>Prediction Lab</b> — try a setting, preview what it would
+                produce, and compare it with the suggestions already stored.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section class="stage">
+            <div class="stage-head col">
+              <h2>Keeping it fed</h2>
+              <p class="sub">Two buttons, both deliberately manual.</p>
+            </div>
+            <div class="prose">
+              <p>
+                <b>Sync Now</b> fetches whatever the Jamcorder has recorded since
+                last time. Sessions already on your machine are skipped, and the
+                empty files the device sometimes leaves behind — opened and
+                closed without a note in them — are ignored rather than filling
+                up your library. A full re-sync re-checks everything, for when a
+                recording needs collecting again.
+              </p>
+              <p>
+                <b>Rebuild Model + Re-score</b> takes every label you have made,
+                including all the suggestions you accepted, builds a fresh model
+                from them, and runs it over the sessions whose suggestions you
+                have not acted on yet. It can take a while, so it happens when
+                you say so and not before. The button in the sidebar picks up a
+                badge when your labeling has moved on since the model was built,
+                or when a piece has appeared that it has never seen.
+              </p>
+            </div>
+            <figure>
+              <a class="shot narrow" href="images/settings.jpg">
+                <img
+                  src="images/settings.jpg"
+                  loading="lazy"
+                  width="968"
+                  height="756"
+                  alt="The Settings dialog: a Sync section with a Sync Now button, a full re-sync option, the time of the last sync and the connected device address, and a Model section with a Rebuild Model and Re-score button."
+                />
+              </a>
+              <figcaption>
+                <b>Settings</b> — collecting new recordings, and folding your
+                review work back into the model.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section class="stage">
+            <div class="stage-head col">
+              <h2>It gets easier as it goes</h2>
+              <p class="sub">
+                The slow part is at the beginning, and you only do it once.
+              </p>
+            </div>
+            <div class="prose">
+              <p>
+                The first few sessions are all hand work. There is nothing to
+                learn from yet, so every take gets named by you — and marking
+                those early recordings complete is what teaches JamCoda the
+                difference between a piece and ten minutes of playing around.
+              </p>
+              <p>
+                After that it compounds. Every take you name, and every
+                suggestion you accept, is another example of how you play that
+                piece, so the next rebuild knows your repertoire a little
+                better. A session that would once have arrived blank arrives
+                mostly named, and the work changes shape: less labeling, more
+                listening and confirming. A new piece needs only a handful of
+                named takes before it starts turning up on its own; something
+                you have been playing for months is usually found without you
+                doing anything at all.
+              </p>
+              <p>
+                The practical version: an hour spent labeling this month is not
+                an hour you spend again next month. It is what makes a library
+                this size — 83 pieces across 162 days of recordings — something
+                you can keep on top of.
+              </p>
+            </div>
+          </section>
+
+          <section class="stage">
+            <div class="stage-head col">
+              <h2>What it adds up to</h2>
+              <p class="sub">
+                The reason for all the labeling: a straight answer to “what have
+                I actually been playing?”
+              </p>
+            </div>
+            <div class="prose">
+              <p>
+                Pick a stretch of time — the last month, the last six, all of it
+                — and Analytics adds up the takes inside it. Four numbers at the
+                top: total practice time, how many different pieces you touched,
+                how many days you sat down and the average per day, and the piece
+                that took the most time along with its share of the total.
+              </p>
+              <p>
+                Under them, the pieces ranked by time, with the number of
+                separate takes beside each: 146 run-throughs of Maple Leaf Rag
+                over ten hours, 139 of Bethena over eight and a half. Clicking a bar
+                picks that piece out of the chart below it; the small icon at
+                the end of the bar opens it in the Songs view, where you can
+                play its takes from different sessions one after another.
+              </p>
+            </div>
+            <figure>
+              <a class="shot" href="images/analytics_top_songs.jpg">
+                <img
+                  src="images/analytics_top_songs.jpg"
+                  loading="lazy"
+                  width="2356"
+                  height="1356"
+                  alt="The Analytics page: range and grouping controls, summary tiles reading 58h 47m practice time, 83 songs touched, 162 active days and top song Maple Leaf Rag, above a ranked bar chart of the top songs by practice time."
+                />
+              </a>
+              <figcaption>
+                <b>Analytics</b> — the range across the top, the totals beneath
+                it, and the pieces ranked by how much time they took.
+              </figcaption>
+            </figure>
+            <div class="note">
+              <p>
+                <b>Only labeled time is counted.</b> Improvising, warming up and
+                anything still unnamed stays out of these totals — which is the
+                practical reason to keep up with the suggestions.
+              </p>
+            </div>
+            <div class="prose">
+              <p>
+                The same time, broken up by month and stacked so each band is one
+                piece. The ten pieces with the most time get a color; everything
+                else is gray. That makes the shape of a bar informative on its
+                own. December 2025 is tall and almost entirely gray: a month
+                spread thinly across many different pieces. August 2026 is taller
+                still and mostly color — the same few pieces, over and over.
+              </p>
+            </div>
+            <figure>
+              <a class="shot" href="images/practice_over_time.jpg">
+                <img
+                  src="images/practice_over_time.jpg"
+                  loading="lazy"
+                  width="2364"
+                  height="998"
+                  alt="The Practice over time chart: stacked bars of labeled practice time per month from October 2025 to September 2026, with the top ten songs in color, everything else in gray, and a legend naming the colored pieces."
+                />
+              </a>
+              <figcaption>
+                <b>Practice over time</b> — a year of practice by month. Gray is
+                everything outside the top ten, so a gray bar is a month of
+                variety and a colorful one a month of focus.
+              </figcaption>
+            </figure>
+            <div class="prose">
+              <p>
+                Then the whole range as a table: every piece, the time it took,
+                how many takes that was, how many separate days it turned up on,
+                when you last played it, and a small line showing how it was
+                spread across the range. Sort by any column, and click a row to
+                pick that piece out of the charts above.
+              </p>
+              <p>
+                Two rows can say quite different things. Maple Leaf Rag — ten
+                hours, 146 takes, across 52 separate days — is something being
+                kept up. Moonlight Sonata — nearly two hours and 46 takes, but on
+                four days, and nothing since February — is a piece learned in a
+                burst and then set down.
+              </p>
+            </div>
+            <figure>
+              <a class="shot" href="images/songs_in_range.jpg">
+                <img
+                  src="images/songs_in_range.jpg"
+                  loading="lazy"
+                  width="2352"
+                  height="1240"
+                  alt="The All songs in range table: one row per piece with total time, number of sessions, number of days, the date last played, and a small trend sparkline, sorted by total time with Maple Leaf Rag at the top."
+                />
+              </a>
+              <figcaption>
+                <b>All songs in range</b> — the same practice, piece by piece,
+                with how recently and how widely each one was played.
+              </figcaption>
+            </figure>
+          </section>
+
+          <section class="stage">
+            <div class="stage-head col">
+              <h2>Read next</h2>
+            </div>
+            <div class="cards">
+              <article>
+                <h3>
+                  <a href="how-jamcoda-works.html"
+                    >How JamCoda finds the songs</a
+                  >
+                </h3>
+                <p>
+                  An illustrated walkthrough of what happens between a recording
+                  and the suggestions: how it listens, what it remembers, and
+                  where it still gets things wrong.
+                </p>
+              </article>
+              <article>
+                <h3>
+                  <a href="https://github.com/jordanderson/jamcoda"
+                    >Set it up yourself</a
+                  >
+                </h3>
+                <p>
+                  The source, and the few commands that install it, point it at
+                  your Jamcorder and start it running locally.
+                </p>
+              </article>
+              <article>
+                <h3>
+                  <a
+                    href="https://github.com/jordanderson/jamcoda/blob/main/ml/README.md"
+                    >The model, in detail</a
+                  >
+                </h3>
+                <p>
+                  Commands and settings for training, predicting and measuring
+                  the model, for anyone who wants to take it further.
+                </p>
+              </article>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer>
+        <div class="wrap col">
+          <p>
+            Screenshots from a working library, September 2026. Song titles and
+            practice times are one player’s own.
+          </p>
+          <p>
+            JamCoda is released under the MIT License.
+            <a href="https://github.com/jordanderson/jamcoda"
+              >github.com/jordanderson/jamcoda</a
+            >
+          </p>
+          <p>
+            Authored by: <a href="https://claude.ai">Claude</a>, edited by
+            <a href="https://github.com/jordanderson">@jordanderson</a>
+          </p>
+        </div>
+      </footer>
     </div>
-  </main>
-
-  <footer class="mono">JamCoda is released under the MIT License.</footer>
-</div>
-</body>
+  </body>
 </html>

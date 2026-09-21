@@ -123,7 +123,7 @@ rather than delegating to a library.
   which `jmxParser` reads off the JMX grid. `core/midi/tempoMap.ts` detects a
   Jamcorder file by its `jmx…` sequencer-specific markers and uses
   `ticksPerBeat * 1000`; that same detection gates the late-tempo mirror, so a
-  non-JMX file keeps standard SMF behaviour.
+  non-JMX file keeps standard SMF behavior.
 - The check that catches all of this: decoded duration must match the `jmxEof`
   trailer's `totalMillis`, the device's own statement of how long it recorded.
   `npm run db:rescale-silent-tempo -- --verify` asserts it across the library.
@@ -173,7 +173,12 @@ Run `npm run typecheck`, `npm test`, and `npm run build`. Touching the model or
 sync also means exercising the rebuild and run-prediction endpoints, or the
 `ml:predict-import` CLI path, against a real file.
 
-Write comments and docs as statements of current behaviour. Do not narrate what
+Write comments and docs as statements of current behavior. Do not narrate what
 a change replaced or improved — that belongs in git. Model results are the
 exception: `ml/CHANGELOG.md` keeps the before/after so failed ideas are not
 retried.
+
+Prose is American English — `behavior`, `color`, `gray`, `labeled`,
+`recognize`, `normalized` — in comments, docs, `docs/*.html` and UI copy alike,
+with dates written `September 7, 2026`. Identifiers and third-party names keep
+their own spelling.

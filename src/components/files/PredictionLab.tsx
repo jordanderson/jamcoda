@@ -248,9 +248,6 @@ export function PredictionLab({
         {isOpen ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
         <FlaskConical className="w-5 h-5 text-indigo-600" />
         <span className="text-xl font-bold text-gray-900">Prediction Lab</span>
-        <span className="text-sm text-gray-600 font-normal">
-          Try settings on this recording. Nothing is saved until you apply.
-        </span>
       </button>
 
       {isOpen && (
@@ -441,8 +438,7 @@ export function PredictionLab({
           <p className="text-xs text-gray-500 border-t pt-3">
             Candidates also appear in the overview beside the piano roll, and are held
             in this page only — they disappear when you leave it.
-            One recording is enough to form a hypothesis, not to settle one — check a
-            setting across the library with <code className="text-gray-700">npm run ml:eval</code> and{' '}
+            Check a setting across the library with <code className="text-gray-700">npm run ml:eval</code> and{' '}
             <code className="text-gray-700">npm run ml:compare</code> before changing how models are built.
           </p>
         </div>
