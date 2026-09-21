@@ -225,7 +225,8 @@
       .shot:hover {
         border-color: var(--accent);
       }
-      .shot img {
+      .shot img,
+      .shot video {
         display: block;
         width: 100%;
         height: auto;
@@ -666,6 +667,25 @@
                 forty-three-minute session. The percentage is how likely you are
                 to accept the suggestion, going by the ones you have accepted
                 before.
+              </figcaption>
+            </figure>
+            <figure>
+              <div class="shot">
+                <video
+                  src="media/annotating.mp4"
+                  poster="images/annotating_poster.jpg"
+                  width="1280"
+                  height="784"
+                  controls
+                  preload="metadata"
+                  playsinline
+                  aria-label="A partly labeled session playing back in JamCoda. Suggested takes for Waltz in A, Maple Leaf Rag and Christmas Time is Here are played, opened for review, and confirmed, moving each one from the predictions lane into the annotations lane."
+                ></video>
+              </div>
+              <figcaption>
+                <b>Reviewing suggestions</b> — on a session that is already
+                partly labeled, three suggested takes are played back and kept,
+                each becoming a label. Sound on.
               </figcaption>
             </figure>
             <div class="note">
