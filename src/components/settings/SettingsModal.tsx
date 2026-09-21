@@ -1,4 +1,4 @@
-import { RefreshCw, X } from 'lucide-react'
+import { ExternalLink, RefreshCw, X } from 'lucide-react'
 import { useSyncStatus } from '../../hooks/useSyncStatus'
 import { useRebuildPredictionModel } from '../../hooks/usePredictionReviews'
 import type { Toast } from '../../hooks/useToasts'
@@ -135,6 +135,18 @@ export function SettingsModal({ isOpen, isSyncStarting, onStartSync, onClose, sh
             files whose unpromoted queue is entirely 'unsure'. Can take a long time.
           </p>
         </section>
+
+        <footer className="mt-6 border-t border-gray-100 pt-4 text-center">
+          <a
+            href="https://jordanderson.github.io/jamcoda/"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            About JamCoda
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </footer>
       </div>
     </div>
   )

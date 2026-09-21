@@ -17,6 +17,11 @@ deliberately Node-only part.
   `ERR_DLOPEN_FAILED` / `NODE_MODULE_VERSION`. Typecheck, build and the client
   are unaffected, so it is easy to misread. Recover with
   `nvm use && npm rebuild better-sqlite3`.
+- **`.env` reaches server code only through `--env-file-if-exists=.env`** on
+  each tsx script in `package.json`; Vite reads it separately. The flag applies
+  before any module reads `process.env` at import time, which a
+  `loadEnvFile()` call in an entry file would not. A new script needs the flag,
+  and `server/envFile.test.ts` fails without it.
 - **Vitest runs every test, in two projects** (`vite.config.ts`): `client`
   (jsdom) covers `src/` and `core/`; `server` (node) covers `server/` and
   `ml/`. `npm test` runs both; `--project server` or `--project client` narrows

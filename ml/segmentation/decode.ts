@@ -212,7 +212,7 @@ function computeEvidence(scoresList: number[][], needRank: boolean): WindowEvide
 
     // `rank` is read only when `fillTopK >= 0`; the default disables it.
     // Building it costs a sort per window — ~11M discarded allocations per
-    // leave-one-out run. See PERFORMANCE_TUNING.md item 7.
+    // leave-one-out run.
     const rank = new Array<number>(scores.length).fill(0);
     if (needRank) {
       scores

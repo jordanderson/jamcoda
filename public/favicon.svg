@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- The JamCoda mark (src/components/layout/JamCodaLogo.tsx) on a white tile,
+       with heavier hairlines so the ring, crossbar and serif survive at 16px. -->
+  <rect width="64" height="64" rx="14" fill="#fff"/>
+  <g fill="#111827" transform="translate(32 32) scale(0.9) translate(-32 -33)">
+    <path fill-rule="evenodd" d="M14.5 30a17.5 18 0 0 0 35 0a17.5 18 0 0 0-35 0zM20.5 30a11.5 14.4 0 0 0 23 0a11.5 14.4 0 0 0-23 0z"/>
+    <rect x="4" y="28" width="56" height="4"/>
+    <path d="M24.5 4h15v3.6h-1Q35 7.6 35 11v39c0 7.5-4.5 12-10.5 12-3 0-5.5-1.5-6.5-3.5l6.5.1c3 0 4.5-3 4.5-8.6V11q0-3.4-3.5-3.4h-1z"/>
+    <circle cx="21.5" cy="56.2" r="4.5"/>
+  </g>
+</svg>

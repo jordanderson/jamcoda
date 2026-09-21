@@ -127,8 +127,7 @@ function buildPrototypesFromGroups(
   // The kernel scale is read only by 'avg' scoring, but the field must stay
   // populated (`loadModel`/tests and saved-model shape). In 'min' mode — every
   // shipped config — estimate it on a token sample: the full 800-window sweep
-  // cost ~21-28% of every leave-one-out fold for a value nothing reads. See
-  // PERFORMANCE_TUNING.md item 1.
+  // cost ~21-28% of every leave-one-out fold for a value nothing reads.
   const kernelScale = estimateKernelScale(
     normalizedGroups,
     prototypes,

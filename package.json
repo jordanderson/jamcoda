@@ -5,12 +5,12 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.9"
   },
   "scripts": {
     "setup": "tsx --tsconfig tsconfig.node.json scripts/setup.ts",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "tsx watch --tsconfig tsconfig.server.json server/index.ts",
+    "dev:server": "tsx watch --env-file-if-exists=.env --tsconfig tsconfig.server.json server/index.ts",
     "dev:client": "vite",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.node.json",
     "build": "npm run typecheck && vite build",
@@ -18,18 +18,18 @@
     "test": "vitest run",
     "test:server": "vitest run --project server",
     "test:client": "vitest run --project client",
-    "db:migrate": "tsx --tsconfig tsconfig.server.json server/scripts/migrate.ts",
-    "db:prune-empty": "tsx --tsconfig tsconfig.server.json server/scripts/pruneEmptyRecordings.ts",
-    "db:backfill-bookmarks": "tsx --tsconfig tsconfig.server.json server/scripts/backfillBookmarks.ts",
-    "db:repair-promotions": "tsx --tsconfig tsconfig.server.json server/scripts/repairPromotions.ts",
-    "db:rescale-silent-tempo": "tsx --tsconfig tsconfig.server.json server/scripts/rescaleSilentTempoFiles.ts",
-    "ml:train": "tsx --tsconfig tsconfig.server.json ml/train.ts",
-    "ml:predict": "tsx --tsconfig tsconfig.server.json ml/predict.ts",
-    "ml:predict-import": "tsx --tsconfig tsconfig.server.json ml/predictAndImport.ts",
-    "ml:predict-missing": "tsx --tsconfig tsconfig.server.json ml/predictMissing.ts",
-    "ml:eval": "tsx --tsconfig tsconfig.server.json ml/eval.ts",
-    "ml:compare": "tsx --tsconfig tsconfig.server.json ml/compareEvals.ts",
-    "ml:fit-confidence": "tsx --tsconfig tsconfig.server.json server/scripts/fitPredictionConfidence.ts"
+    "db:migrate": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json server/scripts/migrate.ts",
+    "db:prune-empty": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json server/scripts/pruneEmptyRecordings.ts",
+    "db:backfill-bookmarks": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json server/scripts/backfillBookmarks.ts",
+    "db:repair-promotions": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json server/scripts/repairPromotions.ts",
+    "db:rescale-silent-tempo": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json server/scripts/rescaleSilentTempoFiles.ts",
+    "ml:train": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json ml/train.ts",
+    "ml:predict": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json ml/predict.ts",
+    "ml:predict-import": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json ml/predictAndImport.ts",
+    "ml:predict-missing": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json ml/predictMissing.ts",
+    "ml:eval": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json ml/eval.ts",
+    "ml:compare": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json ml/compareEvals.ts",
+    "ml:fit-confidence": "tsx --env-file-if-exists=.env --tsconfig tsconfig.server.json server/scripts/fitPredictionConfidence.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
