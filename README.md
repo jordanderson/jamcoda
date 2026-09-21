@@ -117,15 +117,15 @@ Jamcorder.
 
 All configuration is optional and read from environment variables.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `JAMCORDER_URL` | `http://jamcorder.local` | Base URL of your Jamcorder (mDNS name or IP). |
-| `JAMCODA_DB_PATH` | `./data/jamcoda.db` | SQLite database location. |
-| `JAMCODA_MIDI_DIR` | `./data/midi` | Where synced MIDI files are written. Absolute paths work, so the library can live outside the repo. |
-| `JAMCORDER_LIBRARY_PAGE_SIZE` | `5` | Assets per library API page during sync. Keep it small; large pages can crash low-power firmware. |
-| `JAMCORDER_LIBRARY_PAGE_DELAY_MS` | `1000` | Pause between library pages. |
-| `JAMCODA_SYNC_DOWNLOAD_PACE_MS` | `300` | Pause between file downloads. |
-| `JAMCODA_SYNC_EMPTY_ASSET_MAX_BYTES` | `1024` | Device assets at or below this size hold no notes and are not imported. |
+| Variable                             | Default                  | Purpose                                                                                             |
+| ------------------------------------ | ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `JAMCORDER_URL`                      | `http://jamcorder.local` | Base URL of your Jamcorder (mDNS name or IP).                                                       |
+| `JAMCODA_DB_PATH`                    | `./data/jamcoda.db`      | SQLite database location.                                                                           |
+| `JAMCODA_MIDI_DIR`                   | `./data/midi`            | Where synced MIDI files are written. Absolute paths work, so the library can live outside the repo. |
+| `JAMCORDER_LIBRARY_PAGE_SIZE`        | `5`                      | Assets per library API page during sync. Keep it small; large pages can crash low-power firmware.   |
+| `JAMCORDER_LIBRARY_PAGE_DELAY_MS`    | `1000`                   | Pause between library pages.                                                                        |
+| `JAMCODA_SYNC_DOWNLOAD_PACE_MS`      | `300`                    | Pause between file downloads.                                                                       |
+| `JAMCODA_SYNC_EMPTY_ASSET_MAX_BYTES` | `1024`                   | Device assets at or below this size hold no notes and are not imported.                             |
 
 The local backend always runs on port 3001.
 
@@ -146,25 +146,25 @@ Run them by hand with `npm run db:migrate`, adding
 
 ## Scripts
 
-| Script | Does |
-| --- | --- |
-| `npm run dev` | Client + server |
-| `npm run build` | Typecheck + Vite production build |
-| `npm run typecheck` | `src/`, `core/`, `server/`, `ml/` and tooling |
-| `npm test` | All tests (Vitest; `--project server` or `client` to narrow) |
-| `npm run setup` | Interactive first-run setup; writes `.env` |
-| `npm run db:migrate` | Apply pending migrations |
-| `npm run db:prune-empty` | Delete synced recordings with no notes (add `--apply`) |
-| `npm run db:backfill-bookmarks` | Parse JMX passage bookmarks for already-synced files |
-| `npm run db:repair-promotions` | Re-link promotions orphaned by a deleted annotation |
-| `npm run db:rescale-silent-tempo` | Rescale times captured before the tempo fix (`--verify` checks only) |
-| `npm run ml:train` | Train a model from annotations |
-| `npm run ml:predict` | Predict segments for one MIDI file |
-| `npm run ml:predict-import` | Predict and import into `prediction_reviews` |
-| `npm run ml:predict-missing` | Same, for every incomplete file with no predictions (`--force` re-runs) |
-| `npm run ml:eval` | Leave-one-out evaluation; writes a JSON report |
-| `npm run ml:compare` | Diff two evaluation reports |
-| `npm run ml:fit-confidence` | Refit the display-only confidence calibration |
+| Script                            | Does                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------- |
+| `npm run dev`                     | Client + server                                                         |
+| `npm run build`                   | Typecheck + Vite production build                                       |
+| `npm run typecheck`               | `src/`, `core/`, `server/`, `ml/` and tooling                           |
+| `npm test`                        | All tests (Vitest; `--project server` or `client` to narrow)            |
+| `npm run setup`                   | Interactive first-run setup; writes `.env`                              |
+| `npm run db:migrate`              | Apply pending migrations                                                |
+| `npm run db:prune-empty`          | Delete synced recordings with no notes (add `--apply`)                  |
+| `npm run db:backfill-bookmarks`   | Parse JMX passage bookmarks for already-synced files                    |
+| `npm run db:repair-promotions`    | Re-link promotions orphaned by a deleted annotation                     |
+| `npm run db:rescale-silent-tempo` | Rescale times captured before the tempo fix (`--verify` checks only)    |
+| `npm run ml:train`                | Train a model from annotations                                          |
+| `npm run ml:predict`              | Predict segments for one MIDI file                                      |
+| `npm run ml:predict-import`       | Predict and import into `prediction_reviews`                            |
+| `npm run ml:predict-missing`      | Same, for every incomplete file with no predictions (`--force` re-runs) |
+| `npm run ml:eval`                 | Leave-one-out evaluation; writes a JSON report                          |
+| `npm run ml:compare`              | Diff two evaluation reports                                             |
+| `npm run ml:fit-confidence`       | Refit the display-only confidence calibration                           |
 
 ## Playback
 
@@ -191,8 +191,9 @@ exists on more than one side of a boundary.
 
 ## Documentation
 
-- [How JamCoda finds the songs](docs/how-jamcoda-finds-the-songs.html) — an
-  illustrated walkthrough of the segmentation pipeline.
+- [How JamCoda finds the songs](https://jordanderson.github.io/jamcoda/how-jamcoda-works.html)
+  — an illustrated walkthrough of the segmentation pipeline
+  ([source](docs/how-jamcoda-works.html)).
 - [`ml/README.md`](ml/README.md) — model commands, settings and evaluation.
 - [`ml/CHANGELOG.md`](ml/CHANGELOG.md) — model versions and the experiments
   behind them.

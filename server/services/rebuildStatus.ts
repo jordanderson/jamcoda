@@ -88,11 +88,6 @@ function readModelSummary(modelPath: string): ModelSummary | null {
   return summary;
 }
 
-/** Drop the cached model summary. Exported for tests. */
-export function clearModelSummaryCache(): void {
-  cachedSummary = null;
-}
-
 function noModelStatus(): RebuildStatus {
   return {
     modelExists: false,
