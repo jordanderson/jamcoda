@@ -25,17 +25,13 @@ Run them:
 - Typecheck (`src`, `core`, `server`, `ml`, tooling): `npm run typecheck`
 - Build check: `npm run build`
 
-Where to put a new test:
-- **Co-located next to the file it tests** -- `core/timeRanges.test.ts` beside
-  `core/timeRanges.ts`. We do not use `__tests__/` directories.
-- To cover one feature of a large module, use an infix:
-  `Annotation.merge.test.ts`.
-- Shared client helpers live in `src/test/`, not beside a module.
+Put a new test next to the file it tests (`core/timeRanges.test.ts` beside
+`core/timeRanges.ts`), using an infix to scope one feature of a large module:
+`Annotation.merge.test.ts`. Shared client helpers live in `src/test/`.
 
-Which runner to write against depends on the directory:
-- `core/` and `src/` use **Vitest** -- `import { describe, it, expect } from 'vitest'`.
-- `server/` uses **Node's built-in test runner** -- `node:test` and
-  `node:assert/strict`. Vitest globals do not exist there.
+Vitest runs everything, in two projects: `client` (jsdom) for `src/` and
+`core/`, `server` (node) for `server/` and `ml/`. Server tests may assert with
+`node:assert/strict` or Vitest's `expect`.
 
 Server tests must set `JAMCODA_DB_PATH` to a temp database *before* importing
 any model (import them lazily). Running tests against the real `data/jamcoda.db`
@@ -43,7 +39,7 @@ is refused outright.
 
 ## Database Changes
 
-- Add schema changes through `server/config/migrations.ts`.
+- Add schema changes as a new file under `server/config/migrations/`.
 - Keep migrations additive and idempotent.
 - Never hand-edit `data/jamcoda.db` in commits.
 
@@ -57,6 +53,9 @@ Preserve these rules:
 - Merge requires same file + same resolved song and creates one `edited` row while marking source rows `invalid`.
 
 ## Pull Requests
+
+CI (`.github/workflows/ci.yml`) runs typecheck, tests and build on every pull
+request. Run the same three locally before pushing.
 
 - Include a short summary of behavior changes.
 - List validation steps you ran.

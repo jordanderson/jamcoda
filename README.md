@@ -1,5 +1,7 @@
 # JamCoda
 
+[![CI](https://github.com/jordanderson/jamcoda/actions/workflows/ci.yml/badge.svg)](https://github.com/jordanderson/jamcoda/actions/workflows/ci.yml)
+
 JamCoda is a local-first MIDI workflow for Jamcorder practice sessions.
 
 A practice recording is one long file containing several pieces, a few attempts
