@@ -29,10 +29,10 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
-      # Site video lives on the `media` release, not in git. Replacing the
-      # asset does not trigger this workflow; run it by hand afterward.
+      # Site videos live on the `media` release, not in git. Changing its
+      # assets does not trigger this workflow; run it by hand afterward.
       - name: Fetch site media
-        run: gh release download media --pattern annotating.mp4 --dir docs/media
+        run: gh release download media --pattern '*.mp4' --dir docs/media
         env:
           GH_TOKEN: ${{ github.token }}
 
