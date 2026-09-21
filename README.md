@@ -14,6 +14,7 @@ Jamcorder produces one MIDI file per day, with all your practice session. JamCod
 The more you annotate, the better the model gets at proposing segments for you to review.
 
 This is an example of a partially annotated JamCoda session with predictions to review. I listen to them, promote them, and make slight adjustments to the start/end times if needed. Once I finish, I rebuild the model so it takes those new annotations into account.
+
 https://github.com/user-attachments/assets/0768aba3-628a-44a1-af28-6f56146d1225
 
 Everything stays on your computer. There is no remote server, no LLM, no cloud storage, and no data collection. JamCoda is open source and free to use.
