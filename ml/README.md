@@ -497,7 +497,8 @@ Merge behavior (`POST /api/prediction-reviews/merge`):
 ## Suggested Human Workflow (Active Learning Loop)
 
 1. Sync files.
-2. Annotate a few strong examples per song.
+2. Annotate three to five whole takes per song, from different sessions (see
+   [How Many Takes to Annotate](#how-many-takes-to-annotate)).
 3. Rebuild model.
 4. Run predictions on target files.
 5. In review queue:
@@ -515,6 +516,54 @@ Practical heuristics for practice-session data:
 - Keep song naming consistent; rename globally when needed.
 - Do not stretch one annotation across long silence; split into separate played spans.
 - Mark file complete when remaining time is intentionally unlabeled improvisation/noodling.
+
+## How Many Takes to Annotate
+
+Measured on the v2.11 model against the September 21, 2026 library. For each of
+the 34 songs with at least 12 takes, the model was retrained with only k takes
+of that song. Its takes were then scored in sessions the model never saw. Every
+other song kept all of its annotation.
+
+| takes annotated | new takes found | F1 below the song's best | songs within 5 pts of their best |
+| ---: | ---: | ---: | ---: |
+| 1 | 55% | 22 pts | 6 of 32 |
+| 2 | 72% | 10 pts | 10 of 32 |
+| 3 | 78% | 5 pts | 16 of 32 |
+| 5 | 85% | 2 pts | 22 of 32 |
+| 8 | 89% | 1 pt | 27 of 32 |
+
+Medians over songs. A take is *found* when a prediction of the right song covers
+at least half of it. A song's *best* is its F1 when trained on every take it
+has. For the 14 songs with more than 20 takes, the gap is 1 point at 10 takes
+and gone by 15–20.
+
+- **Five whole takes is the working minimum.** Three get most takes found, and
+  eight to ten saturate nearly every song.
+- **Spread them across sessions.** Four takes from four sessions find 80% of new
+  takes, against 66% for four takes packed into one or two sessions. That is
+  mostly because takes drilled in one sitting are short, and short takes are
+  harder to find at every amount of annotation.
+- **Too little annotation costs recall, not precision.** Precision stays near
+  97% from the first take, and an under-annotated song's takes go unpredicted
+  rather than mislabeled. Confident wrong-song proposals come from songs with no
+  annotation at all: a median 13% of such a song's time is labeled as a similar
+  song.
+- **The rest of the library moves the answer.** With every other song capped at
+  three takes, three takes bring a new song within a point of its best. In this
+  library, where a few songs have over a hundred takes, it takes about five.
+  This is consistent with the known defect under [Model Summary](#model-summary):
+  a well-annotated song wins nearest-prototype comparisons.
+- **A song still weak at about ten takes is hard, not under-annotated.**
+  Christmas Don't Be Late, O Christmas Tree and Let It Snow plateau near 80% F1
+  with every take they have.
+
+These numbers assume the unannotated takes of a song sit in files with no
+annotations, which training never loads. With `noneFromCompleteFilesOnly` off,
+the default, an unannotated take inside a file that has other annotations trains
+as `__none__`. Annotating a file halfway therefore teaches the model that the
+skipped takes are silence. Method, per-song results and intervals are in
+`experiments-2026-09-21-annotation-budget.md`, under the gitignored
+`data/ml/notes/`.
 
 ## Tuning Short vs Long Segment Bias
 
