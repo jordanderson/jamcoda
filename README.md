@@ -235,10 +235,6 @@ The dependency tree is deliberately small. MIDI decoding
 implemented here rather than taken from a framework, so no ML or audio
 framework is installed.
 
-Keep `npm audit` clean. It currently reports one low-severity advisory in a
-build-only transitive dependency (`postcss-selector-parser`, via Tailwind),
-with a fix available.
-
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
