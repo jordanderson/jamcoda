@@ -3,14 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>JamCoda</title>
+    <title>How JamCoda works</title>
     <link rel="icon" href="favicon.ico" sizes="32x32" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-    <meta
-      name="description"
-      content="JamCoda turns a Jamcorder practice recording into a journal of what you played: takes, songs, and the time behind them."
-    />
     <style>
       :root {
         --ground: #f3f4f6;
@@ -21,8 +17,14 @@
         --muted: #6b7280;
         --faint: #6b7280;
         --rule: #e5e7eb;
+        --rule-strong: #d1d5db;
         --accent: #4f46e5;
         --accent-hover: #4338ca;
+        --s-a: #2563eb;
+        --s-b: #c2410c;
+        --s-c: #15803d;
+        --s-d: #7c3aed;
+        --warn: #dc2626;
       }
 
       * {
@@ -93,6 +95,11 @@
       }
       strong {
         font-weight: 600;
+      }
+      dfn {
+        font-style: italic;
+        font-weight: 600;
+        color: var(--ink);
       }
       a {
         color: var(--accent);
@@ -211,7 +218,6 @@
         line-height: 1;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
-        color: var(--ink);
       }
       .stat span {
         display: block;
@@ -226,26 +232,18 @@
         display: grid;
         gap: 0.75rem;
       }
-      .shot {
-        display: block;
+      .figbox {
         background: var(--surface);
         border: 1px solid var(--rule);
         border-radius: 6px;
-        overflow: hidden;
-        transition: border-color 0.15s ease;
+        padding: 1.15rem 1.15rem 0.85rem;
+        overflow-x: auto;
       }
-      .shot:hover {
-        border-color: var(--accent);
-      }
-      .shot img,
-      .shot video {
+      figure svg {
         display: block;
         width: 100%;
+        min-width: 560px;
         height: auto;
-      }
-      .shot.narrow {
-        width: min(100%, 520px);
-        justify-self: center;
       }
       figcaption {
         font-size: 0.85rem;
@@ -255,13 +253,91 @@
         color: var(--ink);
         font-weight: 600;
       }
+      .tk {
+        font-family: ui-monospace, monospace;
+        font-size: 10.5px;
+        fill: var(--faint);
+      }
+      .rl {
+        font-family: ui-monospace, monospace;
+        font-size: 11.5px;
+        fill: var(--muted);
+      }
+      .rl-em {
+        font-family: ui-monospace, monospace;
+        font-size: 11.5px;
+        fill: var(--ink);
+        font-weight: 500;
+      }
+      .an {
+        font-size: 11.5px;
+        fill: var(--warn);
+        font-weight: 500;
+      }
+      .bd {
+        font-family: ui-monospace, monospace;
+        font-size: 11.5px;
+        fill: var(--accent);
+        font-weight: 600;
+      }
+      .bl {
+        font-size: 11px;
+        fill: #ffffff;
+        font-weight: 500;
+      }
+      .sn {
+        font-size: 11.5px;
+        font-weight: 600;
+      }
+      .nd {
+        font-size: 11.5px;
+        fill: var(--muted);
+      }
+      .nd-em {
+        font-size: 12px;
+        fill: var(--ink);
+        font-weight: 600;
+      }
+
+      .key {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.15rem;
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+      .key i {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.38rem;
+        font-style: normal;
+      }
+      .key i::before {
+        content: "";
+        width: 11px;
+        height: 11px;
+        border-radius: 2px;
+        background: currentColor;
+      }
+      .k-a {
+        color: var(--s-a);
+      }
+      .k-b {
+        color: var(--s-b);
+      }
+      .k-c {
+        color: var(--s-c);
+      }
+      .k-d {
+        color: var(--s-d);
+      }
 
       .stages {
         display: grid;
         gap: 0;
       }
       .stage {
-        padding: 3.1rem 0;
+        padding: 2rem 0;
         border-top: 1px solid var(--rule);
       }
       .stage-head {
@@ -294,9 +370,89 @@
         font-weight: 600;
       }
 
+      .featgrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .featgrid > div {
+        background: var(--surface);
+        padding: 0.95rem 1.05rem 1.05rem;
+      }
+      .featgrid h4 {
+        margin: 0 0 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--accent);
+      }
+      .featgrid ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.28rem;
+      }
+      .featgrid li {
+        font-size: 0.8rem;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+      .featgrid li b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      .tablewrap {
+        overflow-x: auto;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 540px;
+        font-size: 0.87rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.62rem 0.95rem;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: top;
+      }
+      thead th {
+        font-size: 0.78rem;
+        color: var(--faint);
+        font-weight: 600;
+      }
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      td.n,
+      th.n {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        font-family: ui-monospace, monospace;
+        white-space: nowrap;
+      }
+      td.key-cell {
+        font-family: ui-monospace, monospace;
+        font-size: 0.8rem;
+        white-space: nowrap;
+      }
+      caption {
+        text-align: left;
+        padding: 0.85rem 0.95rem 0.3rem;
+      }
+
       .cards {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
         gap: 1px;
         background: var(--rule);
         border: 1px solid var(--rule);
@@ -323,65 +479,6 @@
         color: var(--accent);
       }
 
-      .loop {
-        display: flex;
-        align-items: stretch;
-        gap: 0.9rem;
-      }
-      .loop > article {
-        flex: 1 1 0;
-        background: var(--surface);
-        border: 1px solid var(--rule);
-        border-radius: 6px;
-        padding: 1.2rem 1.25rem 1.3rem;
-        display: grid;
-        gap: 0.55rem;
-        align-content: start;
-      }
-      .loop h3 {
-        font-size: 1rem;
-      }
-      .loop p {
-        font-size: 0.89rem;
-        color: var(--muted);
-      }
-      .loop .rule-no {
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: var(--accent);
-      }
-      .loop .arrow {
-        flex: none;
-        align-self: center;
-        color: var(--accent);
-        font-size: 1.15rem;
-        line-height: 1;
-      }
-      @media (max-width: 720px) {
-        .loop {
-          flex-direction: column;
-          gap: 0.7rem;
-        }
-        .loop .arrow {
-          align-self: center;
-          transform: rotate(90deg);
-        }
-      }
-
-      .prose {
-        display: grid;
-        gap: 1rem;
-      }
-      .stage > figure,
-      .stage > .cards,
-      .stage > .loop,
-      .stage > .note {
-        margin-block: 1.5rem;
-      }
-      .stage > .prose + .prose {
-        margin-top: 1rem;
-      }
-
       footer {
         border-top: 1px solid var(--rule);
         padding: 2.4rem 0 3.4rem;
@@ -398,6 +495,86 @@
           animation: none !important;
           transition: none !important;
         }
+      }
+      .prose {
+        display: grid;
+        gap: 1rem;
+      }
+      .stage > figure,
+      .stage > .tablewrap {
+        margin-block: 1.5rem;
+      }
+      .stage > .prose + .prose {
+        margin-top: 1rem;
+      }
+      .stage > :last-child {
+        margin-bottom: 0;
+      }
+      .prose ol {
+        margin: 0;
+        padding-left: 1.5rem;
+      }
+      .prose li + li {
+        margin-top: 0.8rem;
+      }
+      /* Technical asides: a dark panel set off from the prose around it. */
+      details {
+        --panel: #111827;
+        --panel-ink: #f9fafb;
+        --panel-body: #d1d5db;
+        --panel-rule: #374151;
+        --panel-code: #1f2937;
+        --panel-accent: #a5b4fc;
+        margin-top: 1.4rem;
+        background: var(--panel);
+        color: var(--panel-body);
+        border-radius: 6px;
+      }
+      summary {
+        cursor: pointer;
+        color: var(--panel-accent);
+        font-weight: 500;
+        padding: 0.8rem 1.15rem;
+        border-radius: 6px;
+      }
+      summary:hover {
+        color: var(--panel-ink);
+      }
+      summary:focus-visible {
+        outline-color: var(--panel-accent);
+        outline-offset: -3px;
+      }
+      details[open] summary {
+        border-bottom: 1px solid var(--panel-rule);
+        border-radius: 6px 6px 0 0;
+      }
+      details .prose {
+        padding: 1rem 1.15rem 1.2rem;
+      }
+      details code {
+        background: var(--panel-code);
+        border: 1px solid var(--panel-rule);
+        color: var(--panel-ink);
+      }
+      details em,
+      details dfn,
+      details b,
+      details strong {
+        color: var(--panel-ink);
+      }
+      details a {
+        color: var(--panel-accent);
+      }
+      details a:hover {
+        color: var(--panel-ink);
+      }
+      .stats .stat b span {
+        display: inline;
+        font-size: 0.6em;
+        color: inherit;
+      }
+      footer .mono {
+        overflow-wrap: anywhere;
       }
     </style>
   </head>
@@ -421,10 +598,9 @@
               </svg>
               JamCoda
             </a>
-            A practice journal for the Jamcorder
+            How predictions work · v2.11
           </p>
           <nav class="bar-links">
-            <a href="how-jamcoda-works.html">How JamCode works →</a>
             <a
               class="repo"
               href="https://github.com/jordanderson/jamcoda"
@@ -450,591 +626,1144 @@
           </nav>
         </div>
       </header>
-
       <main class="wrap">
         <section class="hero">
           <div class="col">
-            <p class="eyebrow">Overview</p>
-            <h1>What you actually practiced</h1>
+            <p class="eyebrow">September 2026</p>
+            <h1>How JamCoda works</h1>
             <p class="standfirst">
-              A Jamcorder saves a practice session as one long recording: two
-              run-throughs of the piece you are learning, four attempts at the
-              bar that keeps going wrong, and a good deal of playing for its own
-              sake. <b>JamCoda turns that into a list of takes</b> — which song,
-              where it starts, how long it lasted — and then into a picture of
-              what you have been working on.
+              A practice recording might contain a few whole pieces, three
+              attempts at another pieces ending, and several minutes of
+              noodling. JamCoda uses the takes the player has labeled -- or
+              annotated -- to find familiar songs in unlabeled sections and
+              suggest where each one starts and stops.
             </p>
             <p>
-              It runs on your own computer. Recordings come off the device over
-              your network into a folder and a small database that belong to
-              you. There is no account, and nothing is uploaded anywhere. The
-              screenshots below are from a real library.
+              It compares short stretches of MIDI with examples from the
+              player’s annotations, finds the phrases it recognizes clearly,
+              then joins them into takes. The musician reviews the results
+              before they become annotations.
             </p>
           </div>
-          <div class="stats">
-            <div class="stat">
-              <b>58h 47m</b><span>Practice time in this library</span>
+        </section>
+        <figure>
+          <div class="figbox">
+            <svg
+              viewBox="0 0 1020 174"
+              role="img"
+              aria-label="A twenty-minute practice recording. The top row is the human annotation of seven takes across four pieces; the bottom row is the model's output. They agree closely except at the end, where three separate takes of Winter Wonderland are predicted as one continuous segment."
+            >
+              <text x="120" y="30" class="sn" style="fill: var(--s-a)">
+                Winter Wonderland
+              </text>
+              <text x="358" y="30" class="sn" style="fill: var(--s-b)">
+                White Christmas
+              </text>
+              <text x="482" y="17" class="sn" style="fill: var(--s-c)">
+                O Little Town of Bethlehem
+              </text>
+              <text x="555" y="30" class="sn" style="fill: var(--s-d)">
+                O Come Emmanuel
+              </text>
+              <text x="753" y="30" class="sn" style="fill: var(--s-a)">
+                Winter Wonderland &#215;3
+              </text>
+
+              <line
+                x1="118"
+                y1="36"
+                x2="118"
+                y2="124"
+                stroke="var(--rule)"
+                stroke-width="1"
+              />
+              <text x="118" y="162" text-anchor="middle" class="tk">0:00</text>
+              <line
+                x1="263.1"
+                y1="36"
+                x2="263.1"
+                y2="124"
+                stroke="var(--rule)"
+                stroke-width="1"
+              />
+              <text x="263.1" y="162" text-anchor="middle" class="tk">
+                3:20
+              </text>
+              <line
+                x1="408.2"
+                y1="36"
+                x2="408.2"
+                y2="124"
+                stroke="var(--rule)"
+                stroke-width="1"
+              />
+              <text x="408.2" y="162" text-anchor="middle" class="tk">
+                6:40
+              </text>
+              <line
+                x1="553.3"
+                y1="36"
+                x2="553.3"
+                y2="124"
+                stroke="var(--rule)"
+                stroke-width="1"
+              />
+              <text x="553.3" y="162" text-anchor="middle" class="tk">
+                10:00
+              </text>
+              <line
+                x1="698.5"
+                y1="36"
+                x2="698.5"
+                y2="124"
+                stroke="var(--rule)"
+                stroke-width="1"
+              />
+              <text x="698.5" y="162" text-anchor="middle" class="tk">
+                13:20
+              </text>
+              <line
+                x1="843.6"
+                y1="36"
+                x2="843.6"
+                y2="124"
+                stroke="var(--rule)"
+                stroke-width="1"
+              />
+              <text x="843.6" y="162" text-anchor="middle" class="tk">
+                16:40
+              </text>
+              <line
+                x1="988.7"
+                y1="36"
+                x2="988.7"
+                y2="124"
+                stroke="var(--rule)"
+                stroke-width="1"
+              />
+              <text x="988.7" y="162" text-anchor="middle" class="tk">
+                20:00
+              </text>
+
+              <text x="106" y="57" text-anchor="end" class="rl-em">player</text>
+              <rect
+                x="118.4"
+                y="40"
+                width="234.9"
+                height="26"
+                rx="2"
+                fill="var(--s-a)"
+              />
+              <rect
+                x="356"
+                y="40"
+                width="114.1"
+                height="26"
+                rx="2"
+                fill="var(--s-b)"
+              />
+              <rect
+                x="480.6"
+                y="40"
+                width="65.5"
+                height="26"
+                rx="2"
+                fill="var(--s-c)"
+              />
+              <rect
+                x="553.4"
+                y="40"
+                width="197.3"
+                height="26"
+                rx="2"
+                fill="var(--s-d)"
+              />
+              <rect
+                x="751.5"
+                y="40"
+                width="77"
+                height="26"
+                rx="2"
+                fill="var(--s-a)"
+              />
+              <rect
+                x="829.6"
+                y="40"
+                width="73.1"
+                height="26"
+                rx="2"
+                fill="var(--s-a)"
+              />
+              <rect
+                x="906.8"
+                y="40"
+                width="79.2"
+                height="26"
+                rx="2"
+                fill="var(--s-a)"
+              />
+
+              <text x="106" y="109" text-anchor="end" class="rl-em">model</text>
+              <rect
+                x="118.4"
+                y="92"
+                width="234.4"
+                height="26"
+                rx="2"
+                fill="var(--s-a)"
+              />
+              <rect
+                x="356.7"
+                y="92"
+                width="106.9"
+                height="26"
+                rx="2"
+                fill="var(--s-b)"
+              />
+              <rect
+                x="503.7"
+                y="92"
+                width="39.7"
+                height="26"
+                rx="2"
+                fill="var(--s-c)"
+              />
+              <rect
+                x="553.6"
+                y="92"
+                width="199.3"
+                height="26"
+                rx="2"
+                fill="var(--s-d)"
+              />
+              <rect
+                x="752.3"
+                y="92"
+                width="233.7"
+                height="26"
+                rx="2"
+                fill="var(--s-a)"
+              />
+
+              <line
+                x1="751.5"
+                y1="130"
+                x2="986"
+                y2="130"
+                stroke="var(--warn)"
+                stroke-width="1.5"
+              />
+              <line
+                x1="751.5"
+                y1="124"
+                x2="751.5"
+                y2="130"
+                stroke="var(--warn)"
+                stroke-width="1.5"
+              />
+              <line
+                x1="986"
+                y1="124"
+                x2="986"
+                y2="130"
+                stroke="var(--warn)"
+                stroke-width="1.5"
+              />
+              <text x="868.7" y="145" text-anchor="middle" class="an">
+                three takes read as one
+              </text>
+            </svg>
+          </div>
+          <figcaption>
+            A recording from December 17, 2025: four pieces over seven takes.
+            The model finds all four songs, but starts
+            <em>O Little Town of Bethlehem</em> late and merges the last three
+            takes of <em>Winter Wonderland</em>. Recognizing the piece is often
+            easier than separating repeated attempts.
+          </figcaption>
+        </figure>
+        <section class="stage">
+          <div class="stage-head col"><h2>Six seconds at a time</h2></div>
+          <div class="prose">
+            <p>
+              JamCoda reads note pitches, start and release times, velocity, and
+              sustain-pedal MIDI events. The song names come from the musician.
+            </p>
+            <p>
+              The model examines six seconds of playing at a time, moving
+              forward one second for each new window. That gives it some musical
+              context without blurring every change of song. Six seconds worked
+              best in experiments with windows from four to eight seconds.
+            </p>
+            <p>
+              Each window gets a label for its center. A window covering 0–6
+              seconds describes what is playing at second 3; the next describes
+              second 4. Those centers determine the initial song boundaries. A
+              later step adjusts them to nearby notes.
+            </p>
+          </div>
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 900 208"
+                role="img"
+                aria-label="A ribbon of notes with six-second windows drawn above it, each starting one second after the last, so consecutive windows overlap by five seconds. A tick marks each window's center, which is the moment its label describes."
+              >
+                <text x="14" y="34" class="rl">notes</text>
+                <rect
+                  x="90"
+                  y="22"
+                  width="46"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="152"
+                  y="32"
+                  width="30"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="120"
+                  y="42"
+                  width="72"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="205"
+                  y="22"
+                  width="38"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="228"
+                  y="42"
+                  width="94"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="300"
+                  y="32"
+                  width="26"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="345"
+                  y="22"
+                  width="60"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="360"
+                  y="42"
+                  width="44"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="420"
+                  y="32"
+                  width="88"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="470"
+                  y="22"
+                  width="34"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="520"
+                  y="42"
+                  width="52"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="560"
+                  y="22"
+                  width="72"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="600"
+                  y="32"
+                  width="40"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="655"
+                  y="42"
+                  width="66"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="690"
+                  y="22"
+                  width="48"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="745"
+                  y="32"
+                  width="94"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+                <rect
+                  x="770"
+                  y="42"
+                  width="58"
+                  height="7"
+                  rx="2"
+                  fill="var(--s-a)"
+                />
+
+                <line
+                  x1="90"
+                  y1="62"
+                  x2="860"
+                  y2="62"
+                  stroke="var(--rule)"
+                  stroke-width="1"
+                />
+
+                <rect
+                  x="90"
+                  y="76"
+                  width="180"
+                  height="15"
+                  rx="2"
+                  fill="none"
+                  stroke="var(--s-d)"
+                  stroke-width="1.5"
+                />
+                <line
+                  x1="180"
+                  y1="70"
+                  x2="180"
+                  y2="97"
+                  stroke="var(--s-d)"
+                  stroke-width="2"
+                />
+                <text x="278" y="88" class="nd">
+                  window 1 &nbsp;·&nbsp; 0–6s
+                </text>
+
+                <rect
+                  x="120"
+                  y="100"
+                  width="180"
+                  height="15"
+                  rx="2"
+                  fill="none"
+                  stroke="var(--s-d)"
+                  stroke-width="1.5"
+                />
+                <line
+                  x1="210"
+                  y1="94"
+                  x2="210"
+                  y2="121"
+                  stroke="var(--s-d)"
+                  stroke-width="2"
+                />
+                <text x="308" y="112" class="nd">
+                  window 2 &nbsp;·&nbsp; 1–7s
+                </text>
+
+                <rect
+                  x="150"
+                  y="124"
+                  width="180"
+                  height="15"
+                  rx="2"
+                  fill="none"
+                  stroke="var(--s-d)"
+                  stroke-width="1.5"
+                />
+                <line
+                  x1="240"
+                  y1="118"
+                  x2="240"
+                  y2="145"
+                  stroke="var(--s-d)"
+                  stroke-width="2"
+                />
+                <text x="338" y="136" class="nd">
+                  window 3 &nbsp;·&nbsp; 2–8s
+                </text>
+
+                <text x="90" y="168" class="nd-em">
+                  6-second window, 1-second hop
+                </text>
+                <text x="90" y="186" class="nd">
+                  a window's label describes its center — the tick — not its
+                  whole span
+                </text>
+              </svg>
             </div>
-            <div class="stat">
-              <b>83</b><span>Pieces it has seen you play</span>
+            <figcaption>
+              Six-second windows overlap by five seconds. The ticks mark their
+              centers, where the labels apply. The one-second spacing sets the
+              initial boundary resolution.
+            </figcaption>
+          </figure>
+        </section>
+
+        <section class="stage">
+          <div class="stage-head col">
+            <h2>What it remembers about the music</h2>
+          </div>
+          <div class="prose">
+            <p>
+              Each window becomes 37 numbers. Most describe which pitch classes
+              are sounding: how much C, C♯, D, and so on. They are counted
+              separately below middle C and from middle C upward, so bass and
+              treble patterns don’t get mixed together. This approximates the
+              separation between accompaniment and melody.
+            </p>
+            <p>
+              Longer notes and louder notes receive more weight. The remaining
+              numbers describe register, density, dynamics, note lengths,
+              silence, and the regularity of note starts. The model retains
+              these summaries, rather than the exact sequence of notes.
+            </p>
+            <p>
+              The sustain pedal matters. When the musician releases a key with
+              the pedal down, the model lets the note continue for up to 0.7
+              seconds, stopping sooner if the pedal lifts. Otherwise, lifting
+              the hands to change position can look like silence even though the
+              piano is still ringing.
+            </p>
+          </div>
+          <div class="tablewrap">
+            <table>
+              <caption class="eyebrow">
+                The 37 features
+              </caption>
+              <thead>
+                <tr>
+                  <th>Features</th>
+                  <th class="n">Count</th>
+                  <th>What they describe</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Low and high pitch-class profiles</td>
+                  <td class="n">24</td>
+                  <td>
+                    The relative weight of each pitch class in each register
+                  </td>
+                </tr>
+                <tr>
+                  <td>Low-register share</td>
+                  <td class="n">1</td>
+                  <td>The balance between bass and treble</td>
+                </tr>
+                <tr>
+                  <td>Note-start density</td>
+                  <td class="n">1</td>
+                  <td>How many notes begin per second</td>
+                </tr>
+                <tr>
+                  <td>Pitch mean, spread and span</td>
+                  <td class="n">3</td>
+                  <td>Where the playing sits on the keyboard</td>
+                </tr>
+                <tr>
+                  <td>Polyphony mean and spread</td>
+                  <td class="n">2</td>
+                  <td>
+                    How many notes sound together, and how much that varies
+                  </td>
+                </tr>
+                <tr>
+                  <td>Velocity mean and spread</td>
+                  <td class="n">2</td>
+                  <td>
+                    How hard the keys are struck, and how much that varies
+                  </td>
+                </tr>
+                <tr>
+                  <td>Duration mean and spread</td>
+                  <td class="n">2</td>
+                  <td>Note lengths and their variation</td>
+                </tr>
+                <tr>
+                  <td>Silence ratio and rhythmic regularity</td>
+                  <td class="n">2</td>
+                  <td>Gaps in the playing and regularity of note starts</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="prose">
+            <p>
+              An explicit tempo estimate was tried and removed. Slow practice
+              and a faster performance of the same piece could look too
+              different. Rhythm still enters through note density, duration and
+              regularity.
+            </p>
+          </div>
+          <details>
+            <summary>Feature calculations</summary>
+            <div class="prose">
+              <p>
+                Each register’s pitch-class profile is normalized separately to
+                sum to one. A note’s contribution is its duration inside the
+                window, weighted by <code>sqrt(velocity/127)</code>. The pedal
+                tail contributes half that weight; its length is capped at 0.6
+                seconds above C5 and 0.7 seconds elsewhere.
+              </p>
+              <p>
+                Silence is the fraction of quarter-second bins with no sounding
+                notes. Linking stops at a ratio of 0.7, but a four-second gap
+                inside a six-second window reaches only about 0.67. Short pauses
+                can slip through.
+              </p>
             </div>
-            <div class="stat"><b>162</b><span>Days with a recording</span></div>
-            <div class="stat">
-              <b>Local</b
-              ><span>Recordings, labels and model stay on your machine</span>
+          </details>
+        </section>
+
+        <section class="stage">
+          <div class="stage-head col">
+            <h2>Learning from the player's annotations</h2>
+          </div>
+          <div class="prose">
+            <p>
+              Training keeps a sample of labeled windows, called
+              <dfn>prototypes</dfn>. There is no neural network here: a prediction
+              is based on resemblance to those stored examples. A separate
+              <code>__none__</code> label represents playing outside the named
+              songs. These could be improvisations, ending flourishes, etc.
+            </p>
+            <p>
+              The model described here was trained from more than 1,000
+              annotations across 145 recordings. Those produced about 236,000
+              windows, reduced to 7,216 prototypes. A song with lots of
+              annotated playing gets more examples, allowing the model to
+              remember different passages and different ways of playing them.
+            </p>
+            <p>
+              That also creates a bias. With more examples, a song has more
+              chances to produce a close match, even when it is the wrong
+              answer. Attempts to compensate for this have reduced accuracy.
+              Giving sparsely annotated songs more examples remains the
+              practical way to improve their coverage.
+            </p>
+          </div>
+          <details>
+            <summary>Prototype selection and scoring</summary>
+            <div class="prose">
+              <p>
+                The default prototype budget is 8,000, divided between labels in
+                proportion to the square root of their training-window counts.
+                The <code>__none__</code> label has a separate cap of 60. Within
+                each label, training takes an evenly spaced, deterministic
+                sample. Caps and available examples mean the saved total can be
+                below the budget.
+              </p>
+              <p>
+                Features are standardized using the training mean and standard
+                deviation. Each label’s score is the negative Euclidean distance
+                to its nearest prototype: a closer match gives a higher score.
+              </p>
+              <p>
+                The decoder compares the best score with the runner-up using
+                <code>(top − runner-up) / (|top| + |runner-up|)</code>. This
+                margin measures how decisively one label won. It is not a
+                probability that the song is correct.
+              </p>
             </div>
+          </details>
+        </section>
+
+        <section class="stage">
+          <div class="stage-head col">
+            <h2>Joining the recognizable parts</h2>
+          </div>
+          <div class="prose">
+            <p>
+              A distinctive phrase is easy to recognize. A few bars of repeated
+              chords may fit several songs. Labeling each window independently
+              would break a performance into fragments whenever the music became
+              less distinctive.
+            </p>
+            <p>
+              JamCoda first looks for <dfn>anchors</dfn>: at least three
+              consecutive windows where the same song wins by a margin of 0.15
+              or more. It then extends those runs into the less certain passages
+              around them. The current “bridge” decoder uses these rules:
+            </p>
+            <ol>
+              <li>
+                <strong>Join anchors of the same song.</strong> If two
+                neighboring anchor runs identify the same piece, extend into the
+                gap from both ends. Silence and strong evidence for another
+                label can still stop the extension.
+              </li>
+              <li>
+                <strong>Limit extensions toward another song.</strong> Give an
+                anchor two seconds of extension, then require its song to remain
+                the top-scoring choice. This limit applies when a different-song
+                anchor exists in that direction; open ends of the recording keep
+                the ordinary linking checks.
+              </li>
+              <li>
+                <strong>Let both sides advance.</strong> Competing extensions
+                move one window at a time, so the earlier song doesn’t get first
+                claim on the entire gap.
+              </li>
+              <li>
+                <strong>Reconsider the gaps left over.</strong> A neighboring
+                song can claim a gap if it ranks well enough on average across
+                that stretch. This rescue pass skips gaps with the same song on
+                both sides, to avoid merging more repeated takes.
+              </li>
+            </ol>
+            <p>
+              The last rule helps with passages the model partly recognizes. A
+              song may rarely win a window but still rank near the top
+              throughout its own performance. The rescue threshold is a mean of
+              at most five labels scoring above it; the code counts rank from
+              zero.
+            </p>
+          </div>
+          <div class="prose">
+            <p>
+              Bridge linking became the training default in v2.11. Older saved
+              models without a link-policy setting still use the previous
+              decoder, so updating the app doesn’t silently change their
+              predictions.
+            </p>
           </div>
         </section>
 
-        <div class="stages">
-          <section class="stage">
-            <div class="stage-head col">
-              <h2>The short version</h2>
-              <p class="sub">
-                New sessions come off the Jamcorder into your library. After
-                that, three things go round.
-              </p>
-            </div>
-            <div class="loop">
-              <article>
-                <p class="rule-no">01</p>
-                <h3>Label</h3>
-                <p>
-                  You mark where a take starts and ends, and give it the name of
-                  the piece.
-                </p>
-              </article>
-              <span class="arrow" aria-hidden="true">→</span>
-              <article>
-                <p class="rule-no">02</p>
-                <h3>Suggest</h3>
-                <p>
-                  JamCoda looks through your other recordings for the pieces it
-                  has learned from you, and proposes where each take begins and
-                  ends.
-                </p>
-              </article>
-              <span class="arrow" aria-hidden="true">→</span>
-              <article>
-                <p class="rule-no">03</p>
-                <h3>Review</h3>
-                <p>
-                  You keep, adjust or reject each suggestion. Everything you
-                  keep becomes a label like any other.
-                </p>
-              </article>
-            </div>
-            <div class="note">
-              <p>
-                <b>↻ And back to labeling.</b> Each round leaves JamCoda knowing
-                your repertoire a little better, so the next one arrives with
-                more of it already named — and a piece it has never been shown
-                stays unnamed until you label a take of it yourself.
-              </p>
-            </div>
-          </section>
+        <section class="stage">
+          <div class="stage-head col">
+            <h2>Turning the result into suggestions</h2>
+          </div>
+          <div class="prose">
+            <p>
+              Consecutive windows with the same song label become a segment. By
+              default, segments shorter than eight seconds or below 0.3
+              confidence are dropped, and remaining same-song segments separated
+              by at most five seconds are merged. Boundaries then snap to nearby
+              note starts and releases. An ending-flourish heuristic can trim an
+              arpeggio after the final chord.
+            </p>
+            <p>
+              Before suggestions enter the review queue, the app removes time
+              the player has already annotated. It also splits segments at
+              device bookmarks and at recorded pauses of at least 30 seconds.
+              These markers are applied after decoding; they don’t help the
+              model identify the song.
+            </p>
+            <p>
+              The musician can confirm a suggestion, correct its name or
+              boundaries, or reject it. Promoting an accepted suggestion makes
+              it an annotation that the next rebuild can learn from. Rebuilding
+              is a manual action. Marking a file complete clears its predictions
+              and blocks further committed runs, though Prediction Lab can still
+              preview results on it.
+            </p>
+            <p class="note">
+              The displayed confidence has a known inconsistency: anchor windows
+              keep their margins, while linked windows usually receive 0.5. A
+              segment made mostly of linked windows can therefore score higher
+              than one made of strong anchors. Treat it as a filtering value,
+              not a calibrated likelihood.
+            </p>
+          </div>
+        </section>
 
-          <section class="stage">
-            <div class="stage-head col">
-              <h2>Every session in one list</h2>
-              <p class="sub">
-                The Library is where you land, and where you can see how far
-                through your recordings you are.
-              </p>
-            </div>
-            <div class="prose">
-              <p>
-                Each row is one session: the date the Jamcorder recorded it, the
-                filename it gave it, and how long it runs. The middle columns
-                say where you stand with it. A green <b>Complete</b> badge means
-                you have decided everything worth naming in that recording has
-                been named; before that, a bar shows how much of the session is
-                covered. Beside it is the number of suggestions still waiting
-                for you.
-              </p>
-              <p>
-                On the right, the session itself, one chip per take: the name of
-                the piece and the minute it begins. Click a chip and the
-                recording opens at that moment.
-              </p>
-              <p>
-                A row is readable on its own. The August 1 session runs 52:51
-                and holds twenty-two takes — a couple of passes at Maple Leaf
-                Rag to warm up, a stretch on Etude No 2, five passes at Bethena
-                in the middle, Maple Leaf Rag again at the end. Directly above
-                it, August 2 is four minutes long and contains a single take of
-                Bethena.
-              </p>
-            </div>
-            <figure>
-              <a class="shot" href="images/library.jpg">
-                <img
-                  src="images/library.jpg"
-                  width="2780"
-                  height="1346"
-                  alt="The JamCoda library: a sidebar with Library, Songs and Analytics, and a table of recordings by date, each row showing duration, a Complete badge, an unreviewed count, and colored chips naming the takes found in that session."
-                />
-              </a>
-              <figcaption>
-                <b>Library</b> — one row per session, newest first. The chips
-                are the takes inside it; clicking one opens the recording at
-                that timestamp.
-              </figcaption>
-            </figure>
-          </section>
+        <section class="stage">
+          <div class="stage-head col"><h2>How well it works</h2></div>
+          <div class="prose">
+            <p>
+              The figures below come from a fixed September 2026 snapshot. Each
+              recording was predicted using a model trained on the other
+              recordings. This leave-one-file-out evaluation checks recognition
+              of a performance the model has not already stored.
+            </p>
+            <p>
+              Accuracy is reported on the 103 recordings marked complete. In an
+              unfinished file, an unlabeled passage might be a song the player
+              hasn’t got to yet. Scoring a correct prediction there as a false
+              positive would measure annotation progress as much as model
+              quality.
+            </p>
+          </div>
+          <div class="tablewrap">
+            <table>
+              <caption class="eyebrow">
+                103 completed recordings · 688 annotated takes ·
+                leave-one-file-out
+              </caption>
+              <thead>
+                <tr>
+                  <th>Measure</th>
+                  <th class="n">Result</th>
+                  <th>Meaning</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Segment F1</td>
+                  <td class="n">93.3%</td>
+                  <td>
+                    Combined recall and precision of same-song time overlap
+                  </td>
+                </tr>
+                <tr>
+                  <td>Recall</td>
+                  <td class="n">92.6%</td>
+                  <td>
+                    Annotated time covered by a prediction of the right song
+                  </td>
+                </tr>
+                <tr>
+                  <td>Precision</td>
+                  <td class="n">94.1%</td>
+                  <td>
+                    Predicted time overlapping an annotation of the same song
+                  </td>
+                </tr>
+                <tr>
+                  <td>Individual takes matched</td>
+                  <td class="n">397 / 688</td>
+                  <td>
+                    Mutual best same-song matches with intersection-over-union
+                    of at least 0.5
+                  </td>
+                </tr>
+                <tr>
+                  <td>Median ending error</td>
+                  <td class="n">+0.81s</td>
+                  <td>Among matched takes; positive means late</td>
+                </tr>
+                <tr>
+                  <td>Endings within two seconds</td>
+                  <td class="n">40.6%</td>
+                  <td>Among matched takes</td>
+                </tr>
+                <tr>
+                  <td>Starts within two seconds</td>
+                  <td class="n">61.7%</td>
+                  <td>Among matched takes</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="prose">
+            <p>
+              The overlap score is high, but only 397 of 688 takes are
+              individually matched. One prediction can cover several attempts at
+              the same piece and get most of their song-labeled time right while
+              matching at most one attempt. That is what happens at the end of
+              the example recording.
+            </p>
+            <p>
+              Comparisons use the same dataset snapshot, with a per-file
+              bootstrap interval for the F1 change. Boundary comparisons also
+              track the takes both runs matched, so an apparent improvement
+              can’t be explained solely by dropping difficult takes. These
+              results describe this practice library; they don’t establish
+              accuracy for other players or repertoires.
+            </p>
+          </div>
+        </section>
 
-          <section class="stage">
-            <div class="stage-head col">
-              <h2>Inside a recording</h2>
-              <p class="sub">
-                Where the labeling happens, and where you listen back.
-              </p>
-            </div>
-            <div class="prose">
-              <p>
-                Opening a session shows what was played. Notes run left to right
-                in time and bottom to top in pitch, with the playhead down the
-                left. Press play and you hear it back on a piano, whatever sound
-                the original was recorded with.
-              </p>
-              <p>
-                Naming a take is the main work. Play until you hear a piece
-                begin, press <b>Start</b>, let it run to the end of the take,
-                press <b>End</b>, then give it a name — or drag across the roll
-                and nudge the edges afterward. <code>P</code> plays,
-                <code>S</code> and <code>E</code> set the two edges.
-                <b>Following</b> keeps the view moving with the music, and the
-                colored bar under the roll is the take you are currently inside.
-              </p>
-              <p>
-                Under that, <b>Whole recording</b> is the entire 52:51 at a
-                glance — all twenty-two takes, colored by piece. Click a block
-                to jump to it, drag an edge to change where it starts or ends.
-                The <b>device markers</b> below are the Jamcorder’s own: points
-                you bookmarked while playing, and the long silences it noticed.
-                They are a good way to find the seams between takes.
-              </p>
-              <p>
-                The empty lane reading <b>No predictions</b> is empty on
-                purpose. This session has been marked complete, so JamCoda has
-                cleared its suggestions and won’t make new ones for it. Marking
-                a session complete is worth doing for another reason too: it
-                tells JamCoda that the unlabeled stretches in that file really
-                were you playing around, rather than takes nobody got around to
-                naming — which is how it learns when to stay quiet.
-              </p>
-            </div>
-            <figure>
-              <a class="shot" href="images/annotated_file.jpg">
-                <img
-                  src="images/annotated_file.jpg"
-                  loading="lazy"
-                  width="2230"
-                  height="1298"
-                  alt="A fully labeled session open in JamCoda: transport controls with Start, End and Following buttons, a piano roll of the notes, a pink annotation bar for Maple Leaf Rag, an empty predictions lane, a whole-recording strip of twenty-two colored takes, and clickable device markers."
-                />
-              </a>
-              <figcaption>
-                <b>A labeled session</b> — the piano roll, the take you are
-                inside, and the whole 52-minute recording summarized underneath.
-              </figcaption>
-            </figure>
-          </section>
+        <section class="stage">
+          <div class="stage-head col"><h2>Where it still needs help</h2></div>
+          <div class="prose">
+            <p>
+              <strong>Repeated takes merge.</strong> The same-song linking rule
+              helps preserve a performance through an ambiguous passage. It can
+              also join two separate attempts. Short pauses don’t always pass
+              the silence threshold, and gap merging can join nearby segments
+              again. Repeated takes are the largest remaining source of missed
+              boundaries.
+            </p>
+            <p>
+              <strong>A weak middle can cut a take short.</strong> When
+              recognition fades, the extension limit may stop a song too soon.
+              The rescue pass can miss the rest because it averages the
+              remaining music together with the unrelated playing after it. One
+              <em>Ashokan Farewell</em> take was reduced to 14 seconds out of
+              78. An experimental rescue with a shorter lookahead helps some
+              such cases, but gave no clear overall gain and remains off by
+              default.
+            </p>
+            <p>
+              <strong>Warm-up makes the boundary debatable.</strong> In one
+              recording, the annotations for <em>The Entertainer</em> begin 73
+              seconds in, while the model starts near the beginning. The
+              disputed passage is warm-up on that piece. Deciding whether it
+              counts as a take needs a consistent annotation rule; a score alone
+              cannot settle it.
+            </p>
+          </div>
+        </section>
 
-          <section class="stage">
-            <div class="stage-head col">
-              <h2>Suggestions on a session you haven’t touched</h2>
-              <p class="sub">
-                The same view, on a recording with nothing labeled in it yet.
-              </p>
-            </div>
-            <div class="prose">
-              <p>
-                Here the top lane says <b>No annotations yet</b>, and the lane
-                below it holds fifteen suggestions: Pathetique, Turkish March,
-                Waltz in A, Bethena, Bink’s Waltz, Blue Danube — forty-three
-                minutes of practice, proposed as takes.
-              </p>
-              <p>
-                They come from a model built out of your own labeling. It knows
-                the pieces you have named before and nothing else, so it will
-                recognize Bethena in a recording it has never seen, and stay
-                quiet about something you sight-read for the first time that
-                day.
-              </p>
-              <p>
-                Each suggestion carries a percentage. That number is not the
-                model rating its own cleverness; it is an estimate, based on
-                which suggestions you have accepted in the past, of how likely
-                you are to accept this one. Long, steady spans read high; short
-                scraps read low.
-              </p>
-            </div>
-            <figure>
-              <a class="shot" href="images/only_predicted.jpg">
-                <img
-                  src="images/only_predicted.jpg"
-                  loading="lazy"
-                  width="2368"
-                  height="1236"
-                  alt="An unlabeled session in JamCoda: the annotations lane reads No annotations yet, while the predictions lane below shows fifteen proposed takes named Pathetique, Turkish March, Waltz in A, Bethena, Bink's Waltz and Blue Danube, the first labeled Pathetique 89%."
+        <section class="stage">
+          <div class="stage-head col"><h2>What improved</h2></div>
+          <div class="prose">
+            <p>
+              Increasing the number of stored examples improved coverage.
+              Standardizing features made distances less sensitive to outliers.
+              Accounting for pedal sustain reduced false silence, and snapping
+              boundaries to notes removed some of the loose edges left by the
+              one-second grid.
+            </p>
+            <p>
+              Bridge linking mostly improved endings. On the same snapshot, it
+              raised F1 from 91.16% to 93.33% and reduced median ending error
+              from 5.85 seconds late to 0.81 seconds late, with recall nearly
+              unchanged.
+            </p>
+          </div>
+          <figure>
+            <div class="figbox">
+              <svg
+                viewBox="0 0 940 384"
+                role="img"
+                aria-label="Complete-file segment F1 rising across four release configurations. Measured on the September 7, 2026 dataset: v2.8 86.3, v2.9 87.8, v2.10 91.2, v2.11 93.3. Reported at the time on each era's smaller corpus: 83.1, 85.7, 88.2, converging on 93.3 at the current release."
+              >
+                <circle cx="156" cy="26" r="5" fill="var(--accent)" />
+                <text x="168" y="30" class="nd">Sep 7, 2026, one dataset</text>
+                <circle
+                  cx="392"
+                  cy="26"
+                  r="5"
+                  fill="none"
+                  stroke="var(--muted)"
+                  stroke-width="2"
                 />
-              </a>
-              <figcaption>
-                <b>Suggestions</b> — fifteen proposed takes across a
-                forty-three-minute session. The percentage is how likely you are
-                to accept the suggestion, going by the ones you have accepted
-                before.
-              </figcaption>
-            </figure>
-            <figure>
-              <div class="shot">
-                <video
-                  src="media/run_predictions.mp4"
-                  poster="images/run_predictions_poster.jpg"
-                  width="1920"
-                  height="1164"
-                  controls
-                  preload="metadata"
-                  playsinline
-                  aria-label="An unlabeled session in JamCoda with empty annotation and prediction lanes. Run Predictions is clicked, a message reports seven prediction segments, and the predictions lane fills with takes including Maple Leaf Rag at 88%, The Entertainer, Christmas Time is Here and Moonlight Sonata, the first few of which are played back."
-                ></video>
-              </div>
-              <figcaption>
-                <b>Run Predictions</b> — on a session with nothing labeled yet,
-                one click fills the lane with seven suggested takes, and the
-                first few are played back. Sound on.
-              </figcaption>
-            </figure>
-            <div class="prose">
-              <p>
-                Clicking a suggestion opens it for review. Listen to it, then
-                keep it as it stands, fix the name or the edges first, or throw
-                it out. Anything you keep becomes an ordinary label, no
-                different from one you made by hand — and part of what the next
-                rebuild learns from.
-              </p>
-            </div>
-            <figure>
-              <div class="shot">
-                <video
-                  src="media/annotating.mp4"
-                  poster="images/annotating_poster.jpg"
-                  width="1280"
-                  height="784"
-                  controls
-                  preload="metadata"
-                  playsinline
-                  aria-label="A partly labeled session playing back in JamCoda. Suggested takes for Waltz in A, Maple Leaf Rag and Christmas Time is Here are played, opened for review, and confirmed, moving each one from the predictions lane into the annotations lane."
-                ></video>
-              </div>
-              <figcaption>
-                <b>Reviewing suggestions</b> — on a session that is already
-                partly labeled, three suggested takes are played back and kept,
-                each becoming a label. Sound on.
-              </figcaption>
-            </figure>
-            <div class="note">
-              <p>
-                <b>How does it recognize anything?</b>
-                <a href="how-jamcoda-works.html">How JamCoda finds the songs</a>
-                is the illustrated version: how a recording is cut into short
-                windows, what each one is compared against, and how the parts it
-                recognizes are joined back into takes. It is the technical
-                companion to this page.
-              </p>
-            </div>
-          </section>
+                <text x="404" y="30" class="nd">
+                  reported at the time, that era&#8217;s corpus
+                </text>
 
-          <section class="stage">
-            <div class="stage-head col">
-              <h2>If a session comes back wrong</h2>
-              <p class="sub">
-                Prediction Lab, for the cases you can see with your own eyes.
-              </p>
-            </div>
-            <div class="prose">
-              <p>
-                Most of the time there is nothing to adjust. Now and then a
-                session comes back visibly off — one take arriving in three
-                pieces, or a take swallowing the noodling that followed it — and
-                this panel, folded away at the bottom of the same page, lets you
-                try something else before committing to it.
-              </p>
-              <p>
-                The first row tidies up the result after the model has had its
-                say: the shortest span allowed to count as a piece, how close
-                two fragments of the same piece must be before they are treated
-                as one take, how sure it has to be to keep a span at all. The
-                second group changes how the parts it recognized are joined
-                together; it re-reads the same model rather than rebuilding
-                anything, so two runs that differ only here are directly
-                comparable.
-              </p>
-              <p>
-                Each box shows the value currently in use, and typing over one
-                applies only to the next preview. <b>Preview</b> draws the
-                result along the bottom, next to what is stored, and forgets it
-                the moment you leave the page. Nothing here retrains the model,
-                and nothing replaces your suggestions until you ask for a real
-                run.
-              </p>
-            </div>
-            <figure>
-              <a class="shot" href="images/prediction_lab.jpg">
-                <img
-                  src="images/prediction_lab.jpg"
-                  loading="lazy"
-                  width="2274"
-                  height="1184"
-                  alt="The Prediction Lab panel: a Segment shaping row with minimum segment, merge gap and confidence fields, a Decoding group with link policy and related settings, Preview and Reset to defaults buttons, and a strip showing the twenty takes currently in the review queue."
+                <line
+                  x1="150"
+                  y1="300"
+                  x2="880"
+                  y2="300"
+                  stroke="var(--rule)"
+                  stroke-width="1"
                 />
-              </a>
-              <figcaption>
-                <b>Prediction Lab</b> — try a setting, preview what it would
-                produce, and compare it with the suggestions already stored.
-              </figcaption>
-            </figure>
-          </section>
+                <text x="138" y="304" text-anchor="end" class="tk">82</text>
+                <line
+                  x1="150"
+                  y1="244.6"
+                  x2="880"
+                  y2="244.6"
+                  stroke="var(--rule)"
+                  stroke-width="1"
+                />
+                <text x="138" y="248.6" text-anchor="end" class="tk">85</text>
+                <line
+                  x1="150"
+                  y1="189.2"
+                  x2="880"
+                  y2="189.2"
+                  stroke="var(--rule)"
+                  stroke-width="1"
+                />
+                <text x="138" y="193.2" text-anchor="end" class="tk">88</text>
+                <line
+                  x1="150"
+                  y1="133.8"
+                  x2="880"
+                  y2="133.8"
+                  stroke="var(--rule)"
+                  stroke-width="1"
+                />
+                <text x="138" y="137.8" text-anchor="end" class="tk">91</text>
+                <line
+                  x1="150"
+                  y1="78.5"
+                  x2="880"
+                  y2="78.5"
+                  stroke="var(--rule)"
+                  stroke-width="1"
+                />
+                <text x="138" y="82.5" text-anchor="end" class="tk">94</text>
 
-          <section class="stage">
-            <div class="stage-head col">
-              <h2>Keeping it fed</h2>
-              <p class="sub">Two buttons, both deliberately manual.</p>
-            </div>
-            <div class="prose">
-              <p>
-                <b>Sync Now</b> fetches whatever the Jamcorder has recorded
-                since last time. Sessions already on your machine are skipped,
-                and the empty files the device sometimes leaves behind — opened
-                and closed without a note in them — are ignored rather than
-                filling up your library. A full re-sync re-checks everything,
-                for when a recording needs collecting again.
-              </p>
-              <p>
-                <b>Rebuild Model + Re-score</b> takes every label you have made,
-                including all the suggestions you accepted, builds a fresh model
-                from them, and runs it over the sessions whose suggestions you
-                have not acted on yet. It can take a while, so it happens when
-                you say so and not before. The button in the sidebar picks up a
-                badge when your labeling has moved on since the model was built,
-                or when a piece has appeared that it has never seen.
-              </p>
-            </div>
-            <figure>
-              <a class="shot narrow" href="images/settings.jpg">
-                <img
-                  src="images/settings.jpg"
-                  loading="lazy"
-                  width="968"
-                  height="756"
-                  alt="The Settings dialog: a Sync section with a Sync Now button, a full re-sync option, the time of the last sync and the connected device address, and a Model section with a Rebuild Model and Re-score button."
+                <line
+                  x1="150"
+                  y1="60"
+                  x2="150"
+                  y2="300"
+                  stroke="var(--rule-strong)"
+                  stroke-width="1"
                 />
-              </a>
-              <figcaption>
-                <b>Settings</b> — collecting new recordings, and folding your
-                review work back into the model.
-              </figcaption>
-            </figure>
-          </section>
 
-          <section class="stage">
-            <div class="stage-head col">
-              <h2>It gets easier as it goes</h2>
-              <p class="sub">
-                The slow part is at the beginning, and you only do it once.
-              </p>
-            </div>
-            <div class="prose">
-              <p>
-                The first few sessions are all hand work. There is nothing to
-                learn from yet, so every take gets named by you — and marking
-                those early recordings complete is what teaches JamCoda the
-                difference between a piece and ten minutes of playing around.
-              </p>
-              <p>
-                After that it compounds. Every take you name, and every
-                suggestion you accept, is another example of how you play that
-                piece, so the next rebuild knows your repertoire a little
-                better. A session that would once have arrived blank arrives
-                mostly named, and the work changes shape: less labeling, more
-                listening and confirming. A new piece needs only a handful of
-                named takes before it starts turning up on its own; something
-                you have been playing for months is usually found without you
-                doing anything at all.
-              </p>
-              <p>
-                The practical version: an hour spent labeling this month is not
-                an hour you spend again next month. It is what makes a library
-                this size — 83 pieces across 162 days of recordings — something
-                you can keep on top of.
-              </p>
-            </div>
-          </section>
+                <polyline
+                  points="240,280.1 420,231.9 600,186.5 780,90.8"
+                  fill="none"
+                  stroke="var(--muted)"
+                  stroke-width="2"
+                  opacity=".5"
+                />
+                <polyline
+                  points="240,220.5 420,193.6 600,130.9 780,90.8"
+                  fill="none"
+                  stroke="var(--accent)"
+                  stroke-width="2"
+                />
 
-          <section class="stage">
-            <div class="stage-head col">
-              <h2>What it adds up to</h2>
-              <p class="sub">
-                The reason for all the labeling: a straight answer to “what have
-                I actually been playing?”
-              </p>
-            </div>
-            <div class="prose">
-              <p>
-                Pick a stretch of time — the last month, the last six, all of it
-                — and Analytics adds up the takes inside it. Four numbers at the
-                top: total practice time, how many different pieces you touched,
-                how many days you sat down and the average per day, and the
-                piece that took the most time along with its share of the total.
-              </p>
-              <p>
-                Under them, the pieces ranked by time, with the number of
-                separate takes beside each: 146 run-throughs of Maple Leaf Rag
-                over ten hours, 139 of Bethena over eight and a half. Clicking a
-                bar picks that piece out of the chart below it; the small icon
-                at the end of the bar opens it in the Songs view, where you can
-                play its takes from different sessions one after another.
-              </p>
-            </div>
-            <figure>
-              <a class="shot" href="images/analytics_top_songs.jpg">
-                <img
-                  src="images/analytics_top_songs.jpg"
-                  loading="lazy"
-                  width="2356"
-                  height="1356"
-                  alt="The Analytics page: range and grouping controls, summary tiles reading 58h 47m practice time, 83 songs touched, 162 active days and top song Maple Leaf Rag, above a ranked bar chart of the top songs by practice time."
+                <circle
+                  cx="240"
+                  cy="280.1"
+                  r="5"
+                  fill="none"
+                  stroke="var(--muted)"
+                  stroke-width="2"
                 />
-              </a>
-              <figcaption>
-                <b>Analytics</b> — the range across the top, the totals beneath
-                it, and the pieces ranked by how much time they took.
-              </figcaption>
-            </figure>
-            <div class="note">
-              <p>
-                <b>Only labeled time is counted.</b> Improvising, warming up and
-                anything still unnamed stays out of these totals — which is the
-                practical reason to keep up with the suggestions.
-              </p>
-            </div>
-            <div class="prose">
-              <p>
-                The same time, broken up by month and stacked so each band is
-                one piece. The ten pieces with the most time get a color;
-                everything else is gray. That makes the shape of a bar
-                informative on its own. December 2025 is tall and almost
-                entirely gray: a month spread thinly across many different
-                pieces. August 2026 is taller still and mostly color — the same
-                few pieces, over and over.
-              </p>
-            </div>
-            <figure>
-              <a class="shot" href="images/practice_over_time.jpg">
-                <img
-                  src="images/practice_over_time.jpg"
-                  loading="lazy"
-                  width="2364"
-                  height="998"
-                  alt="The Practice over time chart: stacked bars of labeled practice time per month from October 2025 to September 2026, with the top ten songs in color, everything else in gray, and a legend naming the colored pieces."
+                <text x="250" y="296" class="nd">83.1</text>
+                <circle
+                  cx="420"
+                  cy="231.9"
+                  r="5"
+                  fill="none"
+                  stroke="var(--muted)"
+                  stroke-width="2"
                 />
-              </a>
-              <figcaption>
-                <b>Practice over time</b> — a year of practice by month. Gray is
-                everything outside the top ten, so a gray bar is a month of
-                variety and a colorful one a month of focus.
-              </figcaption>
-            </figure>
-            <div class="prose">
-              <p>
-                Then the whole range as a table: every piece, the time it took,
-                how many takes that was, how many separate days it turned up on,
-                when you last played it, and a small line showing how it was
-                spread across the range. Sort by any column, and click a row to
-                pick that piece out of the charts above.
-              </p>
-              <p>
-                Two rows can say quite different things. Maple Leaf Rag — ten
-                hours, 146 takes, across 52 separate days — is something being
-                kept up. Moonlight Sonata — nearly two hours and 46 takes, but
-                on four days, and nothing since February — is a piece learned in
-                a burst and then set down.
-              </p>
-            </div>
-            <figure>
-              <a class="shot" href="images/songs_in_range.jpg">
-                <img
-                  src="images/songs_in_range.jpg"
-                  loading="lazy"
-                  width="2352"
-                  height="1240"
-                  alt="The All songs in range table: one row per piece with total time, number of sessions, number of days, the date last played, and a small trend sparkline, sorted by total time with Maple Leaf Rag at the top."
+                <text x="430" y="252" class="nd">85.7</text>
+                <circle
+                  cx="600"
+                  cy="186.5"
+                  r="5"
+                  fill="none"
+                  stroke="var(--muted)"
+                  stroke-width="2"
                 />
-              </a>
-              <figcaption>
-                <b>All songs in range</b> — the same practice, piece by piece,
-                with how recently and how widely each one was played.
-              </figcaption>
-            </figure>
-          </section>
+                <text x="610" y="206" class="nd">88.2</text>
 
-          <section class="stage">
-            <div class="stage-head col">
-              <h2>Read next</h2>
+                <circle cx="240" cy="220.5" r="5" fill="var(--accent)" />
+                <text x="240" y="207" text-anchor="middle" class="nd-em">
+                  86.3
+                </text>
+                <circle cx="420" cy="193.6" r="5" fill="var(--accent)" />
+                <text x="420" y="180" text-anchor="middle" class="nd-em">
+                  87.8
+                </text>
+                <circle cx="600" cy="130.9" r="5" fill="var(--accent)" />
+                <text x="600" y="117" text-anchor="middle" class="nd-em">
+                  91.2
+                </text>
+                <circle cx="780" cy="90.8" r="5" fill="var(--accent)" />
+                <text x="794" y="95" class="nd-em">93.3</text>
+
+                <text x="240" y="326" text-anchor="middle" class="rl">
+                  v2.8
+                </text>
+                <text x="240" y="344" text-anchor="middle" class="tk">
+                  win 4s · minmax · 2k
+                </text>
+                <text x="420" y="326" text-anchor="middle" class="rl">
+                  v2.9
+                </text>
+                <text x="420" y="344" text-anchor="middle" class="tk">
+                  win 5s · z-score · 2k
+                </text>
+                <text x="600" y="326" text-anchor="middle" class="rl">
+                  v2.10
+                </text>
+                <text x="600" y="344" text-anchor="middle" class="tk">
+                  win 6s · 8k · silence gate
+                </text>
+                <text x="780" y="326" text-anchor="middle" class="rl-em">
+                  v2.11 · current
+                </text>
+                <text x="780" y="344" text-anchor="middle" class="tk">
+                  + bridge linking
+                </text>
+
+                <text x="24" y="180" class="nd">complete-file</text>
+                <text x="24" y="196" class="nd">segment F1 (%)</text>
+                <text x="515" y="372" text-anchor="middle" class="nd">
+                  release configuration, oldest to newest
+                </text>
+              </svg>
             </div>
-            <div class="cards">
-              <article>
-                <h3>
-                  <a href="how-jamcoda-works.html"
-                    >How JamCoda finds the songs</a
-                  >
-                </h3>
-                <p>
-                  An illustrated walkthrough of what happens between a recording
-                  and the suggestions: how it listens, what it remembers, and
-                  where it still gets things wrong.
-                </p>
-              </article>
-              <article>
-                <h3>
-                  <a href="https://github.com/jordanderson/jamcoda"
-                    >Set it up yourself</a
-                  >
-                </h3>
-                <p>
-                  The source, and the few commands that install it, point it at
-                  your Jamcorder and start it running locally.
-                </p>
-              </article>
-              <article>
-                <h3>
-                  <a
-                    href="https://github.com/jordanderson/jamcoda/blob/main/ml/README.md"
-                    >The model, in detail</a
-                  >
-                </h3>
-                <p>
-                  Commands and settings for training, predicting and measuring
-                  the model, for anyone who wants to take it further.
-                </p>
-              </article>
-            </div>
-          </section>
-        </div>
+            <figcaption>
+              Filled points compare older release settings using the current
+              feature extractor on one frozen dataset. Hollow points show
+              results reported on the smaller datasets available at release
+              time. This is a comparison of settings, not a full reconstruction
+              of each old model.
+            </figcaption>
+          </figure>
+          <div class="prose">
+            <p>
+              Several plausible changes failed: equal prototype budgets
+              discarded useful examples, one-hand training copies reduced
+              accuracy, and stricter per-window rank checks broke takes into
+              more fragments. The
+              <a
+                href="https://github.com/jordanderson/jamcoda/blob/main/ml/CHANGELOG.md"
+                >ML changelog</a
+              >
+              records those experiments and the release history.
+            </p>
+          </div>
+        </section>
       </main>
-
       <footer>
         <div class="wrap col">
           <p>
-            Screenshots from a working library, September 2026. Song titles and
-            practice times are one player’s own.
+            Model snapshot: v2.11, 145 training recordings, 1,007 annotations,
+            67 songs and 7,216 prototypes. Evaluation snapshot: September 7,
+            2026, dataset <span class="mono">90836c7f…</span>. Example
+            recording: <span class="mono">Jmx-A00058-Dec-17-2025</span>.
           </p>
           <p>
-            JamCoda is released under the MIT License.
-            <a href="https://github.com/jordanderson/jamcoda"
-              >github.com/jordanderson/jamcoda</a
+            Implementation:
+            <a
+              href="https://github.com/jordanderson/jamcoda/blob/main/ml/songSegmentation.ts"
+              >feature extraction, training and decoding</a
+            >;
+            <a
+              href="https://github.com/jordanderson/jamcoda/blob/main/server/services/predictionImport.ts"
+              >prediction import</a
+            >. See the
+            <a
+              href="https://github.com/jordanderson/jamcoda/blob/main/ml/README.md"
+              >ML guide</a
             >
+            for commands and settings.
           </p>
           <p>
             Authored by: <a href="https://claude.ai">Claude</a>, edited by

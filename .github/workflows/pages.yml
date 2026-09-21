@@ -29,13 +29,6 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
-      # Site videos live on the `media` release, not in git. Changing its
-      # assets does not trigger this workflow; run it by hand afterward.
-      - name: Fetch site media
-        run: gh release download media --pattern '*.mp4' --dir docs/media
-        env:
-          GH_TOKEN: ${{ github.token }}
-
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs

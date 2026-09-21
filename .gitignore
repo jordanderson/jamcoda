@@ -10,9 +10,6 @@ coverage/
 data/
 data.backup/
 
-# Site media, fetched from the `media` release when Pages deploys
-docs/media/
-
 # Logs and OS files
 *.log
 .DS_Store

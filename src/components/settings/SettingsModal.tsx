@@ -138,7 +138,7 @@ export function SettingsModal({ isOpen, isSyncStarting, onStartSync, onClose, sh
 
         <footer className="mt-6 border-t border-gray-100 pt-4 text-center">
           <a
-            href="https://jordanderson.github.io/jamcoda/"
+            href="https://github.com/jordanderson/jamcoda"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"

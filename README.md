@@ -9,7 +9,7 @@ Jamcorder produces one MIDI file per day, with all your practice session. JamCod
 1. Syncs the MIDI files from the Jamcorder onto your computer.
 2. Gives you a user-friendly way to annotate song segments.
 3. Runs an ML segmentation model that learns from your annotations and proposes song segments.
-4. Allows you to review, edit, and promote those proposals into new annotations.
+4. Allows you to review, edit, and promote those proposed songs into new annotations.
 
 The more you annotate, the better the model gets at proposing segments for you to review.
 
@@ -20,8 +20,6 @@ https://github.com/user-attachments/assets/fd862241-4e85-4347-b869-2bf00c5dbb43
 This is an example of a partially annotated JamCoda session with predictions to review. I listen to them, promote them, and make slight adjustments to the start/end times if needed. Once I finish, I rebuild the model so it takes those new annotations into account.
 
 https://github.com/user-attachments/assets/0768aba3-628a-44a1-af28-6f56146d1225
-
-For a guided tour with screenshots from a real library, see the [JamCoda overview](https://jordanderson.github.io/jamcoda/).
 
 ## Workflow
 
@@ -93,7 +91,7 @@ whose unpromoted proposals are all still `unsure`.
 
 <img src="docs/images/settings.jpg" width="484" alt="The Settings dialog: a Sync section with a Sync Now button, a full re-sync option, the time of the last sync and the connected device address, and a Model section with a Rebuild Model and Re-score button.">
 
-[How JamCoda works](https://jordanderson.github.io/jamcoda/how-jamcoda-works.html)
+[How JamCoda works](https://jordanderson.github.io/jamcoda/)
 is an illustrated walkthrough of how the model finds songs in a recording.
 
 ## Getting started
@@ -216,11 +214,9 @@ memory for the session; the browser's cache serves them after that.
 
 ## Documentation
 
-- [JamCoda overview](https://jordanderson.github.io/jamcoda/) — what it does,
-  with screenshots ([source](docs/index.html)).
-- [How JamCoda works](https://jordanderson.github.io/jamcoda/how-jamcoda-works.html)
-  — an illustrated walkthrough of the segmentation pipeline
-  ([source](docs/how-jamcoda-works.html)).
+- [How JamCoda works](https://jordanderson.github.io/jamcoda/) — an
+  illustrated walkthrough of the segmentation pipeline
+  ([source](docs/index.html)).
 - [`ml/README.md`](ml/README.md) — model commands, settings and evaluation.
 - [`ml/CHANGELOG.md`](ml/CHANGELOG.md) — model versions and the experiments
   behind them.
