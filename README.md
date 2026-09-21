@@ -13,11 +13,9 @@ Jamcorder produces one MIDI file per day, with all your practice session. JamCod
 
 The more you annotate, the better the model gets at proposing segments for you to review.
 
-This is an example of a partially annotated JamCoda session with predictions to review. I listen to them, promote them, and make slight adjustments to the start/end times if needed. Once I finish, I rebuild the model so it takes those new annotations into account.
+This is an example of a partially annotated JamCoda session with predictions to review. I listen to them, promote them, and make slight adjustments to the start/end times if needed. Once I finish, I rebuild the model so it takes those new annotations into account. (Turn the sound on the video below.)
 
 https://github.com/user-attachments/assets/0768aba3-628a-44a1-af28-6f56146d1225
-
-Everything stays on your computer. There is no remote server, no LLM, no cloud storage, and no data collection. JamCoda is open source and free to use.
 
 For a guided tour with screenshots from a real library, see the [JamCoda overview](https://jordanderson.github.io/jamcoda/).
 
@@ -60,10 +58,6 @@ segments on the roll; click one to review it against the audio, then
 proposal into an annotation the next rebuild can learn from.
 
 ![An unlabeled session in JamCoda: the annotations lane reads No annotations yet, while the predictions lane below shows fifteen proposed takes named Pathetique, Turkish March, Waltz in A, Bethena, Bink's Waltz and Blue Danube, the first labeled Pathetique 89%.](docs/images/only_predicted.jpg)
-
-Review statuses are `unsure`, `invalid`, `confirmed` and `edited`. Only
-`confirmed` and `edited` can be promoted, and only `edited` uses the values a
-reviewer typed.
 
 Prediction Lab, on the same page, previews how different decoder settings would
 change the proposals before you commit a run.

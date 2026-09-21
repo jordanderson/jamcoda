@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>JamCoda</title>
+    <link rel="icon" href="favicon.ico" sizes="32x32" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <meta
       name="description"
       content="JamCoda turns a Jamcorder practice recording into a journal of what you played: takes, songs, and the time behind them."
@@ -128,27 +131,36 @@
         font-size: 0.85rem;
         color: var(--muted);
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: 0.55rem;
+        gap: 0.3rem 0.8rem;
       }
-      .mark b {
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 0.3em;
         color: var(--ink);
-        font-weight: 600;
+        font-family: "Bodoni 72", Didot, Georgia, serif;
+        font-size: 1.35rem;
+        font-weight: 700;
+        line-height: 1;
+        text-decoration: none;
       }
-      .dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--accent);
+      .brand svg {
+        height: 1.15em;
+        width: auto;
         flex: none;
       }
-      .bar-inner a {
-        font-size: 0.85rem;
+      a.brand:hover {
+        color: var(--ink);
       }
       .bar-links {
         display: flex;
         align-items: center;
         gap: 1.25rem;
+      }
+      .bar-links a {
+        font-size: 0.85rem;
       }
       .repo {
         display: flex;
@@ -394,11 +406,25 @@
       <header class="bar">
         <div class="wrap bar-inner">
           <p class="mark">
-            <span class="dot"></span><b>JamCoda</b> &nbsp; A practice journal for
-            the Jamcorder
+            <a class="brand" href="index.html">
+              <!-- The JamCoda mark (src/components/layout/JamCodaLogo.tsx) -->
+              <svg viewBox="4 4 56 58" fill="currentColor" aria-hidden="true">
+                <path
+                  fill-rule="evenodd"
+                  d="M14.5 30a17.5 18 0 0 0 35 0a17.5 18 0 0 0-35 0zM20.25 30a11.75 15.4 0 0 0 23.5 0a11.75 15.4 0 0 0-23.5 0z"
+                />
+                <rect x="4" y="28.6" width="56" height="2.8" />
+                <path
+                  d="M24.5 4h15v2.6h-1Q35 6.6 35 10v40c0 7.5-4.5 12-10.5 12-3 0-5.5-1.5-6.5-3.5l6.5.9c3 0 4.5-3.4 4.5-9.4V10q0-3.4-3.5-3.4h-1z"
+                />
+                <circle cx="21.5" cy="56.2" r="4.2" />
+              </svg>
+              JamCoda
+            </a>
+            A practice journal for the Jamcorder
           </p>
           <nav class="bar-links">
-            <a href="how-jamcoda-works.html">How it finds the songs →</a>
+            <a href="how-jamcoda-works.html">How JamCode works →</a>
             <a
               class="repo"
               href="https://github.com/jordanderson/jamcoda"
@@ -452,9 +478,7 @@
             <div class="stat">
               <b>83</b><span>Pieces it has seen you play</span>
             </div>
-            <div class="stat">
-              <b>162</b><span>Days with a recording</span>
-            </div>
+            <div class="stat"><b>162</b><span>Days with a recording</span></div>
             <div class="stat">
               <b>Local</b
               ><span>Recordings, labels and model stay on your machine</span>
@@ -495,8 +519,8 @@
                 <p class="rule-no">03</p>
                 <h3>Review</h3>
                 <p>
-                  You keep, adjust or reject each suggestion. Everything you keep
-                  becomes a label like any other.
+                  You keep, adjust or reject each suggestion. Everything you
+                  keep becomes a label like any other.
                 </p>
               </article>
             </div>
@@ -535,10 +559,10 @@
               </p>
               <p>
                 A row is readable on its own. The August 1 session runs 52:51
-                and holds twenty-two takes — a couple of passes at Maple Leaf Rag
-                to warm up, a stretch on Etude No 2, five passes at Bethena in
-                the middle, Maple Leaf Rag again at the end. Directly above it,
-                August 2 is four minutes long and contains a single take of
+                and holds twenty-two takes — a couple of passes at Maple Leaf
+                Rag to warm up, a stretch on Etude No 2, five passes at Bethena
+                in the middle, Maple Leaf Rag again at the end. Directly above
+                it, August 2 is four minutes long and contains a single take of
                 Bethena.
               </p>
             </div>
@@ -552,9 +576,9 @@
                 />
               </a>
               <figcaption>
-                <b>Library</b> — one row per session, newest first. The chips are
-                the takes inside it; clicking one opens the recording at that
-                timestamp.
+                <b>Library</b> — one row per session, newest first. The chips
+                are the takes inside it; clicking one opens the recording at
+                that timestamp.
               </figcaption>
             </figure>
           </section>
@@ -591,13 +615,13 @@
                 They are a good way to find the seams between takes.
               </p>
               <p>
-                The empty lane reading <b>No predictions</b> is empty on purpose.
-                This session has been marked complete, so JamCoda has cleared its
-                suggestions and won’t make new ones for it. Marking a session
-                complete is worth doing for another reason too: it tells JamCoda
-                that the unlabeled stretches in that file really were you
-                playing around, rather than takes nobody got around to naming —
-                which is how it learns when to stay quiet.
+                The empty lane reading <b>No predictions</b> is empty on
+                purpose. This session has been marked complete, so JamCoda has
+                cleared its suggestions and won’t make new ones for it. Marking
+                a session complete is worth doing for another reason too: it
+                tells JamCoda that the unlabeled stretches in that file really
+                were you playing around, rather than takes nobody got around to
+                naming — which is how it learns when to stay quiet.
               </p>
             </div>
             <figure>
@@ -635,7 +659,8 @@
                 They come from a model built out of your own labeling. It knows
                 the pieces you have named before and nothing else, so it will
                 recognize Bethena in a recording it has never seen, and stay
-                quiet about something you sight-read for the first time that day.
+                quiet about something you sight-read for the first time that
+                day.
               </p>
               <p>
                 Each suggestion carries a percentage. That number is not the
@@ -647,9 +672,9 @@
               <p>
                 Clicking a suggestion opens it for review. Listen to it, then
                 keep it as it stands, fix the name or the edges first, or throw
-                it out. Anything you keep becomes an ordinary label, no different
-                from one you made by hand — and part of what the next rebuild
-                learns from.
+                it out. Anything you keep becomes an ordinary label, no
+                different from one you made by hand — and part of what the next
+                rebuild learns from.
               </p>
             </div>
             <figure>
@@ -691,9 +716,7 @@
             <div class="note">
               <p>
                 <b>How does it recognize anything?</b>
-                <a href="how-jamcoda-works.html"
-                  >How JamCoda finds the songs</a
-                >
+                <a href="how-jamcoda-works.html">How JamCoda finds the songs</a>
                 is the illustrated version: how a recording is cut into short
                 windows, what each one is compared against, and how the parts it
                 recognizes are joined back into takes. It is the technical
@@ -719,19 +742,21 @@
               </p>
               <p>
                 The first row tidies up the result after the model has had its
-                say: the shortest span allowed to count as a piece, how close two
-                fragments of the same piece must be before they are treated as
-                one take, how sure it has to be to keep a span at all. The second
-                group changes how the parts it recognized are joined together;
-                it re-reads the same model rather than rebuilding anything, so
-                two runs that differ only here are directly comparable.
+                say: the shortest span allowed to count as a piece, how close
+                two fragments of the same piece must be before they are treated
+                as one take, how sure it has to be to keep a span at all. The
+                second group changes how the parts it recognized are joined
+                together; it re-reads the same model rather than rebuilding
+                anything, so two runs that differ only here are directly
+                comparable.
               </p>
               <p>
                 Each box shows the value currently in use, and typing over one
-                applies only to the next preview. <b>Preview</b> draws the result
-                along the bottom, next to what is stored, and forgets it the
-                moment you leave the page. Nothing here retrains the model, and
-                nothing replaces your suggestions until you ask for a real run.
+                applies only to the next preview. <b>Preview</b> draws the
+                result along the bottom, next to what is stored, and forgets it
+                the moment you leave the page. Nothing here retrains the model,
+                and nothing replaces your suggestions until you ask for a real
+                run.
               </p>
             </div>
             <figure>
@@ -758,12 +783,12 @@
             </div>
             <div class="prose">
               <p>
-                <b>Sync Now</b> fetches whatever the Jamcorder has recorded since
-                last time. Sessions already on your machine are skipped, and the
-                empty files the device sometimes leaves behind — opened and
-                closed without a note in them — are ignored rather than filling
-                up your library. A full re-sync re-checks everything, for when a
-                recording needs collecting again.
+                <b>Sync Now</b> fetches whatever the Jamcorder has recorded
+                since last time. Sessions already on your machine are skipped,
+                and the empty files the device sometimes leaves behind — opened
+                and closed without a note in them — are ignored rather than
+                filling up your library. A full re-sync re-checks everything,
+                for when a recording needs collecting again.
               </p>
               <p>
                 <b>Rebuild Model + Re-score</b> takes every label you have made,
@@ -839,15 +864,15 @@
                 Pick a stretch of time — the last month, the last six, all of it
                 — and Analytics adds up the takes inside it. Four numbers at the
                 top: total practice time, how many different pieces you touched,
-                how many days you sat down and the average per day, and the piece
-                that took the most time along with its share of the total.
+                how many days you sat down and the average per day, and the
+                piece that took the most time along with its share of the total.
               </p>
               <p>
                 Under them, the pieces ranked by time, with the number of
                 separate takes beside each: 146 run-throughs of Maple Leaf Rag
-                over ten hours, 139 of Bethena over eight and a half. Clicking a bar
-                picks that piece out of the chart below it; the small icon at
-                the end of the bar opens it in the Songs view, where you can
+                over ten hours, 139 of Bethena over eight and a half. Clicking a
+                bar picks that piece out of the chart below it; the small icon
+                at the end of the bar opens it in the Songs view, where you can
                 play its takes from different sessions one after another.
               </p>
             </div>
@@ -875,12 +900,13 @@
             </div>
             <div class="prose">
               <p>
-                The same time, broken up by month and stacked so each band is one
-                piece. The ten pieces with the most time get a color; everything
-                else is gray. That makes the shape of a bar informative on its
-                own. December 2025 is tall and almost entirely gray: a month
-                spread thinly across many different pieces. August 2026 is taller
-                still and mostly color — the same few pieces, over and over.
+                The same time, broken up by month and stacked so each band is
+                one piece. The ten pieces with the most time get a color;
+                everything else is gray. That makes the shape of a bar
+                informative on its own. December 2025 is tall and almost
+                entirely gray: a month spread thinly across many different
+                pieces. August 2026 is taller still and mostly color — the same
+                few pieces, over and over.
               </p>
             </div>
             <figure>
@@ -910,9 +936,9 @@
               <p>
                 Two rows can say quite different things. Maple Leaf Rag — ten
                 hours, 146 takes, across 52 separate days — is something being
-                kept up. Moonlight Sonata — nearly two hours and 46 takes, but on
-                four days, and nothing since February — is a piece learned in a
-                burst and then set down.
+                kept up. Moonlight Sonata — nearly two hours and 46 takes, but
+                on four days, and nothing since February — is a piece learned in
+                a burst and then set down.
               </p>
             </div>
             <figure>
