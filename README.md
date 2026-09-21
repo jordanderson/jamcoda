@@ -19,6 +19,8 @@ https://github.com/user-attachments/assets/0768aba3-628a-44a1-af28-6f56146d1225
 
 Everything stays on your computer. There is no remote server, no LLM, no cloud storage, and no data collection. JamCoda is open source and free to use.
 
+For a guided tour with screenshots from a real library, see the [JamCoda overview](https://jordanderson.github.io/jamcoda/).
+
 ## Workflow
 
 ### Sync and browse
@@ -33,6 +35,8 @@ Files are listed in `#/browse` with annotation progress, an unreviewed predictio
 count, and song chips that jump to a timestamp. Sort by date or by most
 unreviewed predictions.
 
+![The JamCoda library: a sidebar with Library, Songs and Analytics, and a table of recordings by date, each row showing duration, a Complete badge, an unreviewed count, and colored chips naming the takes found in that session.](docs/images/library.jpg)
+
 ### Annotate
 
 Open a file at `#/detail/:id` for the piano roll. Play with `P`, mark a segment
@@ -46,6 +50,8 @@ appear on the roll and as chips below it that jump to their time.
 `Mark Complete` declares the remaining unannotated time to be unusable for song predictions.
 Marking a file complete also clears its predictions and blocks further prediction runs until it is marked incomplete.
 
+![A fully labeled session open in JamCoda: transport controls with Start, End and Following buttons, a piano roll of the notes, a pink annotation bar for Maple Leaf Rag, an empty predictions lane, a whole-recording strip of twenty-two colored takes, and clickable device markers.](docs/images/annotated_file.jpg)
+
 ### Review predictions
 
 `Run Predictions` generates proposals for the open file. They appear as
@@ -53,12 +59,16 @@ segments on the roll; click one to review it against the audio, then
 `Confirm & Promote`, `Edit & Promote`, or `Mark Invalid`. Promoting turns a
 proposal into an annotation the next rebuild can learn from.
 
+![An unlabeled session in JamCoda: the annotations lane reads No annotations yet, while the predictions lane below shows fifteen proposed takes named Pathetique, Turkish March, Waltz in A, Bethena, Bink's Waltz and Blue Danube, the first labeled Pathetique 89%.](docs/images/only_predicted.jpg)
+
 Review statuses are `unsure`, `invalid`, `confirmed` and `edited`. Only
 `confirmed` and `edited` can be promoted, and only `edited` uses the values a
 reviewer typed.
 
 Prediction Lab, on the same page, previews how different decoder settings would
 change the proposals before you commit a run.
+
+![The Prediction Lab panel: a Segment shaping row with minimum segment, merge gap and confidence fields, a Decoding group with link policy and related settings, Preview and Reset to defaults buttons, and a strip showing the twenty takes currently in the review queue.](docs/images/prediction_lab.jpg)
 
 ### Songs and analytics
 
@@ -72,6 +82,8 @@ learns the new name.
 (Last 30d / 90d / 6m / All time / Custom) and periodicity (Auto / Day / Week /
 Month), with top-song bars, a practice-over-time trend, and a sortable table.
 
+![The Analytics page: range and grouping controls, summary tiles reading 58h 47m practice time, 83 songs touched, 162 active days and top song Maple Leaf Rag, above a ranked bar chart of the top songs by practice time.](docs/images/analytics_top_songs.jpg)
+
 ### Rebuild the model
 
 `Rebuild Model` in the sidebar retrains from all current annotations and writes
@@ -80,6 +92,11 @@ since the model was built, or when songs exist that the model has never seen.
 
 `Rebuild Model + Re-score`, in Settings, also re-runs predictions for files
 whose unpromoted proposals are all still `unsure`.
+
+<img src="docs/images/settings.jpg" width="484" alt="The Settings dialog: a Sync section with a Sync Now button, a full re-sync option, the time of the last sync and the connected device address, and a Model section with a Rebuild Model and Re-score button.">
+
+[How JamCoda works](https://jordanderson.github.io/jamcoda/how-jamcoda-works.html)
+is an illustrated walkthrough of how the model finds songs in a recording.
 
 ## Getting started
 
