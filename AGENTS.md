@@ -1,270 +1,179 @@
 # AGENTS.md
 
-Agent runbook for `jamcoda`.
+Repo-specific execution guidance. Product and setup are in `README.md`; model
+details are in `ml/README.md`.
 
-## Purpose
+Start in `core/` — pure, isomorphic domain code with no I/O, typechecked
+against both the DOM and Node libs, and the single home for any rule that
+applies on more than one side of a tier boundary. `core/cli/` is the one
+deliberately Node-only part.
 
-Use this file for repo-specific execution guidance. For product and ML details, read:
-- `README.md`
-- `ml/README.md`
+## Gotchas
 
-## Read First
-
-`core/` holds everything shared across tiers -- read it before changing
-behaviour that exists on more than one side of a boundary:
-- `core/types.ts`, `core/predictionReview.ts`, `core/timeRanges.ts`
-- `core/midi/noteSequence.ts`, `core/cli/args.ts`
-- `core/errors.ts`, `core/predictionConfidence.ts`
-
-Then:
-- `src/App.tsx`
-- `src/components/layout/Sidebar.tsx`
-- `src/components/files/DateBrowser.tsx`
-- `src/components/files/DetailPage.tsx`
-- `src/components/songs/SongsPage.tsx`
-- `src/components/analytics/AnalyticsPage.tsx`
-- `src/hooks/useMidiPlayer.ts`
-- `server/routes/files.routes.ts`
-- `server/routes/annotations.routes.ts`
-- `server/routes/predictionReviews.routes.ts`
-- `server/models/PredictionReview.ts`
-- `ml/songSegmentation.ts` (public surface; implementation in `ml/segmentation/`)
-
-## Quick Start
-
-Use Node 22 (`.nvmrc`, and `engines.node` is `>=22`). Run `nvm use` first if you
-manage versions with nvm -- see the native-module note under Change Hygiene
-before running `npm install` on a different version.
-
-- Install: `npm install`
-- Dev: `npm run dev`
-- Build: `npm run build`
-- DB migrate: `npm run db:migrate`
-- Typecheck (client + server/ml + tooling): `npm run typecheck`
-- Test (server + client/core): `npm test`
-- ML train: `npm run ml:train -- --out data/ml/model.json`
-- Predict only: `npm run ml:predict -- --model data/ml/model.json --midi <path>`
-- Predict + import: `npm run ml:predict-import -- --model data/ml/model.json --midi <path>`
-
-## Architecture Snapshot
-
-- Shared: `core/` -- pure, isomorphic domain code with no I/O. It is typechecked
-  against both the DOM and Node libs (it appears in `tsconfig.json` *and*
-  `tsconfig.server.json`), which keeps it safe for both. `core/cli/` is the one
-  deliberately Node-only part.
-- Frontend: React + Vite + hash routing.
-- Local backend: Express on `http://localhost:3001`.
-- External device API: Jamcorder at `http://jamcorder.local` (default; override with `JAMCORDER_URL`).
-- Storage (all local state lives under `data/`, which is gitignored):
-  - DB: `data/jamcoda.db` (override with `JAMCODA_DB_PATH`)
-  - MIDI files: `data/midi/YYYY-MM-DD/...` (override with `JAMCODA_MIDI_DIR`)
-  - ML artifacts: `data/ml/`
-
-Core frontend routes:
-- `#/browse`
-- `#/detail/:id`
-- `#/songs`
-- `#/analytics`
+- **Node 22 only for `npm install` / `npm rebuild`.** `better-sqlite3` is
+  native, and its binary is tied to the installing Node major. Installing under
+  another major (an agent shell defaulting to Node 20, say) leaves a binary
+  Node 22 cannot load and the server dies at `initializeDatabase()` with
+  `ERR_DLOPEN_FAILED` / `NODE_MODULE_VERSION`. Typecheck, build and the client
+  are unaffected, so it is easy to misread. Recover with
+  `nvm use && npm rebuild better-sqlite3`.
+- **Vitest runs every test, in two projects** (`vite.config.ts`): `client`
+  (jsdom) covers `src/` and `core/`; `server` (node) covers `server/` and
+  `ml/`. `npm test` runs both; `--project server` or `--project client` narrows
+  it. Server tests assert with `node:assert/strict`, which works unchanged
+  inside Vitest.
+- **A server test must point `JAMCODA_DB_PATH` at a temp database before
+  importing any model**, and import models lazily. `initializeDatabase()`
+  refuses to run under `NODE_ENV=test` against the app DB, and Vitest sets
+  `NODE_ENV=test` for you.
+- **No `.js` extension on relative imports.** `moduleResolution` is `bundler`
+  and nothing emits Node ESM. Prefer the path aliases (`@core/*`, `@/*`,
+  `@server/*`, `@models/*`, `@utils/*`, `@config/*`).
+- Sync changes are verified with tests, never by syncing a real device.
 
 ## Shared Helpers
 
-Reach for these before writing a local copy:
+Check these before writing a local copy:
 
-- `core/errors.ts` -- `errorMessage(error, fallback)`. `catch` binds `unknown`,
-  so never re-inline the `instanceof Error` check.
-- `core/predictionConfidence.ts` -- the display-only calibration *and*
+- `core/errors.ts` — `errorMessage(error, fallback)`; never re-inline the
+  `instanceof Error` check.
+- `core/timeRanges.ts`, `core/predictionReview.ts`, `core/math.ts` — domain
+  rules used on both sides of the HTTP boundary.
+- `core/predictionConfidence.ts` — display calibration, plus
   `confidenceFeatures`, which `ml:fit-confidence` also calls so the fit and the
-  scorer cannot disagree about what the weights multiply.
-- `core/timeRanges.ts`, `core/predictionReview.ts`, `core/math.ts` -- domain
-  rules that exist on both sides of the HTTP boundary.
-- `server/utils/route.ts` -- `route(action, handler)` wraps a route so a throw
-  becomes one logged 500. Routes that return the underlying error to the client
-  keep their own `try`/`catch`.
-- `server/utils/requestParams.ts` -- parsers for untrusted query/body values.
-- `server/utils/time.ts` -- `nowUnix()`, the unit every `*_at` column stores.
-- `src/utils/format.ts` -- all display formatting.
+  scorer agree on what the weights multiply.
+- `server/utils/` — `route(action, handler)` (wraps a route so a throw becomes
+  one logged 500), request-param parsers, `nowUnix()`.
+- `src/utils/format.ts` — all display formatting.
 
-## Import Conventions
+## Invariants
 
-- Use the path aliases (`@core/*`, `@/*`, `@server/*`, `@models/*`,
-  `@utils/*`, `@config/*`) rather than long relative chains.
-- **No `.js` extension on relative imports.** `moduleResolution` is `bundler`
-  and neither `tsc` (`noEmit`) nor `tsx` needs it; the extension is only
-  required when TypeScript emits Node ESM, which this project never does.
+### Reviews and completion
 
-## Invariants To Preserve
-
-- File completion is authoritative.
-- `POST /api/prediction-reviews/run` must reject complete files.
-- Marking file complete clears all `prediction_reviews` rows for that file.
-- Prediction review statuses are `unsure | invalid | confirmed | edited`.
-- Promotion only for `confirmed` and `edited`.
-- Merge behavior:
-  - selected rows must be same file and same resolved song
-  - create one merged `edited` row
-  - mark merged source rows `invalid`
-- Song rename updates both annotations and prediction review name fields.
-- A review resolves to its `reviewed_*` values only when its status is `edited`;
-  every other status uses `predicted_*`. This rule lives once, in
-  `core/predictionReview.ts` -- both `resolveReviewFields()` and the
-  `RESOLVED_*_SQL` fragments. Do not re-express it inline or with a bare
-  `COALESCE`, which is how the SQL and TS paths previously disagreed.
+- File completion is authoritative: `POST /api/prediction-reviews/run` rejects
+  complete files, and marking a file complete clears its `prediction_reviews`
+  rows.
+- Statuses are `unsure | invalid | confirmed | edited`. Only `confirmed` and
+  `edited` can be promoted.
+- **A review resolves to `reviewed_*` only when its status is `edited`**;
+  everything else uses `predicted_*`. This lives once, in
+  `core/predictionReview.ts` — `resolveReviewFields()` and the `RESOLVED_*_SQL`
+  fragments. Never re-express it inline or as a bare `COALESCE`: `update()`
+  writes `reviewed_*` and `status` independently, so a row can hold reviewed
+  values while still `unsure`, and the two paths then disagree.
+- Merge requires the same file and same resolved song; it creates one `edited`
+  row and marks the sources `invalid`.
+- Song rename updates annotation and prediction-review name fields together.
 - The prediction pipeline has one implementation,
-  `server/services/predictionImport.ts`. The API route and `ml:predict-import`
-  both call it; neither reimplements exclusion, inserts, or schema.
-- **Model variants are compared on the complete-files row of the eval report,
-  never on the aggregate.** `ml:eval` prints segment recall/precision/F1 three
-  ways: over files marked complete, over the files that are not, and over
-  everything. Precision only means something where the annotations are
-  finished — an incomplete file has unannotated time that a *correct* prediction
-  is scored against, and the same model measures 85% precision on complete files
-  and 38% on incomplete ones. The aggregate therefore tracks annotation coverage
-  rather than the model, and moves less than a point across changes that move
-  the honest number by three. See `experiments-2026-09-03-addendum.md`, under
-  the gitignored `data/ml/notes/`.
-- **Bridge linking is the training default, and an absent `linkPolicy` still
-  decodes as legacy.** `resolveTrainConfig` fills `linkPolicy: 'bridge'` (with
-  `linkTailSec: 2`, `linkRescueRank: 5`) so every model built from 2026-09-07
-  records the policy in its own config; `anchorLinkDecode` treats a *missing*
-  policy as `legacy`, which is what keeps a model saved before then decoding the
-  way it was built. Do not "tidy" that asymmetry into one default — it is the
-  v2.3 rule that a default must never move an existing model, and both halves
-  are asserted by tests in `ml/songSegmentation.linking.test.ts`.
-- **`__none__` training windows come only from files marked complete**
+  `server/services/predictionImport.ts`, called by both the API route and
+  `ml:predict-import`. Neither reimplements exclusion, inserts, or schema.
+- The staleness badge is read-only: `GET /api/prediction-reviews/rebuild-status`
+  compares annotation `updated_at` against the model's `createdAt`, and current
+  song names against the model's labels. It never trains, and it must clear
+  after a rebuild.
+
+### Model
+
+- **Compare model variants on the complete-files row of the eval report, never
+  the aggregate.** `ml:eval` reports three ways: complete files, incomplete,
+  and everything. Precision only means something where annotation is finished —
+  an incomplete file scores a *correct* prediction against unannotated time, so
+  the same model reads 85% precision on complete files and 38% on incomplete
+  ones. The aggregate tracks annotation coverage, not the model, and moves less
+  than a point across changes worth three on the honest number.
+- **`__none__` training windows come only from complete files**
   (`TrainConfig.noneFromCompleteFilesOnly`, on by default). An unannotated
   window asserts "no song" only where the user declared the file finished;
-  elsewhere it is an unreviewed gap, and training on it taught the model that
-  real performances are silence. Marking a file complete therefore has model
-  value, not just bookkeeping value.
-- The model-staleness badge is read-only: `GET /api/prediction-reviews/rebuild-status`
-  compares annotation `updated_at` against the saved model's `createdAt` and the
-  current unique song names against the model's labels. It never trains, and it
-  must clear after a rebuild.
-- MIDI decoding has one implementation, `core/midi/noteSequence.ts`, and it
-  pairs note events itself rather than delegating to a library. Two rules it
-  must keep:
-  - **All Notes Off (CC 123) and All Sound Off (CC 120) end every sounding note
-    on their channel.** The Jamcorder emits these instead of a Note Off for
-    each key when it goes idle -- 158 of them across the library. Pairing that
-    ignores them leaves notes open, and the orphan then takes the release
-    belonging to the next press of that pitch, shifting every later note of
-    that pitch for the rest of the file. That is where the twenty-minute
-    "sustained" notes came from. Do not reintroduce a decoder that pairs only
-    Note On to Note Off.
-  - **Do not split a track on programChange.** Jamcorder writes format 0, one
-    track, one channel; program changes are patch switches mid-performance,
-    not separate instruments. `@tonejs/midi` split on them (one file became 14
-    tracks) and paired notes within each split, so a note whose release landed
-    after a patch change never found it.
-  Notes still sounding at the end of a track are dropped, not extended: nothing
-  released them, so there is no honest end time. A note ended by All Notes Off
-  is capped (`MAX_ALL_NOTES_OFF_SECONDS`), because that end is an upper bound
-  rather than a measured release.
+  elsewhere it is an unreviewed gap, and training on it teaches the model that
+  real performances are silence. Marking a file complete has model value, not
+  just bookkeeping value.
+- **Bridge linking is the training default, and an absent `linkPolicy` decodes
+  as legacy.** `resolveTrainConfig` fills `linkPolicy: 'bridge'`
+  (`linkTailSec: 2`, `linkRescueRank: 5`) so a model records its own policy;
+  `anchorLinkDecode` reads a *missing* policy as `legacy`, which is what keeps
+  an older saved model decoding the way it was built. Do not collapse that
+  asymmetry into one default — a new default must never move an existing model.
+  Both halves are asserted in `ml/songSegmentation.linking.test.ts`.
+- Model experiment notes live in the gitignored `data/ml/notes/`;
+  `ml/CHANGELOG.md` records what shipped and what failed.
+
+### MIDI decoding
+
+One implementation, `core/midi/noteSequence.ts`, which pairs note events itself
+rather than delegating to a library.
+
+- **All Notes Off (CC 123) and All Sound Off (CC 120) end every sounding note on
+  their channel.** The Jamcorder emits these instead of a Note Off per key when
+  it goes idle — 158 across the library, so this is not an edge case. A decoder
+  that pairs only Note On to Note Off leaves notes open, and the orphan takes
+  the release belonging to the next press of that pitch, shifting every later
+  note of that pitch for the rest of the file.
+- **Never split a track on `programChange`.** Jamcorder files are format 0, one
+  track, one channel; a program change is a patch switch mid-performance, not a
+  separate instrument. Splitting there and pairing within each split strands any
+  note whose release lands after the switch.
+- Notes still sounding at the end of a track are dropped, not extended —
+  nothing released them, so there is no honest end time. A note ended by All
+  Notes Off is capped at `MAX_ALL_NOTES_OFF_SECONDS`, that end being an upper
+  bound rather than a measured release.
 - **A Jamcorder recording is on the JMX grid of one millisecond per tick even
-  when it declares no tempo.** 89 of 235 files never write a Set Tempo event;
-  reading them at the Standard MIDI File default of 120 BPM stretched them by
-  9.17% (500000/458000), so their notes disagreed with their own device
-  markers -- `jmxParser` has always read bookmarks and skips off the JMX grid.
-  `core/midi/tempoMap.ts` detects a Jamcorder file by its `jmx…`
-  sequencer-specific markers and uses `ticksPerBeat * 1000`; that detection
-  also gates the late-tempo mirror, so a non-JMX file keeps standard SMF
-  behaviour. Times captured against the stretched timeline were rescaled once
-  by `npm run db:rescale-silent-tempo` (migration `006`).
-- The check that catches all of this: a file's decoded duration must match its
-  `jmxEof` trailer's `totalMillis`, which is the device's own statement of how
-  long it recorded. `npm run db:rescale-silent-tempo -- --verify` asserts it
-  across the library.
-- Playback is normalized to grand piano: `src/audio/pianoSampler.ts` loads no
+  when it declares no tempo.** 89 of 235 files write no Set Tempo event;
+  reading those at the SMF default of 120 BPM stretches them by 9.17%
+  (500000/458000) and their notes then disagree with their own device markers,
+  which `jmxParser` reads off the JMX grid. `core/midi/tempoMap.ts` detects a
+  Jamcorder file by its `jmx…` sequencer-specific markers and uses
+  `ticksPerBeat * 1000`; that same detection gates the late-tempo mirror, so a
+  non-JMX file keeps standard SMF behaviour.
+- The check that catches all of this: decoded duration must match the `jmxEof`
+  trailer's `totalMillis`, the device's own statement of how long it recorded.
+  `npm run db:rescale-silent-tempo -- --verify` asserts it across the library.
+
+### Sync
+
+- Discovery is a filesystem walk over the detailed listing (real sizes → skip
+  unchanged), falling back to the library API only when the walk fails, with a
+  high-water mark to keep that fallback cheap. `POST /api/sync/start?full=1`
+  forces a full pass. The library API is crash-prone on low-power firmware and
+  is never the primary source.
+- Firmware is resource-constrained and may drop requests or crash: small pages,
+  generous inter-page and inter-download delays, per-page and per-file retries.
+- A device file smaller than the synced copy is skipped with a warning — never
+  overwrite local data with a truncated download.
+- A *new* device asset with no notes is not imported: skipped on reported size
+  before download, and on the JMX trailer's `totalNotes`/`totalMillis` after.
+  The device makes these in bursts, and importing them buries real recordings.
+  Never infer emptiness from a local parse failure. See `API_NOTES.md`.
+
+### Playback and the piano roll
+
+- Playback is normalized to grand piano; `src/audio/pianoSampler.ts` loads no
   other instrument.
-- Sync uses a cheap filesystem walk over the detailed file listing (real sizes → skip-unchanged), falls back to the library API when the walk fails, skips unchanged assets by size, and records a high-water mark so a library-API fallback is fast. `POST /api/sync/start?full=1` forces a full pass. The library API is crash-prone on low-power firmware, so it is never the primary discovery source.
-- A device file that is smaller than the synced copy is skipped with a warning (device-side truncation hazard); do not overwrite local data with it.
-- A *new* device asset with no notes is not imported at all — skipped on reported size before download, and again on the JMX trailer's `totalNotes`/`totalMillis` after. The device produces these in bursts (hundreds in a minute); importing them hides real recordings. Never infer emptiness from a local parse failure. See `API_NOTES.md`.
-- The Jamcorder firmware is resource-constrained and may drop requests or crash; the sync client uses small library pages, generous inter-page/inter-download delays, and per-page/per-file retries.
-- Piano roll "follow playback" has one rule, in
-  `src/components/midi/pianoRollFollow.ts`: ease the viewport so the playhead
-  sits at `FOLLOW_ANCHOR` of the visible width, clamped to the scroll range.
-  Stop, restart, seek and re-enable all follow from that target. Do not add
-  per-playback-state branches; that is how the rules previously disagreed at
-  every transition.
+- Follow-playback has one rule, in `src/components/midi/pianoRollFollow.ts`:
+  ease the viewport so the playhead sits at `FOLLOW_ANCHOR` of the visible
+  width, clamped to the scroll range. Stop, restart, seek and re-enable all
+  follow from that target. Per-playback-state branches disagree at the
+  transitions between states.
 - A user scroll needs a scroll-producing *input* (wheel, touch drag, scroll key,
-  scrollbar grab) **and** a `scroll` event confirming it moved. Do not infer it
-  from scroll events alone or from timestamps against our own scrolling, which
-  previously both switched follow off mid-playback and ignored real manual
-  scrolls. A press inside the roll is a seek, and clears the latch.
+  scrollbar grab) **and** a `scroll` event confirming it moved. Inferring it
+  from scroll events alone, or from timestamps against our own scrolling, both
+  switches follow off mid-playback and misses real manual scrolls. A press
+  inside the roll is a seek, and clears the latch.
 - `useMidiPlayer` starts playback asynchronously. Every halt bumps
-  `playbackGenerationRef` and `beginPlayback` bails if it moved while awaiting
-  samples; without that, a stop or pause during the load window is dropped and
+  `playbackGenerationRef`, and `beginPlayback` bails if it moved while awaiting
+  samples; without that a stop or pause during the load window is dropped and
   audio starts anyway.
-- The detail page re-renders every animation frame during playback, so the roll's
-  layers and the annotation list sit behind `memo` with
-  `useCallback`-stable handlers. An unmemoised array or inline handler on that
-  path silently restores a full-page render at 60fps.
+- The detail page re-renders every animation frame during playback, so the
+  roll's layers and the annotation list sit behind `memo` with
+  `useCallback`-stable handlers. An unmemoised array or inline handler there
+  silently restores a full-page render at 60fps.
 
-## Typical Workflow Changes
+## Before Finishing
 
-- New annotations or song rename should be followed by model rebuild. The
-  sidebar's `Rebuild Model` button shows a badge (annotations created or edited
-  after the model's `createdAt`, plus song names the model has never seen) when
-  a rebuild would help; it is a hint, never an automatic trigger.
-- If user reports `no such table: prediction_reviews`, run `npm run db:migrate`.
-- If CLI prediction output does not appear in UI, use `Run Predictions` in detail page or `ml:predict-import`.
-- If predictions are over-fragmented, prefer merge and threshold tuning over manual DB edits.
-- If the user needs to re-check every device file (e.g. after a device reprovision or fresh SD card), use the sidebar's "Full re-sync" button rather than editing the high-water mark.
-- If the server dies at startup with `ERR_DLOPEN_FAILED` / `NODE_MODULE_VERSION
-  <n>. This version of Node.js requires NODE_MODULE_VERSION <m>`, the
-  `better-sqlite3` native binary was built for a different Node major than the
-  one now running it. Fix with `nvm use && npm rebuild better-sqlite3` -- see
-  Change Hygiene.
+Run `npm run typecheck`, `npm test`, and `npm run build`. Touching the model or
+sync also means exercising the rebuild and run-prediction endpoints, or the
+`ml:predict-import` CLI path, against a real file.
 
-## Test Conventions
-
-- Tests are **co-located siblings**, not in `__tests__/` directories:
-  `core/timeRanges.test.ts` sits next to `core/timeRanges.ts`. This is the
-  Vitest default and what the existing suites follow.
-- Scope a test file to one feature of a large module with an infix:
-  `Annotation.merge.test.ts` covers merge behaviour in `Annotation.ts`.
-- **Two runners, and they are not interchangeable.** Pick by directory:
-  - `core/` and `src/` -> **Vitest** (`import { describe, it, expect } from 'vitest'`),
-    jsdom environment, discovered by the `include` globs in `vite.config.ts`.
-  - `server/` -> **Node's built-in runner** (`node:test` + `node:assert/strict`),
-    because server code runs under tsx directly. Vitest globals are not
-    available there.
-- Shared client test helpers stay in `src/test/` (`setup.ts`, `mocks/`,
-  `utils/renderWithProviders.tsx`) rather than being co-located -- they belong
-  to no single module.
-- A server test **must** point `JAMCODA_DB_PATH` at a temp database before
-  importing any model, and import models lazily (after setting it).
-  `initializeDatabase()` refuses to run with `NODE_ENV=test` against the app DB,
-  so this is enforced rather than merely conventional.
-- Prefer testing pure functions in `core/` over reaching through a route: that
-  is why the domain rules were moved there.
-
-## Validation Checklist
-
-After changes, run what is relevant:
-- `npm run typecheck` (covers `src/`, `core/`, `server/`, `ml/`, and tooling)
-- `npm test`
-- `npm run build`
-- Route-level smoke checks in UI:
-  - browse loads
-  - detail playback and annotation actions
-  - detail prediction actions (confirm/edit/invalid/promote, trim flourish, snap bounds)
-  - analytics controls (presets, periodicity) and charts
-  - songs page playback modal and rename flow
-- ML checks when touched:
-  - rebuild model endpoint
-  - run predictions endpoint
-  - predict-import CLI path
-
-## Change Hygiene
-
-- Run `npm install` / `npm rebuild` under Node 22 only. `better-sqlite3` is a
-  native module: its compiled binary is tied to the Node ABI of whichever
-  version installed it, so installing under a different major (e.g. an agent
-  shell defaulting to Node 20) leaves a binary the project's own Node 22 cannot
-  load, and the server dies at `initializeDatabase()` with `ERR_DLOPEN_FAILED`.
-  It fails only at runtime -- typecheck, build and the client are all unaffected,
-  so it is easy to miss. Recover with `nvm use && npm rebuild better-sqlite3`.
-- Do not hand-edit `data/jamcoda.db` unless explicitly asked.
-- Prefer API/model layer changes over ad hoc SQL in route handlers.
-- Keep docs in sync when behavior/status semantics change.
+Write comments and docs as statements of current behaviour. Do not narrate what
+a change replaced or improved — that belongs in git. Model results are the
+exception: `ml/CHANGELOG.md` keeps the before/after so failed ideas are not
+retried.

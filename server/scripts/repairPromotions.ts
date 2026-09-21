@@ -9,17 +9,15 @@ import { nowUnix } from '@utils/time';
 /**
  * Repair prediction reviews whose promotion was silently undone.
  *
- * `prediction_reviews.promoted_annotation_id` is declared ON DELETE SET NULL.
- * Deleting the annotation a review was promoted into used to null the link
- * without clearing `promoted_at`. The common path was the same-song merge:
- * extending an annotation over a promoted one deleted the promoted row,
- * reverting its review to unpromoted. The review reappeared on the detail
- * view and a re-promote created a duplicate annotation.
+ * A damaged row has `promoted_at` set but `promoted_annotation_id` null:
+ * `promoted_annotation_id` is ON DELETE SET NULL, so deleting the annotation a
+ * review was promoted into can clear the link while leaving `promoted_at`. The
+ * review then reappears on the detail view, and re-promoting it creates a
+ * duplicate annotation.
  *
- * `mergeOverlappingSameSong` now re-points those reviews at the surviving
- * annotation and `remove()` clears the whole promotion, so no new rows get
- * into this state. This is a one-time pass over rows damaged before that
- * fix.
+ * `mergeOverlappingSameSong` re-points such reviews at the surviving
+ * annotation and `remove()` clears the whole promotion, so live code does not
+ * produce this state. This is a one-time pass over rows already in it.
  *
  * A row is re-linked only when exactly one same-song annotation in the same
  * file fully covers its range — the signature of a merge that absorbed it.

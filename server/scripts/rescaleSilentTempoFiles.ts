@@ -32,7 +32,7 @@ const MIGRATION_ID = '006-rescale-silent-tempo-files';
 const MIGRATION_NOTE =
   'Divide out the 9.17% stretch on recordings that declare no tempo (JMX 1ms grid)';
 
-/** 120 BPM, the Standard MIDI File default the decoder used to fall back to. */
+/** 120 BPM: the Standard MIDI File default, applied to these files in error. */
 const SMF_DEFAULT_MICROSECONDS_PER_BEAT = 500_000;
 
 interface AffectedFile {
@@ -132,7 +132,7 @@ function findAffected(rootDir: string): AffectedFile[] {
     }
     if (hasTempo) continue;
 
-    // What we used to read it at, over what it really is.
+    // The rate these times were captured at, over the rate they belong on.
     const factor = SMF_DEFAULT_MICROSECONDS_PER_BEAT / (ticksPerBeat * 1000);
     if (!Number.isFinite(factor) || factor <= 0) continue;
 

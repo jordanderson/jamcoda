@@ -9,12 +9,8 @@ import {
 /**
  * A minimal Web Audio sampler for the acoustic grand piano.
  *
- * This replaces `@magenta/music`'s `SoundFontPlayer`, which pulled in
- * TensorFlow.js, protobufjs and Tone.js -- roughly 40 MB of dependencies with
- * nine unfixable advisories -- to play back a single instrument.
- *
- * Samples are fetched from the same URLs Magenta used and kept in memory for
- * the session; repeat visits rely on the browser's own HTTP cache.
+ * Samples are fetched from the `sgm_plus` soundfont and kept in memory for the
+ * session; repeat visits rely on the browser's own HTTP cache.
  *
  * Sample layout, from the soundfont's own `instrument.json`:
  *   {BASE}/p{pitch}_v{velocity}.mp3   pitch 21-108, velocity in VELOCITY_LAYERS

@@ -81,7 +81,7 @@ async function main() {
   process.env.JAMCODA_DB_PATH = resolveDbPath();
 
   // Applies pending migrations too, so the schema this CLI writes against is
-  // whatever the migration runner defines. It no longer creates tables itself.
+  // whatever the migration runner defines. Schema is never this file's job.
   const { appliedMigrations } = initializeDatabase();
   if (appliedMigrations.length > 0) {
     console.log(`Applied ${appliedMigrations.length} pending migration(s).`);

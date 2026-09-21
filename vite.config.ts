@@ -65,21 +65,44 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@core': path.resolve(import.meta.dirname, './core'),
-        '@': path.resolve(import.meta.dirname, './src'),
+        '@server': path.resolve(import.meta.dirname, './server'),
+        '@models': path.resolve(import.meta.dirname, './server/models'),
+        '@routes': path.resolve(import.meta.dirname, './server/routes'),
+        '@utils': path.resolve(import.meta.dirname, './server/utils'),
+        '@config': path.resolve(import.meta.dirname, './server/config'),
         '@/components': path.resolve(import.meta.dirname, './src/components'),
         '@/hooks': path.resolve(import.meta.dirname, './src/hooks'),
         '@/api': path.resolve(import.meta.dirname, './src/api'),
         '@/utils': path.resolve(import.meta.dirname, './src/utils'),
+        '@': path.resolve(import.meta.dirname, './src'),
       },
     },
     server: { proxy },
     preview: { proxy },
     test: {
-      environment: 'jsdom',
-      setupFiles: './src/test/setup.ts',
-      css: true,
-      clearMocks: true,
-      include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'core/**/*.test.ts'],
+      // Two projects, because the tiers need different environments: the
+      // client renders into jsdom, the server opens a real SQLite file.
+      projects: [
+        {
+          extends: true,
+          test: {
+            name: 'client',
+            environment: 'jsdom',
+            setupFiles: './src/test/setup.ts',
+            css: true,
+            clearMocks: true,
+            include: ['src/**/*.test.{ts,tsx}', 'core/**/*.test.ts'],
+          },
+        },
+        {
+          extends: true,
+          test: {
+            name: 'server',
+            environment: 'node',
+            include: ['server/**/*.test.ts', 'ml/**/*.test.ts'],
+          },
+        },
+      ],
     },
   }
 })

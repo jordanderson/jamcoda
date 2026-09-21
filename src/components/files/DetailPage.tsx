@@ -666,9 +666,8 @@ export function DetailPage({ fileId }: DetailPageProps) {
       {rollReady && (
         <div className="border rounded-lg overflow-hidden shadow-sm">
           <div className="bg-white p-4 border-b border-gray-200">
-            {/* Transport, checkpoints and view controls on one row: the
-                keyboard shortcuts each button carries in its `title` are what
-                the legend under this row used to say. */}
+            {/* Transport, checkpoints and view controls on one row. Each
+                button names its keyboard shortcut in its `title`. */}
             <div className="flex justify-between items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2 flex-wrap">
                 <button

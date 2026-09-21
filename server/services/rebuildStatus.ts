@@ -36,7 +36,7 @@ export function findMissingLabels(currentLabels: string[], modelLabels: string[]
  *
  * `loadModel` reads and parses the whole model -- eight megabytes and ~30ms of
  * blocked event loop for the current one -- and every annotation edit asks for
- * this status, so each edit stalled every other request behind it. Only the
+ * this status, so an uncached read stalls every other request behind it. Only the
  * summary is kept: holding the parsed model would pin its heap for the life of
  * the process. A rebuild rewrites the file, which changes mtime and size and
  * so misses the cache, which is what keeps the badge's "clears after a

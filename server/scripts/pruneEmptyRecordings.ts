@@ -7,9 +7,9 @@ import { errorMessage } from '@core/errors';
 
 /**
  * Remove already-synced empty recordings — assets the Jamcorder opened and
- * closed without recording a note. Sync no longer imports these, but
- * libraries synced before that change carry hundreds of them (118 on
- * 2026-02-19, 147 on 2026-04-11 on the observed device).
+ * closed without recording a note. Sync skips these, but a library synced
+ * earlier can carry hundreds (118 on 2026-02-19, 147 on 2026-04-11 on the
+ * observed device).
  *
  * Deleting is safe: the device keeps its own copy, re-syncing will not
  * bring them back, and there is no annotation work to lose. The script

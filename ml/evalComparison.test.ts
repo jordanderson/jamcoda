@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { bootstrapF1DeltaPoints, closeTransitions, compareReports, f1OverFiles } from './evalComparison';
 import type { BoundaryMatch } from './boundaryEvaluation';
