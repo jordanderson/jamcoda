@@ -632,17 +632,19 @@
             <p class="eyebrow">September 2026</p>
             <h1>How JamCoda works</h1>
             <p class="standfirst">
-              A practice recording might contain a few whole pieces, three
-              attempts at another pieces ending, and several minutes of
-              noodling. JamCoda uses the takes the player has labeled -- or
-              annotated -- to find familiar songs in unlabeled sections and
-              suggest where each one starts and stops.
+              Jamcorder produces one MIDI file per day with all your practice
+              sessions. That’s fantastic, but if you play a lot and want to know
+              exactly which songs you played, or follow your progress on one
+              piece over time, you have to go through each recording and label
+              it by hand. The magic of Jamcorder is that every note is captured
+              as MIDI data, and that’s enough to recognize songs you’ve played
+              before.
             </p>
             <p>
-              It compares short stretches of MIDI with examples from the
-              player’s annotations, finds the phrases it recognizes clearly,
-              then joins them into takes. The musician reviews the results
-              before they become annotations.
+              JamCoda compares short stretches of MIDI with examples from your
+              annotations, finds the phrases it recognizes clearly, and joins
+              them into takes. Each prediction you confirm or correct becomes an
+              annotation, and the next model rebuild learns from it.
             </p>
           </div>
         </section>
@@ -1126,7 +1128,7 @@
                   6-second window, 1-second hop
                 </text>
                 <text x="90" y="186" class="nd">
-                  a window's label describes its center — the tick — not its
+                  a window’s label describes its center — the tick — not its
                   whole span
                 </text>
               </svg>
@@ -1257,15 +1259,16 @@
 
         <section class="stage">
           <div class="stage-head col">
-            <h2>Learning from the player's annotations</h2>
+            <h2>Learning from the player’s annotations</h2>
           </div>
           <div class="prose">
             <p>
               Training keeps a sample of labeled windows, called
-              <dfn>prototypes</dfn>. There is no neural network here: a prediction
-              is based on resemblance to those stored examples. A separate
-              <code>__none__</code> label represents playing outside the named
-              songs. These could be improvisations, ending flourishes, etc.
+              <dfn>prototypes</dfn>. There is no neural network here: a
+              prediction is based on resemblance to those stored examples. A
+              separate <code>__none__</code> label represents playing outside
+              the named songs. These could be improvisations, ending flourishes,
+              etc.
             </p>
             <p>
               The model described here was trained from more than 1,000
@@ -1354,9 +1357,9 @@
             <p>
               The last rule helps with passages the model partly recognizes. A
               song may rarely win a window but still rank near the top
-              throughout its own performance. The rescue threshold is a mean of
-              at most five labels scoring above it; the code counts rank from
-              zero.
+              throughout its own performance. The rescue threshold is a mean
+              rank of at most five: on average across the gap, no more than
+              five labels score above the song.
             </p>
           </div>
           <div class="prose">
@@ -1419,7 +1422,7 @@
             <p>
               Accuracy is reported on the 103 recordings marked complete. In an
               unfinished file, an unlabeled passage might be a song the player
-              hasn’t got to yet. Scoring a correct prediction there as a false
+              hasn’t gotten to yet. Scoring a correct prediction there as a false
               positive would measure annotation progress as much as model
               quality.
             </p>
