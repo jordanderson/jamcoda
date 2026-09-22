@@ -18,6 +18,179 @@ How to read the numbers:
 
 ---
 
+## 2026-09-22 — melody: not shipped, as a feature or as a second check
+
+### The question
+
+The model describes each six-second window by *which* notes sound and how
+(pitch classes, loudness, density, silence), never by the *order* they come in.
+Songs in the same key with similar harmony differ mostly in their melody, and
+several of the model's worst confusions look like that: Silent Night and Silver
+Bells, Rudolph and Frosty, Waltz in A and Take Five. The idea came from a user:
+find the melody line and give the model a feature for it.
+
+### Finding the melody
+
+The melody is taken to be the top line. Each time keys are struck, the highest
+of them is a melody note, as long as no higher key is still held down. So a
+chord counts once, and notes played under a sustained melody note are left out.
+One correction was needed: when the right hand lifts early, a bass note can
+briefly become the highest note. A note more than a major sixth below the last
+melody note, within a second of it, is therefore treated as accompaniment.
+After a pause of a second or more, the line may start anywhere, so a left-hand
+passage on its own still counts. This keeps 31% of all notes. On Silent Night it
+recovers the opening sol–la–sol–mi.
+
+"The fastest-moving line" was considered and set aside. In this repertoire the
+fastest line is often the accompaniment: ragtime stride bass, Alberti figures,
+arpeggios, and practice drills.
+
+### Describing it
+
+An exact fingerprint of the note sequence breaks on a single wrong or missing
+note, depends on where a window happens to start, and changes with tempo. So
+the melody was summarized as counts, which survive all three and also ignore
+the key:
+
+- **Melody pitch profile:** how often each pitch class appears in the top line
+  (12 numbers). Unlike the others, it depends on the key.
+- **Interval profile:** how often each step or leap occurs, from an octave down
+  to an octave up (17 numbers).
+- **Motif pairs:** how often each pair of consecutive moves occurs, such as
+  "small step up, then leap down" (49 numbers).
+
+The model compares windows by distance, with every number counting equally, so
+each melody block was scaled to count as a fixed number of features rather than
+one per number. Otherwise a 49-number block would outweigh the existing 37.
+
+### Inside the window model: no reliable gain
+
+Leave-one-file-out on the September 21 library (dataset `460c80302e4a…`) with
+v2.12 settings. The baseline run reproduced `ml:eval` exactly: 92.87% F1 and 652
+matched takes. Ten variants were tried; the most informative:
+
+| Variant | F1 change | 95% interval | Matched takes |
+| --- | ---: | --- | ---: |
+| Motif pairs | 0.00 | [−0.54, +0.50] | 645 |
+| Intervals + motif pairs | −0.24 | [−1.42, +0.76] | 642 |
+| Intervals + motif pairs, 12-second view | +0.21 | [−0.61, +1.06] | 621 |
+| Melody pitch profile, light weight | +0.36 | [−0.06, +0.80] | 656 |
+
+None clears zero. The best is the melody pitch profile, which carries no order
+at all. After ten tries, a variant that happened to scrape past zero would not
+be trustworthy either.
+
+The per-song results explain the flat total. The melody features do fix the
+confusions they were aimed at: Silent Night gains up to 16 F1 points, O
+Christmas Tree up to 13 and Silver Bells up to 7. But they create new ones: Away
+in a Manger loses up to 18 and Ashokan Farewell up to 27. Across the 58 songs
+with enough annotation, 11–17 improve by more than 2 points and 5–13 get worse,
+depending on the variant, and the total barely moves. Letting the melody block see
+12 seconds instead of 6 helped identity, but cost about 30 matched takes,
+because near a song change the wider view picks up the next song's melody.
+
+The underlying problem is that a six-second window holds only about nine
+melody notes, too few for a fingerprint to be reliable.
+
+### Over a whole take: a strong signal
+
+A whole take holds hundreds of melody notes. To see whether the fingerprint
+works at that scale, each annotated take (1,186 takes of 64 songs) was matched
+to the song whose average fingerprint it most resembles. The averages were
+built only from takes in other recordings. No model was trained for this; it
+is a deliberately simple test.
+
+| Fingerprint of the whole take | Right song first | Among top three | Confusable songs, first |
+| --- | ---: | ---: | ---: |
+| Pitch content (what the model uses now) | 79.7% | 90.0% | 80.6% |
+| Intervals + motif pairs | 86.2% | 91.0% | 89.1% |
+| **Both together** | **92.7%** | **95.8%** | **93.3%** |
+
+Over a whole take, the melody identifies the song better than pitch content
+does, and the two together are much better than either. Melody adds
+information the model does not have.
+
+### Follow-up: checking each proposed segment's melody
+
+That suggested a second stage instead of a feature: let the model propose its
+segments as usual, then compare each segment's melody fingerprint with each
+song's. The take-level test above used annotated boundaries. Real proposals are
+messier, sometimes two takes merged or one take cut short, so the second stage
+was measured on the model's own proposals, again leaving one recording out.
+Each song's fingerprint was built only from takes in other recordings.
+
+Two rules were tested:
+
+- **Reject:** drop a proposed segment whose melody matches its own song poorly.
+- **Relabel:** switch a segment to another song, but only one the model
+  already ranked among its top three candidates for that stretch, and only when
+  the melody clearly prefers it.
+
+Thresholds were set from where correct and wrong segments separate, not by
+tuning to F1. Correctly labeled segments match their song's fingerprint with a
+typical similarity of 0.98, and, outside the left-hand passages described
+below, none scores below 0.60. So the rejection cutoff
+is 0.60: below it, the check drops 12 wrong segments, about 10 minutes of wrong
+predictions, and no correct ones. Recordings made before July 18, 2026 alone
+give the same cutoff. The relabel rule requires the other song to beat the
+current label by at least 0.10. For 99% of correct segments, no other candidate
+beats their label by more than 0.06.
+
+| Rule | F1 change | 95% interval |
+| --- | ---: | --- |
+| **Reject poor melody matches** | **+0.15** | **[+0.01, +0.34]** |
+| Relabel among the top three candidates | +0.09 | [−0.23, +0.41] |
+| Both | +0.24 | [−0.12, +0.61] |
+| Ceiling: a perfect check of every proposed segment | +1.70 | [+0.94, +2.70] |
+
+Rejection is safe and clears zero, but the gain is small. On the newest quarter
+of recordings (from July 18, 2026) it changes a single file, because the model
+makes fewer of these mistakes on recent recordings.
+
+The check captures little of the ceiling for two reasons:
+
+- **Few proposals are wrong to begin with.** Of 817 checkable segments on
+  complete recordings, 32 name the wrong song and 32 cover playing that is not
+  a song.
+- **Relabeling can reach only some of them.** The right song is among the
+  model's top three candidates for just 12 of the 32 wrong-song segments.
+  Widening the list breaks correct segments faster than it fixes wrong ones:
+  the top five breaks 4, and the top ten breaks 10.
+
+### Left-hand practice
+
+A player sometimes practices only the left-hand accompaniment. Then the "top
+line" is the accompaniment, and its fingerprint looks nothing like the song's
+melody. That shows in the data: left-hand passages from a January 13 Moonlight
+Sonata session and a July 8 Maple Leaf Rag session match their songs with a
+similarity of only 0.57–0.86, against 0.98 for a typical correct segment.
+
+So the check skips any segment with less than 20% of its playing at or above
+middle C. On complete recordings that skipped 26 segments: 8 correct left-hand
+passages, and 18 errors. Without the skip, rejection drops one of those correct
+passages, a 9-second stretch of Moonlight Sonata, and any stricter cutoff would
+drop more. Left-hand passages are also where the model itself goes wrong: in
+the same Moonlight Sonata session it proposed Ashokan Farewell and Ain't
+Misbehavin' over left-hand practice. A melody check cannot safely catch those,
+because it cannot tell them from genuine left-hand practice.
+
+Only 6 of 1,293 annotated takes have under 10% of their playing above middle
+C, so the skip costs little here. A library with more left-hand practice would
+depend on it more.
+
+### Where this leaves it
+
+Not shipped. +0.15 F1, and about none on recent recordings, does not justify
+keeping melody fingerprints in the model and maintaining the extraction.
+
+The signal may still be useful as a hint rather than a decision. On complete
+recordings, every proposed segment with a melody similarity below 0.60 was
+wrong. Marking such segments in the review queue ("the melody doesn't match
+this song"), instead of dropping them, would help a reviewer triage without the
+model ever deleting a correct left-hand take. That has not been built.
+
+---
+
 ## 2026-09-21 — v2.12: learn "no song" only from finished recordings, and store twice the examples (accepted)
 
 ### In plain terms
