@@ -14,7 +14,7 @@ export const NO_SONG_LABEL = '__none__';
  * to name its report files, so runs stay referable without manual renaming.
  * Keep `ml/CHANGELOG.md` in sync with each bump.
  */
-export const MODEL_VERSION = 'v2.11';
+export const MODEL_VERSION = 'v2.12';
 
 /**
  * Version 2 features (v2.8 boundary snapping & cadence/flourish trimming, v2.7 acoustic sustain decay).
@@ -130,7 +130,7 @@ export interface TrainConfig {
   /** Kept for v1 compatibility; v2 prediction is prototype-based. */
   k: number;
   maxNoneToSongRatio: number;
-  /** Total prototype budget across all labels (default 2000). */
+  /** Total prototype budget across all labels (default 16000). */
   prototypeBudget?: number;
   /** Hard cap on how many prototypes the __none__ class may keep (default 60). */
   maxNonePrototypes?: number;
@@ -145,25 +145,15 @@ export interface TrainConfig {
   /** Feature normalization: 'zscore' (default), 'minmax', 'none'. */
   featureScaling?: 'zscore' | 'minmax' | 'none';
   /**
-   * Draw `__none__` training windows only from files marked complete
-   * (**default false** — measured to help only at an undersized prototype
-   * budget; see the v2.10 entry in `ml/CHANGELOG.md` before turning it on).
+   * Draw `__none__` training windows only from files marked complete (default
+   * true). An unannotated window asserts "no song" only where the user declared
+   * the file finished. In an unfinished file it is unreviewed time, most of it
+   * real playing, and often a take of a song the user has not annotated yet;
+   * training on it teaches the model that song is silence. See the v2.12 entry
+   * in `ml/CHANGELOG.md` for the measurements, including what it costs: a
+   * narrower `__none__` class labels some practice drills as songs.
    *
-   * The premise is sound: training labels every unannotated window of an
-   * annotated file `__none__`, which is a statement the user made in a complete
-   * file but an assumption in an incomplete one, where 63% of the audio has no
-   * annotation yet and the review queue shows the user accepts predictions over
-   * that time 85% of the time by duration.
-   *
-   * It measured as a clear win at `prototypeBudget` 2000 (+0.83 segment F1) and
-   * as a regression at 8000 (-0.67). Most of the apparent gain was a side
-   * effect: withholding ~62k windows lowers `__none__`'s `sqrt(support)` and so
-   * raises every song's share of a fixed budget by ~9%, which is worth more
-   * when songs are starved of prototypes than the negative class is worth. Once
-   * songs have enough prototypes, what remains is the loss: `__none__` has to
-   * cover everything that is not an annotated song, and the unannotated time in
-   * incomplete files is a large part of that variety.
-   *
+   * Fit-only: the decoder never reads it, so it cannot move a saved model.
    * Falls back to every `__none__` window when no file is complete, so a fresh
    * library still trains.
    */

@@ -12,7 +12,7 @@ Goal:
 ## Model Summary
 
 Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v2,
-release stamp `v2.11`):
+release stamp `v2.12`):
 
 - extracts windowed MIDI features (split-register pitch-class profiles —
   chroma separated into low and high register at `registerDivide`, default
@@ -20,17 +20,23 @@ release stamp `v2.11`):
   with 0.5x decayed tail weight and weighted by sqrt(velocity/127) for melodic prominence — plus
   onset density, pitch/velocity/duration/polyphony stats, register balance,
   rhythmic regularity, silence ratio and register span)
-- condenses training windows into per-label prototypes instead of retaining every
-  window, so retraining and prediction stay fast and the model file stays small.
-  The budget matters more than it looks: leave-one-out segment F1 on complete
-  files runs 81.9% / 85.7% / 86.8% / 87.3% at budgets of 1000 / 2000 / 4000 /
-  8000 — the largest single lever measured so far. It flattens there: 12000,
-  16000 and 24000 all land within ±0.15 of 8000 while costing up to 4.6x the
-  scoring time, so 8000 is the knee rather than a stopping point
-- draws `__none__` training windows from every annotated file. Restricting them
-  to files marked complete (`--trusted-none`) is a sound idea that measures as a
-  win only when the prototype budget is too small — see the v2.10 entry in
-  [`CHANGELOG.md`](CHANGELOG.md) before enabling it
+- condenses training windows into a fixed budget of stored examples
+  (*prototypes*, 16,000 by default) instead of keeping every window, so
+  retraining and prediction stay fast. With `__none__` drawn only from complete
+  files (below), 12,000 / 16,000 / 24,000 score +0.26 / +0.82 / +1.01 F1 over
+  8,000 on the current library, and only 16,000 and 24,000 clear zero. 24,000
+  adds +0.18 over 16,000 (file bootstrap 95% [−0.24, +0.63]) for 1.5x the
+  prediction time, so 16,000 is the default. At 16,000 a 63-minute recording
+  predicts in about 4 seconds, a rebuild takes about 3, and the model file is
+  about 17 MB
+- draws `__none__` training windows only from files marked complete. In an
+  unfinished file, unannotated time is unreviewed, mostly real playing, and
+  often takes of songs not yet annotated; training on it as silence costs a new
+  song 4–5 points of takes found. The cost is a narrower `__none__` class that
+  labels some practice drills as songs. Together with the 16,000 budget it
+  scores +1.06 F1 on the current library ([+0.21, +2.01]) and no measurable
+  change on the smaller September 7 snapshot. See the v2.12 entry in
+  [`CHANGELOG.md`](CHANGELOG.md)
 - scores each window by its nearest prototype per song (z-scored features). Prototype budgets scale with sqrt(support), so a song with more
   annotation keeps more prototypes.
   **Known defect:** a nearest-prototype distance decreases as a song gains
@@ -104,7 +110,7 @@ npm run ml:train -- \
   --step 1 \
   --k 7 \
   --none-ratio 1.5 \
-  --prototype-budget 8000 \
+  --prototype-budget 16000 \
   --max-none-prototypes 60 \
   --scaling zscore \
   --score-mode min \
@@ -129,12 +135,13 @@ Notes:
   experimentation.
 - `--none-ratio` controls negative sampling volume.
 - `--prototype-budget` caps the total condensed prototypes across all songs;
-  `--max-none-prototypes` caps the `__none__` share of that budget. Raising the
-  total budget is the cheapest accuracy win available and the default was too
-  low for the current library; prediction cost scales linearly with it.
-- `--trusted-none` restricts `__none__` training windows to files marked
-  complete. Off by default: measured as a regression at the default prototype
-  budget. See the model summary above.
+  `--max-none-prototypes` caps the `__none__` share of that budget. Prediction
+  time and model size scale linearly with the budget. See the model summary
+  above for how it was chosen.
+- `--none-from-all-files` trains `__none__` on the unannotated time of every
+  annotated file instead of only files marked complete (the default). It is the
+  pre-v2.12 behavior. The setting is fit-only and recorded in the model, so it
+  never changes how a saved model decodes. See the model summary above.
 - `--link-max-silence` sets the `silence_ratio` at which a window stops being
   linkable into an anchor run (default 0.7; 1 disables the rule).
 - `--link-policy` is `bridge` by default, which stops a finished song running
@@ -247,7 +254,8 @@ fresh runtime measurement. The cache is disposable and never updates annotations
 prediction reviews, or the saved model.
 
 The cache key includes annotation ranges and names, file completion, MIDI byte
-hashes, training/scoring settings, and source hashes. LOO caches cover the entire
+hashes, training/scoring settings, and hashes of the code that produces scores:
+every file in `ml/segmentation/`, plus the MIDI decoder. LOO caches cover the entire
 training population, not just the held-out file, and keep each fold's own label
 list. In-sample caches also pin the model bytes. A prototype budget, feature,
 normalization or training-data change therefore recomputes the scores. Decoder
@@ -282,9 +290,8 @@ default a model is now built with; `legacy` reproduces any report written before
 [+1.403, +3.084]**, with the median ending error down from +5.85s to +0.81s and
 four more takes recognized. It costs nothing in recall on this population and
 does not fix repeated takes of the same song, which are now the dominant error.
-See the 2026-09-07 and 2026-09-06 entries in [`CHANGELOG.md`](CHANGELOG.md), and
-`experiments-2026-09-06-linking.md` under the gitignored `data/ml/notes/` for the
-original method, the held-out check and the rejected alternatives.
+See the 2026-09-07 and 2026-09-06 entries in [`CHANGELOG.md`](CHANGELOG.md) for
+the method, the held-out check and the rejected alternatives.
 
 `--link-rescue-lookahead <seconds>` is an experimental, eval-only override, off
 at 0. The rescue pass normally judges an unlabelled span by its mean rank as a
@@ -299,9 +306,8 @@ override. Legacy is the existing behavior: the earlier anchor claims ambiguous
 windows first. The other policies divide a mutually linkable gap between two
 different-song anchors at its midpoint or the best single change in their score
 evidence. Silence and strong competing evidence remain barriers. These experiments
-do not change the app's default decoder or the saved model. See
-`experiments-2026-09-06.md`, under the gitignored `data/ml/notes/`, for
-controlled results.
+do not change the app's default decoder or the saved model. The 2026-09-06
+entry in [`CHANGELOG.md`](CHANGELOG.md) compares them.
 
 ### Compare two runs, not two numbers
 
@@ -350,8 +356,8 @@ than marked invalid.
 The practical consequence is that the aggregate row barely responds to real
 changes. Across window lengths 4s to 8s it moves less than a point and
 non-monotonically, while the complete-files row moves 3.3 points. Precision lost
-on incomplete files cancels recall gained. See
-`experiments-2026-09-03-addendum.md`, under the gitignored `data/ml/notes/`.
+on incomplete files cancels recall gained. See the v2.10 entry in
+[`CHANGELOG.md`](CHANGELOG.md).
 
 Marking a file complete therefore does two things: it puts the file into the
 honest evaluation population, and it makes the file's unannotated time usable as
@@ -557,13 +563,12 @@ and gone by 15–20.
   Christmas Don't Be Late, O Christmas Tree and Let It Snow plateau near 80% F1
   with every take they have.
 
-These numbers assume the unannotated takes of a song sit in files with no
-annotations, which training never loads. With `noneFromCompleteFilesOnly` off,
-the default, an unannotated take inside a file that has other annotations trains
-as `__none__`. Annotating a file halfway therefore teaches the model that the
-skipped takes are silence. Method, per-song results and intervals are in
-`experiments-2026-09-21-annotation-budget.md`, under the gitignored
-`data/ml/notes/`.
+The song's unannotated takes were left out of training for these measurements.
+Since v2.12, training leaves them out the same way, because `__none__` comes
+only from files marked complete; tested like this, v2.12's rule finds as many
+new takes or slightly more (see the v2.12 entry in
+[`CHANGELOG.md`](CHANGELOG.md)). The one way to teach the model that a take is
+silence is to mark its file complete without annotating the take.
 
 ## Tuning Short vs Long Segment Bias
 
@@ -597,11 +602,8 @@ Rebuild model after new annotations using sidebar `Rebuild Model` or `npm run ml
 
 ## Key Files (for Coding Agents)
 
-Experiment write-ups are **not** in the repo. Each dated `experiments-*.md` lives
-under `data/ml/notes/`, which is gitignored along with the reports and model
-snapshots it cites. `CHANGELOG.md` is the committed record and stands on its own;
-the notes are the long-form working detail behind each entry. A changelog entry
-naming a file you do not have is expected, not a broken link.
+[`CHANGELOG.md`](CHANGELOG.md) is the committed record of every model
+experiment, including the ones that failed.
 
 - `ml/songSegmentation.ts`: the public surface -- orchestration plus re-exports
 - `ml/segmentation/types.ts`: shared shapes and tuning constants

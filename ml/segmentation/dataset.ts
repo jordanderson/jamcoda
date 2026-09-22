@@ -24,17 +24,9 @@ function toNum(value: unknown): number {
 }
 
 /**
- * Resolve each optional setting to the value that the fit and the decoder
- * use. Defaults are applied here. A saved model records these values, so a
- * change to a default does not change the behaviour of an existing model.
+ * Read-only query against the app database. It uses the server's own
+ * better-sqlite3 dependency, so training needs no `sqlite3` command-line tool.
  */
-/**
- * Defaults for the four fields `TrainConfig` requires. Every optional field's
- * default lives in `resolveTrainConfig`. Both entry points that build a config
- * from user input — `ml/train.ts` and the `rebuild-model` route — read these,
- * so the CLI and the sidebar button cannot train different models.
- */
-
 function sqliteJsonQuery<T>(dbPath: string, sql: string): T[] {
   const db = new Database(dbPath, { readonly: true });
   try {

@@ -14,7 +14,12 @@ export function decoderIgnoredOptions(decoder: TrainConfig['decoder']): string[]
   return [];
 }
 
-
+/**
+ * Defaults for the four fields `TrainConfig` requires. Every optional field's
+ * default lives in `resolveTrainConfig`. Both entry points that build a config
+ * from user input — `ml/train.ts` and the `rebuild-model` route — read these,
+ * so the CLI and the sidebar button cannot train different models.
+ */
 export const TRAIN_CONFIG_DEFAULTS = {
   windowSec: 6,
   stepSec: 1,
@@ -57,13 +62,18 @@ export type ResolvedTrainConfig = Required<
   >
 > & TrainConfig;
 
+/**
+ * Resolve each optional setting to the value that the fit and the decoder
+ * use. Defaults are applied here. A saved model records these values, so a
+ * change to a default does not change the behavior of an existing model.
+ */
 export function resolveTrainConfig(config: TrainConfig): ResolvedTrainConfig {
   const resolved: ResolvedTrainConfig = {
     ...config,
-    prototypeBudget: config.prototypeBudget ?? 8000,
+    prototypeBudget: config.prototypeBudget ?? 16000,
     maxNonePrototypes: config.maxNonePrototypes ?? 60,
     featureScaling: config.featureScaling ?? 'zscore',
-    noneFromCompleteFilesOnly: config.noneFromCompleteFilesOnly ?? false,
+    noneFromCompleteFilesOnly: config.noneFromCompleteFilesOnly ?? true,
     linkMaxSilenceRatio: config.linkMaxSilenceRatio ?? 0.7,
     registerDivide: config.registerDivide ?? 60,
     handMaskAugmentFraction: config.handMaskAugmentFraction ?? 0,
@@ -98,11 +108,3 @@ export function resolveTrainConfig(config: TrainConfig): ResolvedTrainConfig {
 
   return resolved;
 }
-
-/**
- * Read-only query against the app database.
- *
- * Previously this shelled out to the `sqlite3` CLI, an undeclared system
- * requirement that made `ml:train` fail on a fresh clone without it. The
- * server already depends on better-sqlite3, so this uses that instead.
- */

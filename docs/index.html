@@ -598,7 +598,7 @@
               </svg>
               JamCoda
             </a>
-            How predictions work · v2.11
+            How predictions work · v2.12
           </p>
           <nav class="bar-links">
             <a
@@ -653,7 +653,7 @@
             <svg
               viewBox="0 0 1020 174"
               role="img"
-              aria-label="A twenty-minute practice recording. The top row is the human annotation of seven takes across four pieces; the bottom row is the model's output. They agree closely except at the end, where three separate takes of Winter Wonderland are predicted as one continuous segment."
+              aria-label="A twenty-minute practice recording. The top row is the human annotation of seven takes across four pieces; the bottom row is the model's output. They agree closely except in two places: the model picks up O Little Town of Bethlehem only for its last 19 seconds, and at the end three separate takes of Winter Wonderland are predicted as one continuous segment."
             >
               <text x="120" y="30" class="sn" style="fill: var(--s-a)">
                 Winter Wonderland
@@ -809,39 +809,39 @@
               <rect
                 x="118.4"
                 y="92"
-                width="234.4"
+                width="237.6"
                 height="26"
                 rx="2"
                 fill="var(--s-a)"
               />
               <rect
-                x="356.7"
+                x="356.0"
                 y="92"
-                width="106.9"
+                width="107.3"
                 height="26"
                 rx="2"
                 fill="var(--s-b)"
               />
               <rect
-                x="503.7"
+                x="531.5"
                 y="92"
-                width="39.7"
+                width="13.8"
                 height="26"
                 rx="2"
                 fill="var(--s-c)"
               />
               <rect
-                x="553.6"
+                x="553.3"
                 y="92"
-                width="199.3"
+                width="199.5"
                 height="26"
                 rx="2"
                 fill="var(--s-d)"
               />
               <rect
-                x="752.3"
+                x="752.8"
                 y="92"
-                width="233.7"
+                width="232.9"
                 height="26"
                 rx="2"
                 fill="var(--s-a)"
@@ -878,10 +878,10 @@
           </div>
           <figcaption>
             A recording from December 17, 2025: four pieces over seven takes.
-            The model finds all four songs, but starts
-            <em>O Little Town of Bethlehem</em> late and merges the last three
-            takes of <em>Winter Wonderland</em>. Recognizing the piece is often
-            easier than separating repeated attempts.
+            The model finds all four songs, but catches only the last 19
+            seconds of <em>O Little Town of Bethlehem</em> and merges the last
+            three takes of <em>Winter Wonderland</em>. Recognizing the piece is
+            often easier than finding where each attempt starts and ends.
           </figcaption>
         </figure>
         <section class="stage">
@@ -1271,9 +1271,18 @@
               etc.
             </p>
             <p>
+              The model learns what “no song” sounds like only from recordings
+              the player has marked complete. In a recording that isn’t
+              finished, an unlabeled stretch is often a song the player hasn’t
+              labeled yet, and learning it as “no song” would teach the model to
+              overlook that song. Marking a recording complete tells the model
+              its unlabeled time really is something else, so it’s worth doing,
+              but only once every take in it is labeled.
+            </p>
+            <p>
               The model described here was trained from more than 1,000
               annotations across 145 recordings. Those produced about 236,000
-              windows, reduced to 7,216 prototypes. A song with lots of
+              windows, reduced to 15,406 prototypes. A song with lots of
               annotated playing gets more examples, allowing the model to
               remember different passages and different ways of playing them.
             </p>
@@ -1284,12 +1293,20 @@
               Giving sparsely annotated songs more examples remains the
               practical way to improve their coverage.
             </p>
+            <p>
+              How many is enough? In a September 2026 test on this library, one
+              labeled take of a song let the model find about half of that
+              song’s later takes, three found about 78%, and five about 85%.
+              Past ten, more takes of the same song rarely helped. Whole takes
+              from different sessions teach it more than repeated passes from
+              one sitting.
+            </p>
           </div>
           <details>
             <summary>Prototype selection and scoring</summary>
             <div class="prose">
               <p>
-                The default prototype budget is 8,000, divided between labels in
+                The default prototype budget is 16,000, divided between labels in
                 proportion to the square root of their training-window counts.
                 The <code>__none__</code> label has a separate cap of 60. Within
                 each label, training takes an evenly spaced, deterministic
@@ -1443,28 +1460,28 @@
               <tbody>
                 <tr>
                   <td>Segment F1</td>
-                  <td class="n">93.3%</td>
+                  <td class="n">93.4%</td>
                   <td>
                     Combined recall and precision of same-song time overlap
                   </td>
                 </tr>
                 <tr>
                   <td>Recall</td>
-                  <td class="n">92.6%</td>
+                  <td class="n">93.7%</td>
                   <td>
                     Annotated time covered by a prediction of the right song
                   </td>
                 </tr>
                 <tr>
                   <td>Precision</td>
-                  <td class="n">94.1%</td>
+                  <td class="n">93.0%</td>
                   <td>
                     Predicted time overlapping an annotation of the same song
                   </td>
                 </tr>
                 <tr>
                   <td>Individual takes matched</td>
-                  <td class="n">397 / 688</td>
+                  <td class="n">394 / 688</td>
                   <td>
                     Mutual best same-song matches with intersection-over-union
                     of at least 0.5
@@ -1472,17 +1489,17 @@
                 </tr>
                 <tr>
                   <td>Median ending error</td>
-                  <td class="n">+0.81s</td>
+                  <td class="n">+1.33s</td>
                   <td>Among matched takes; positive means late</td>
                 </tr>
                 <tr>
                   <td>Endings within two seconds</td>
-                  <td class="n">40.6%</td>
+                  <td class="n">40.9%</td>
                   <td>Among matched takes</td>
                 </tr>
                 <tr>
                   <td>Starts within two seconds</td>
-                  <td class="n">61.7%</td>
+                  <td class="n">62.4%</td>
                   <td>Among matched takes</td>
                 </tr>
               </tbody>
@@ -1490,7 +1507,7 @@
           </div>
           <div class="prose">
             <p>
-              The overlap score is high, but only 397 of 688 takes are
+              The overlap score is high, but only 394 of 688 takes are
               individually matched. One prediction can cover several attempts at
               the same piece and get most of their song-labeled time right while
               matching at most one attempt. That is what happens at the end of
@@ -1519,14 +1536,22 @@
               boundaries.
             </p>
             <p>
-              <strong>A weak middle can cut a take short.</strong> When
-              recognition fades, the extension limit may stop a song too soon.
-              The rescue pass can miss the rest because it averages the
-              remaining music together with the unrelated playing after it. One
-              <em>Ashokan Farewell</em> take was reduced to 14 seconds out of
-              78. An experimental rescue with a shorter lookahead helps some
-              such cases, but gave no clear overall gain and remains off by
-              default.
+              <strong>A weak passage can cut a take short or split it.</strong>
+              When recognition fades partway through a performance, the model
+              may stop the song too soon, or break one take into two
+              predictions. In a recording from December 20, 2025,
+              <em>The Christmas Song</em> comes out as two pieces with a
+              20-second gap between them. An experimental rescue setting helps
+              some takes that stop too soon, but made no clear overall
+              difference and stays off by default.
+            </p>
+            <p>
+              <strong>Drills can be mistaken for songs.</strong> Because “no
+              song” is learned only from recordings marked complete, the model
+              has fewer examples of scales, drills and noodling to learn from.
+              In one recording, nine minutes of a two-note drill were labeled
+              <em>Beethoven’s 5th</em> and
+              <em>Bridge Over Troubled Water</em>.
             </p>
             <p>
               <strong>Warm-up makes the boundary debatable.</strong> In one
@@ -1555,13 +1580,27 @@
               from 5.85 seconds late to 0.81 seconds late, with recall nearly
               unchanged.
             </p>
+            <p>
+              v2.12 changed where the model learns “no song”. It used to take
+              every unlabeled stretch of any recording with at least one
+              annotation, including recordings the player hadn’t finished
+              labeling. Those stretches are mostly real playing, often the very
+              songs the model is trying to learn, so a new song’s unlabeled
+              takes were being taught as silence. v2.12 learns “no song” only
+              from recordings marked complete, and stores twice as many
+              examples. For a song with one to three labeled takes and more
+              still unlabeled, it finds 5 to 6 more of every 100 later takes.
+              On this snapshot its overall score is unchanged (93.37% against
+              93.33%); on the larger September 21 library it rises from 91.8% to
+              92.9%.
+            </p>
           </div>
           <figure>
             <div class="figbox">
               <svg
                 viewBox="0 0 940 384"
                 role="img"
-                aria-label="Complete-file segment F1 rising across four release configurations. Measured on the September 7, 2026 dataset: v2.8 86.3, v2.9 87.8, v2.10 91.2, v2.11 93.3. Reported at the time on each era's smaller corpus: 83.1, 85.7, 88.2, converging on 93.3 at the current release."
+                aria-label="Complete-file segment F1 across five release configurations. Measured on the September 7, 2026 dataset: v2.8 86.3, v2.9 87.8, v2.10 91.2, v2.11 93.3, v2.12 93.4. Reported at the time on each era's smaller corpus: 83.1, 85.7, 88.2, converging on 93.3 at v2.11."
               >
                 <circle cx="156" cy="26" r="5" fill="var(--accent)" />
                 <text x="168" y="30" class="nd">Sep 7, 2026, one dataset</text>
@@ -1633,85 +1672,93 @@
                 />
 
                 <polyline
-                  points="240,280.1 420,231.9 600,186.5 780,90.8"
+                  points="195,280.1 360,231.9 525,186.5 690,90.8"
                   fill="none"
                   stroke="var(--muted)"
                   stroke-width="2"
                   opacity=".5"
                 />
                 <polyline
-                  points="240,220.5 420,193.6 600,130.9 780,90.8"
+                  points="195,220.5 360,193.6 525,130.9 690,90.8 855,90.0"
                   fill="none"
                   stroke="var(--accent)"
                   stroke-width="2"
                 />
 
                 <circle
-                  cx="240"
+                  cx="195"
                   cy="280.1"
                   r="5"
                   fill="none"
                   stroke="var(--muted)"
                   stroke-width="2"
                 />
-                <text x="250" y="296" class="nd">83.1</text>
+                <text x="205" y="296" class="nd">83.1</text>
                 <circle
-                  cx="420"
+                  cx="360"
                   cy="231.9"
                   r="5"
                   fill="none"
                   stroke="var(--muted)"
                   stroke-width="2"
                 />
-                <text x="430" y="252" class="nd">85.7</text>
+                <text x="370" y="252" class="nd">85.7</text>
                 <circle
-                  cx="600"
+                  cx="525"
                   cy="186.5"
                   r="5"
                   fill="none"
                   stroke="var(--muted)"
                   stroke-width="2"
                 />
-                <text x="610" y="206" class="nd">88.2</text>
+                <text x="535" y="206" class="nd">88.2</text>
 
-                <circle cx="240" cy="220.5" r="5" fill="var(--accent)" />
-                <text x="240" y="207" text-anchor="middle" class="nd-em">
+                <circle cx="195" cy="220.5" r="5" fill="var(--accent)" />
+                <text x="195" y="207" text-anchor="middle" class="nd-em">
                   86.3
                 </text>
-                <circle cx="420" cy="193.6" r="5" fill="var(--accent)" />
-                <text x="420" y="180" text-anchor="middle" class="nd-em">
+                <circle cx="360" cy="193.6" r="5" fill="var(--accent)" />
+                <text x="360" y="180" text-anchor="middle" class="nd-em">
                   87.8
                 </text>
-                <circle cx="600" cy="130.9" r="5" fill="var(--accent)" />
-                <text x="600" y="117" text-anchor="middle" class="nd-em">
+                <circle cx="525" cy="130.9" r="5" fill="var(--accent)" />
+                <text x="525" y="117" text-anchor="middle" class="nd-em">
                   91.2
                 </text>
-                <circle cx="780" cy="90.8" r="5" fill="var(--accent)" />
-                <text x="794" y="95" class="nd-em">93.3</text>
+                <circle cx="690" cy="90.8" r="5" fill="var(--accent)" />
+                <text x="690" y="77" text-anchor="middle" class="nd-em">93.3</text>
+                <circle cx="855" cy="90.0" r="5" fill="var(--accent)" />
+                <text x="869" y="94" class="nd-em">93.4</text>
 
-                <text x="240" y="326" text-anchor="middle" class="rl">
+                <text x="195" y="326" text-anchor="middle" class="rl">
                   v2.8
                 </text>
-                <text x="240" y="344" text-anchor="middle" class="tk">
+                <text x="195" y="344" text-anchor="middle" class="tk">
                   win 4s · minmax · 2k
                 </text>
-                <text x="420" y="326" text-anchor="middle" class="rl">
+                <text x="360" y="326" text-anchor="middle" class="rl">
                   v2.9
                 </text>
-                <text x="420" y="344" text-anchor="middle" class="tk">
+                <text x="360" y="344" text-anchor="middle" class="tk">
                   win 5s · z-score · 2k
                 </text>
-                <text x="600" y="326" text-anchor="middle" class="rl">
+                <text x="525" y="326" text-anchor="middle" class="rl">
                   v2.10
                 </text>
-                <text x="600" y="344" text-anchor="middle" class="tk">
+                <text x="525" y="344" text-anchor="middle" class="tk">
                   win 6s · 8k · silence gate
                 </text>
-                <text x="780" y="326" text-anchor="middle" class="rl-em">
-                  v2.11 · current
+                <text x="690" y="326" text-anchor="middle" class="rl">
+                  v2.11
                 </text>
-                <text x="780" y="344" text-anchor="middle" class="tk">
+                <text x="690" y="344" text-anchor="middle" class="tk">
                   + bridge linking
+                </text>
+                <text x="855" y="326" text-anchor="middle" class="rl-em">
+                  v2.12 · current
+                </text>
+                <text x="855" y="344" text-anchor="middle" class="tk">
+                  + cleaner no-song · 16k
                 </text>
 
                 <text x="24" y="180" class="nd">complete-file</text>
@@ -1726,7 +1773,9 @@
               feature extractor on one frozen dataset. Hollow points show
               results reported on the smaller datasets available at release
               time. This is a comparison of settings, not a full reconstruction
-              of each old model.
+              of each old model. v2.12 is level with v2.11 on this dataset; on
+              the larger September 21 library, measured at its release, it
+              scores 92.9% against v2.11’s 91.8%.
             </figcaption>
           </figure>
           <div class="prose">
@@ -1747,15 +1796,15 @@
       <footer>
         <div class="wrap col">
           <p>
-            Model snapshot: v2.11, 145 training recordings, 1,007 annotations,
-            67 songs and 7,216 prototypes. Evaluation snapshot: September 7,
+            Model snapshot: v2.12, 145 training recordings, 1,007 annotations,
+            66 songs and 15,406 prototypes. Evaluation snapshot: September 7,
             2026, dataset <span class="mono">90836c7f…</span>. Example
             recording: <span class="mono">Jmx-A00058-Dec-17-2025</span>.
           </p>
           <p>
             Implementation:
             <a
-              href="https://github.com/jordanderson/jamcoda/blob/main/ml/songSegmentation.ts"
+              href="https://github.com/jordanderson/jamcoda/tree/main/ml/segmentation"
               >feature extraction, training and decoding</a
             >;
             <a

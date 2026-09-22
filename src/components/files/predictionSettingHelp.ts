@@ -3,8 +3,8 @@
  *
  * Each one says what the setting does, which way to move it, and — where the
  * library has actually been measured — what that measurement was, so a number
- * in a box is not a guess. Figures come from `ml/CHANGELOG.md` and
- * `experiments-2026-09-06-linking.md` (kept locally under `data/ml/notes/`).
+ * in a box is not a guess. Figures are leave-one-file-out measurements of this
+ * practice library; `ml/CHANGELOG.md` records them.
  */
 
 export interface SettingHelp {

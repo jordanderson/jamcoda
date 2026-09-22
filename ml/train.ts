@@ -78,7 +78,7 @@ Options:
   --step <seconds>       Window step in seconds (default: 1)
   --k <int>              K nearest neighbors (legacy v1 models only; default: 7)
   --none-ratio <float>   Max none:song window ratio kept in training (default: 1.5)
-  --prototype-budget <int>     Total condensed prototype budget (default: 8000)
+  --prototype-budget <int>     Total condensed prototype budget (default: 16000)
   --max-none-prototypes <int>  Prototype cap for the __none__ class (default: 60)
   --scaling <zscore|minmax|none>  Feature normalization (default: zscore)
   --register-divide <int>        MIDI note separating low/high register chroma (default: 60, middle C)
@@ -104,11 +104,10 @@ Options:
                                default: 5; -1 disables the pass)
   --link-rescue-lookahead <float>  Seconds of lookahead the rescue tests instead
                                of the whole span at once, so a song keeps only the
-                               part its evidence covers (bridge only; default: 12;
-                               0 restores the whole-span test)
-  --trusted-none         Train __none__ only on files marked complete, instead of
-                         on every annotated file (default: off — it helps only at
-                         a small --prototype-budget; see ml/CHANGELOG.md v2.10)
+                               part its evidence covers (bridge only; experimental;
+                               default: 0, the whole-span test)
+  --none-from-all-files  Train __none__ on the unannotated time of every annotated
+                         file, not only files marked complete (the default)
   --skip-eval            Skip leave-one-file-out evaluation
   --help                 Show this help
 `);
@@ -148,7 +147,7 @@ async function main() {
     linkTailSec: optionalNum('--link-tail-sec', 0),
     linkRescueRank: optionalNum('--link-rescue-rank', -1),
     linkRescueLookaheadSec: optionalNum('--link-rescue-lookahead', 0),
-    noneFromCompleteFilesOnly: hasFlag('--trusted-none') ? true : undefined
+    noneFromCompleteFilesOnly: hasFlag('--none-from-all-files') ? false : undefined
   };
 
   if (config.windowSec <= 0 || config.stepSec <= 0) {
@@ -174,7 +173,7 @@ async function main() {
     const completeFiles = files.filter((file) => file.isComplete).length;
     console.log(
       `__none__ drawn from the ${completeFiles} of ${files.length} files marked complete;`
-      + ` ${droppedNone} windows from incomplete files withheld (--trusted-none).`
+      + ` ${droppedNone} windows from incomplete files withheld.`
     );
   }
   console.log(`Labels: ${model.labels.join(', ')}`);

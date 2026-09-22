@@ -1,9 +1,9 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { datasetIdentity, EvalScoreCache, scoringConfig } from './evalCache';
+import { datasetIdentity, EvalScoreCache, scoringConfig, scoringSourceFiles } from './evalCache';
 import type { AnnotatedMidiFile, TrainConfig } from './songSegmentation';
 
 describe('evaluation score cache', () => {
@@ -48,5 +48,16 @@ describe('evaluation score cache', () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it('invalidates when any segmentation source file changes', () => {
+    // Features, fitting and scoring live in ml/segmentation/. A file missing
+    // from the identity would let an edit to it reuse the old code's scores.
+    const segmentation = readdirSync(path.join(import.meta.dirname, 'segmentation'))
+      .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'));
+    assert.ok(segmentation.length > 0);
+    const hashed = scoringSourceFiles();
+    for (const name of segmentation) assert.ok(hashed.includes(`./segmentation/${name}`), name);
+    assert.ok(hashed.includes('./songSegmentation.ts'));
   });
 });

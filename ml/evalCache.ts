@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deserialize, serialize } from 'node:v8';
@@ -29,12 +29,27 @@ export function scoringConfig(config: TrainConfig): Record<string, unknown> {
     .sort(([a], [b]) => a.localeCompare(b)));
 }
 
+/**
+ * Every source file whose code can change a cached score, relative to this
+ * file. All of `ml/segmentation/` is read from disk rather than listed, so a
+ * file added there is covered without editing this list.
+ */
+export function scoringSourceFiles(): string[] {
+  const segmentation = readdirSync(fileURLToPath(new URL('./segmentation/', import.meta.url)))
+    .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+    .sort()
+    .map((name) => `./segmentation/${name}`);
+  return [
+    './songSegmentation.ts', './prototypeScorer.ts', './evalCache.ts', ...segmentation,
+    '../core/midi/noteSequence.ts', '../core/midi/tempoMap.ts', '../core/cli/args.ts'
+  ];
+}
+
 /** Conservative invalidation when any feature/training/scoring implementation changes. */
 export function scoringSourceIdentity(): string {
-  return digest(JSON.stringify([
-    './songSegmentation.ts', './prototypeScorer.ts', './evalCache.ts',
-    '../core/midi/noteSequence.ts', '../core/midi/tempoMap.ts', '../core/cli/args.ts'
-  ].map((relative) => digest(readFileSync(fileURLToPath(new URL(relative, import.meta.url)))))));
+  return digest(JSON.stringify(scoringSourceFiles().map((relative) => (
+    [relative, digest(readFileSync(fileURLToPath(new URL(relative, import.meta.url))))]
+  ))));
 }
 
 export interface CachedScores {

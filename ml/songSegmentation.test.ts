@@ -271,24 +271,26 @@ describe('trusted __none__ sampling', () => {
     }));
   }
 
-  it('withholds __none__ windows from files that are not complete when asked', () => {
+  it('withholds __none__ windows from files that are not complete by default', () => {
     const samples = [...samplesFor(1, true), ...samplesFor(2, false)];
-    const model = trainModelFromSamples(samples, { ...config, noneFromCompleteFilesOnly: true });
+    const model = trainModelFromSamples(samples, config);
     // The 20 __none__ windows of the incomplete file 2 are not evidence of
     // silence: that file simply has not been annotated there yet.
     assert.equal(model.trainingSummary.noneSamplesDroppedAsUntrusted, 20);
     assert.ok(model.labels.includes(NO_SONG_LABEL));
+    // The model records the setting it was fitted with.
+    assert.equal(model.config.noneFromCompleteFilesOnly, true);
   });
 
-  it('keeps every __none__ window by default', () => {
+  it('keeps every __none__ window when asked', () => {
     const samples = [...samplesFor(1, true), ...samplesFor(2, false)];
-    const model = trainModelFromSamples(samples, config);
+    const model = trainModelFromSamples(samples, { ...config, noneFromCompleteFilesOnly: false });
     assert.equal(model.trainingSummary.noneSamplesDroppedAsUntrusted, 0);
   });
 
   it('falls back to every __none__ window when no file is complete', () => {
     const samples = samplesFor(1, false);
-    const model = trainModelFromSamples(samples, { ...config, noneFromCompleteFilesOnly: true });
+    const model = trainModelFromSamples(samples, config);
     // A library with nothing marked complete still has to train.
     assert.equal(model.trainingSummary.noneSamplesDroppedAsUntrusted, 0);
     assert.ok(model.labels.includes(NO_SONG_LABEL));

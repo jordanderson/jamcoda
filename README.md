@@ -45,8 +45,16 @@ edited, split at a silent gap, trimmed, or snapped to the notes actually played.
 The device's own markers — passage bookmarks and the silence gaps it recorded —
 appear on the roll and as chips below it that jump to their time.
 
-`Mark Complete` declares the remaining unannotated time to be unusable for song predictions.
-Marking a file complete also clears its predictions and blocks further prediction runs until it is marked incomplete.
+Three to five whole takes of a song, from different sessions, are usually
+enough for the model to find its later takes; eight to ten get it as good as it
+will get. See
+[How many takes to annotate](ml/README.md#how-many-takes-to-annotate).
+
+`Mark Complete` says every take in the file is annotated, so its remaining time
+holds no song. Complete files are the only place the model learns what "no
+song" sounds like, so mark a file complete once every take in it is annotated,
+and not before. Marking a file complete also clears its predictions and blocks
+further prediction runs until it is marked incomplete.
 
 ![A fully labeled session open in JamCoda: transport controls with Start, End and Following buttons, a piano roll of the notes, a pink annotation bar for Maple Leaf Rag, an empty predictions lane, a whole-recording strip of twenty-two colored takes, and clickable device markers.](docs/images/annotated_file.jpg)
 
@@ -83,6 +91,8 @@ Month), with top-song bars, a practice-over-time trend, and a sortable table.
 `Rebuild Model` in the sidebar retrains from all current annotations and writes
 `data/ml/model.json`. The button shows a badge when annotations have changed
 since the model was built, or when songs exist that the model has never seen.
+Rebuild after updating JamCoda, too: the badge doesn't track new releases, and a
+new release's training changes take effect only when you rebuild.
 
 `Rebuild Model + Re-score`, in Settings, also re-runs predictions for files
 whose unpromoted proposals are all still `unsure`.

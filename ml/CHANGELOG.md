@@ -18,6 +18,153 @@ How to read the numbers:
 
 ---
 
+## 2026-09-21 — v2.12: learn "no song" only from finished recordings, and store twice the examples (accepted)
+
+### In plain terms
+
+The model learns what a song sounds like from annotated takes. It learns what
+*no song* sounds like from the time between them. Until this release, it took
+that "no song" time from every recording with at least one annotation,
+including recordings the player hadn't finished labeling. Those gaps are
+mostly real playing, often the very songs the model is trying to learn, so a
+new song's unlabeled takes were being taught as silence. v2.12 takes "no song"
+only from recordings marked complete. It also stores 16,000 examples instead
+of 8,000, which pays off once "no song" is cleaner.
+
+What it buys:
+
+- **New songs are found more often.** While a song has 1–3 annotated takes and
+  more sitting unlabeled in unfinished recordings, v2.12 finds 5–6 more of every
+  100 of its later takes.
+- **On today's library, complete-file F1 rises from 91.8% to 92.9%** (+1.06
+  points, 95% interval [+0.21, +2.01]).
+- **On the older September 7 benchmark it is unchanged:** 93.3% to 93.4%, an
+  interval of [−0.79, +0.80].
+
+What it costs: some practice drills and noodling get a song name instead of
+none, some takes are split in two at a weak passage, prediction takes about
+twice as long, and the model file doubles to about 17 MB.
+
+Marking a recording complete now matters to the model: it tells it that the
+recording's unlabeled time really is "no song". Do it once every take is
+annotated, and not before.
+
+### What changed
+
+- `resolveTrainConfig` resolves `noneFromCompleteFilesOnly` to `true` and
+  `prototypeBudget` to 16,000. Both are fit-only and every model since v2.10
+  records both, so no saved model decodes differently. With no file marked
+  complete, `__none__` still falls back to every file.
+- `ml:train --trusted-none` is replaced by `--none-from-all-files`, which builds
+  the v2.11 behavior. `POST /api/prediction-reviews/rebuild-model` still accepts
+  `noneFromCompleteFilesOnly: false`.
+- `MODEL_VERSION` bumped to `v2.12`.
+- `ml:eval`'s score cache now fingerprints every file in `ml/segmentation/`.
+  It had been hashing only the file that re-exports them, so an edit to feature
+  extraction or fitting could reuse the old code's cached scores. A test fails
+  if a file there is left out. Existing cache entries are recomputed once.
+
+### Why
+
+The v2.10 entry rejected this setting at −0.67 F1. That was measured on 111
+files, 40 of them incomplete, with legacy linking and no interval. Re-measured
+on the current library (162 annotated files, 133 complete, 1,293 annotations,
+dataset `460c80302e4a…`), the reason for the setting is concrete: of 53,661
+`__none__` training windows, 37,528 (70%) came from the 29 incomplete files. The
+v2.10 entry found that time is ~85% real playing.
+
+**A song's unannotated takes in unfinished files.** Leave-one-file-out cannot
+see this case, which every new song is in. It was measured directly: for each of
+the 34 songs with at least 12 takes, keep k takes annotated, leave the rest in
+their files unannotated with those files counted as incomplete, and score the
+song's takes in held-out sessions. Paired on the same draws, bootstrap over
+songs, at budget 8,000:
+
+| k | takes found: removed from training / flag off / flag on | flag on vs off: found | flag on vs off: F1 |
+| ---: | ---: | ---: | ---: |
+| 1 | 56.1% / 50.7% / 56.8% | **+6.1 [+2.7, +9.8]** | +4.9 [+1.9, +8.2] |
+| 3 | 75.7% / 72.1% / 77.3% | **+5.2 [+2.4, +8.3]** | +2.9 [+0.7, +5.2] |
+| 5 | 80.8% / 80.1% / 82.4% | +2.3 [+0.0, +4.7] | +2.4 [−0.3, +6.4] |
+
+With the flag off, learning those takes as silence costs a new song 4–5 points
+of takes found. The flag recovers all of it, with the song's precision
+unchanged (within ±0.5).
+
+### Numbers: leave-one-file-out, complete files
+
+Current library, v2.11 against v2.12: F1 91.81% → **92.87%** (recall 89.3 →
+91.4, precision 94.5 → 94.4), matched takes 645 → 652, endings within 2s
+43.3% → 45.1%, starts within 2s 63.6% → 66.6%. Paired: **+1.057 [+0.209,
++2.007]**. Per file, 50 improve, 18 worsen and 65 are unchanged.
+
+The two changes need each other. On the current library, paired, file
+bootstrap 95%:
+
+| comparison | ΔF1 | interval |
+| --- | ---: | --- |
+| flag on vs off, budget 8,000 | +0.23 | [−0.51, +1.02] |
+| budget 16,000 vs 8,000, flag off | +0.25 | [−0.70, +1.06] |
+| flag on vs off, budget 16,000 | **+0.81** | **[+0.13, +1.53]** |
+| budget 16,000 vs 8,000, flag on | **+0.82** | **[+0.27, +1.41]** |
+
+Neither is distinguishable from zero alone; together they are. The v2.10
+explanation for the flag's old gain — withholding windows buys songs a larger
+share of a starved budget — predicts a gain that shrinks as the budget grows.
+Here it grows. With the flag on, the budget sweep:
+
+| budget | F1 | vs 8,000 | 63-minute prediction | model file |
+| ---: | ---: | --- | ---: | ---: |
+| 8,000 | 92.05% | — | 2.4s | 8.8 MB |
+| 12,000 | 92.31% | +0.26 [−0.21, +0.72] | 3.4s | 13.1 MB |
+| **16,000** | **92.87%** | **+0.82 [+0.27, +1.41]** | **4.3s** | **17.4 MB** |
+| 24,000 | 93.05% | +1.01 [+0.49, +1.57] | 6.2s | 26.1 MB |
+
+24,000 adds +0.18 over 16,000 ([−0.24, +0.63]) for 1.5x the prediction time,
+so 16,000 is the default. A full rebuild takes 2.9s against 2.7s.
+
+**September 7 benchmark** (145 files, 103 complete; the figures in `docs/`),
+v2.11 against v2.12: F1 93.33% → 93.37%, **+0.04 [−0.79, +0.80]**. Recall
+rises 92.6 → 93.7 and precision falls 94.1 → 93.0. Matched takes 397 → 394;
+per file, 25 improve, 21 worsen, 57 are unchanged. The flag alone scores +0.10
+[−0.34, +0.60] and the budget alone +0.15 [−0.43, +0.78]. Each trades a little
+precision for recall. Why the gain appears on the current library and not this
+one is not established; the library has since gained 28% more annotations and
+17 more songs.
+
+### The files that get worse, and why
+
+Each was re-predicted both ways and read against its annotations.
+
+- **A drill labeled as songs** (`Jmx-A00453-Jun-21-2026`, current library). One
+  38-minute Maple Leaf Rag annotation; its last nine minutes are a two-note
+  drill (E♭ 62% and D♭ 21% of sounding time, D and B natural under 1% each).
+  v2.12 labels most of it Beethoven's 5th and Bridge Over Troubled Water, whose
+  takes carry D and B natural heavily. v2.11 labeled almost none of it. With
+  "no song" drawn only from finished recordings, the model has fewer examples
+  of drills. **This is the main cost of the change.**
+- **Takes split at a weak passage** (`Jmx-A00061-Dec-20-2025`,
+  `Jmx-A00055-Dec-14-2025`, September 7 benchmark). The Christmas Song, It's
+  Beginning to Look a Lot Like Christmas and White Christmas each come out as
+  two predictions with a 9–20 second gap, where v2.11 had one.
+- **A poorly known song absorbed** (`Jmx-A00504-Sep-05-2026`). On the
+  September 7 benchmark, Maple Leaf Rag runs across both Ashokan Farewell takes,
+  where v2.11 kept 14 seconds of the first. On the current library both versions
+  do this.
+- **A confusion between two 3/4 carols** (`Jmx-A00054-Dec-13-2025`, current
+  library, flag on at 8,000). Silent Night, with five takes, is predicted as
+  Silver Bells. It is not among the worst files at 16,000.
+
+And the gains. In `Jmx-A00048-Dec-07-2025`, eight takes of Santa Claus is
+Coming to Town, v2.11 finds the song for about 5 of 20 minutes and v2.12 for
+about 16. Every other take of that song is annotated in a complete
+file, so nothing was teaching *that* song as silence. What changed is the "no
+song" class: drawn 70% from unfinished recordings, it looks like music, and a
+half-recognized take loses to it. Improvements are mostly recall (26 of 37
+improving files with the flag alone), and this supersedes the v2.10 "Rejected:
+trusted `__none__` sampling" result.
+
+---
+
 ## 2026-09-07 — v2.11: bridge linking is the default (accepted)
 
 ### Context
@@ -27,7 +174,7 @@ opt-in, with three open questions: does it hold on a larger annotated library,
 are its thresholds right, and can the 14 files it regressed be fixed or
 explained. This entry answers all three and turns it on.
 
-Population: snapshot `data/ml/bridge-default-20260907/annotations.db`, 145 files,
+Population: a frozen snapshot of the library taken September 7, 2026, 145 files,
 1,007 annotations, dataset SHA-256
 `90836c7f78419cf304311739d16d354e3aa5a8fb634da6bad46e57ba31267d8d`. All numbers
 are leave-one-file-out over the **103 complete files**. Every run below was
@@ -174,10 +321,6 @@ cue — a silence run, a bookmark, a compressed JMX pause — used as a barrier 
 blocks *vouching*, which is the one bridge rule that still has no right-hand
 bound. That is the next target, and `files.skips_json` already holds the cue.
 
-Reports, sweeps and the per-file reads are under
-`data/ml/bridge-default-20260907/`, which is gitignored; the tables above are the
-record.
-
 ---
 
 ## 2026-09-06 — bridge linking: a finished song no longer runs long (experimental, opt-in)
@@ -193,9 +336,7 @@ Two candidate causes were measured and **ruled out**:
 
 - **Note snapping.** Running the same folds without `snapSegmentBoundaries`
   moves the median end error from +6.09s to +6.02s. Snapping accounts for 0.07s
-  of it. The adjacent-pair snapping refinement proposed in
-  `experiments-2026-09-06.md` is not worth building for this. (That note, and the
-  one below, are kept locally under `data/ml/notes/`, which is gitignored.)
+  of it. An adjacent-pair snapping refinement is not worth building for this.
 - **The classifier.** Across the 6,391 windows that sit between an annotated end
   and its late prediction, the take's own song is the model's top label in a
   median **11.1%** of them, and `__none__` in 0.0%. The model does not think the
@@ -312,13 +453,10 @@ three and the CLI, the import pipeline and the API decode it identically, while
 a legacy-trained model records none of them and is unchanged. Turning it on for
 real means retraining and reading the review queue's confirmed/edited/invalid
 split — the offline evidence here does not measure how the predictions feel to
-correct by hand. Full method, the rejected variants
-— global `fillTopK`, per-window rank gating, all-or-nothing bridging, a
-contention horizon, vote fraction as the rescue statistic, rescuing same-song
-spans, and `bridge` combined with `evidence` — and reproduction commands are in
-`experiments-2026-09-06-linking.md`, under the gitignored `data/ml/notes/`. The
-entry above stands on its own; that note is the long-form working record rather
-than something this entry depends on.
+correct by hand. Variants tried and rejected: global `fillTopK`, per-window
+rank gating, all-or-nothing bridging, a contention horizon, vote fraction as the
+rescue statistic, rescuing same-song spans, and `bridge` combined with
+`evidence`.
 
 ---
 
@@ -357,9 +495,6 @@ lengths 4s to 8s it moves between 67.7% and 68.7%, under a point and
 non-monotone, which reads as noise; the complete-files metric moves 83.1% to
 86.4% over the same sweep. Precision lost on incomplete files was cancelling
 recall gained, and several sweeps were read as flat when they were not.
-
-Full method and the rejected ideas: `experiments-2026-09-03-addendum.md`, under
-the gitignored `data/ml/notes/`.
 
 ### What changed
 
@@ -526,7 +661,7 @@ Full library in-sample test (111 files, 162,753 extracted windows):
 - **Segment F1:** 75.5%
 
 #### 3. Architectural Experiments
-Detailed experimentation logs exploring window duration sweeps ($2.5\text{s} \to 6.0\text{s}$), multi-scale dual-window concatenation, and note-density-modulated confidence thresholding are documented in `experiments-2026-09-03.md`, under the gitignored `data/ml/notes/`.
+Also explored, without a change shipping: window duration sweeps (2.5s to 6.0s), multi-scale dual-window concatenation, and note-density-modulated confidence thresholding.
 
 ---
 
@@ -578,8 +713,7 @@ Diagnostic analysis of v2.4 LOO errors revealed that **92.7% of all classificati
 - **Ablation of `tempo_bpm`:** Removed `tempo_bpm` from the feature set (38 -> 37 features). Practice speed variation no longer distorts nearest-prototype distance.
 - **Rebalanced prototype budgeting:** Default `maxNonePrototypes` reduced from 120 to 60; default `prototypeBudget` increased from 1200 to 2000. Songs receive ample prototypes to capture diverse musical sections without being swallowed by silence.
 - **Phrase gap merging:** Default `mergeGapSec` increased from 3s to 5s to bridge typical micro-pauses between practice phrases.
-- `MODEL_VERSION` bumped to `v2.6`. Full report saved in
-  `experiments-2026-09-02.md`, under the gitignored `data/ml/notes/`.
+- `MODEL_VERSION` bumped to `v2.6`.
 
 ### Results
 
@@ -661,8 +795,6 @@ from this entry and the two stamped LOO reports left on disk.
 
 ### Notes
 
-- Reports: `data/ml/eval-loo-v2.4-20260902-152407.json` (baseline) and
-  `data/ml/eval-loo-v2.5-20260902-152738.json` (pedal).
 - Eval reports now stamp their filename with the model release (`v2.4`/`v2.5`,
   from the model's new `modelVersion` field) and a `YYYYMMDD-HHmmss` timestamp,
   so runs are referable without copying or renaming. See `ml/eval.ts`.

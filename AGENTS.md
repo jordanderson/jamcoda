@@ -87,11 +87,13 @@ Check these before writing a local copy:
   ones. The aggregate tracks annotation coverage, not the model, and moves less
   than a point across changes worth three on the honest number.
 - **`__none__` training windows come only from complete files**
-  (`TrainConfig.noneFromCompleteFilesOnly`, on by default). An unannotated
-  window asserts "no song" only where the user declared the file finished;
-  elsewhere it is an unreviewed gap, and training on it teaches the model that
-  real performances are silence. Marking a file complete has model value, not
-  just bookkeeping value.
+  (`TrainConfig.noneFromCompleteFilesOnly`, on by default, falling back to every
+  file when none is complete). An unannotated window asserts "no song" only
+  where the user declared the file finished; elsewhere it is an unreviewed gap,
+  and training on it teaches the model that real performances are silence.
+  Marking a file complete has model value, not just bookkeeping value. The v2.10
+  changelog entry rejected this setting; the v2.12 entry re-measured it and
+  supersedes that result.
 - **Bridge linking is the training default, and an absent `linkPolicy` decodes
   as legacy.** `resolveTrainConfig` fills `linkPolicy: 'bridge'`
   (`linkTailSec: 2`, `linkRescueRank: 5`) so a model records its own policy;
@@ -99,8 +101,9 @@ Check these before writing a local copy:
   an older saved model decoding the way it was built. Do not collapse that
   asymmetry into one default — a new default must never move an existing model.
   Both halves are asserted in `ml/songSegmentation.linking.test.ts`.
-- Model experiment notes live in the gitignored `data/ml/notes/`;
-  `ml/CHANGELOG.md` records what shipped and what failed.
+- `ml/CHANGELOG.md` is the committed record of model experiments: what shipped
+  and what failed. Working notes, reports and database snapshots stay out of the
+  repository, and committed files never cite them.
 
 ### MIDI decoding
 
