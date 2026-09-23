@@ -72,7 +72,7 @@ const EMPTY_ANNOTATIONS: RollAnnotation[] = [];
 const EMPTY_BOOKMARKS: RollBookmark[] = [];
 const EMPTY_SKIPS: RollSkip[] = [];
 
-/** The name shown for a review, honouring a reviewer's edit. */
+/** The name shown for a review, honoring a reviewer's edit. */
 const getPredictionDisplaySongName = (review: PredictionReview): string =>
   resolveReviewFields(review).songName
 
@@ -264,7 +264,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
   }, [midiBlob, loadMidi, fileId]);
 
   /**
-   * Honour a `?time=` parameter once the player is ready for this file.
+   * Honor a `?time=` parameter once the player is ready for this file.
    *
    * Guarded on `loadedFileId`, not bare `isLoaded`, so a timer left from the
    * previous file cannot seek into this one. Clearing it on unmount keeps a

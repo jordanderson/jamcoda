@@ -9,7 +9,7 @@ import type { JmxBookmark, JmxMetadata, JmxSkip } from '../types/index';
  * - `time` from `jmxAsset` (authoritative local recording date).
  * - `totalMillis`, `totalNotes`, `fileOffset` from `jmxEof` (silence-
  *   compressed duration, note count, and the byte offset of the renewable
- *   trailer for incremental re-sync and for recognising empty recordings).
+ *   trailer for incremental re-sync and for recognizing empty recordings).
  * - `bookmarks` from `jmxBookmark` (user-triggered passage markers) with
  *   their position on the silence-compressed playback timeline in seconds.
  * - `skips` from `jmxSkip` (wall-clock silence omitted from the timeline)

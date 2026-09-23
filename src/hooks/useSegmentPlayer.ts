@@ -10,7 +10,7 @@ import { errorMessage } from '@core/errors'
  * `segmentCurrentTime` and `segmentElapsed` were byte-identical, while the
  * seek handlers had quietly diverged. One parked the playhead at the segment
  * end after stopping and surfaced errors in the UI; the other did neither.
- * This is the single implementation, taking the more complete behaviour of
+ * This is the single implementation, taking the more complete behavior of
  * the two.
  */
 

@@ -150,7 +150,7 @@ describe('useMidiPlayer', () => {
     const { result } = await loadedPlayer()
 
     await startAndSuspend(() => { void result.current.play() })
-    // The seek supersedes the pending start rather than cancelling playback.
+    // The seek supersedes the pending start rather than canceling playback.
     await startAndSuspend(() => { void result.current.seekTo(30) })
     await finishLoading()
 

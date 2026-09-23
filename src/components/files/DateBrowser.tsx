@@ -30,7 +30,7 @@ function progressBarColor(percentage: number): string {
   return 'bg-orange-500';
 }
 
-// Hash a string to a colour, so the same song keeps its colour across the UI.
+// Hash a string to a color, so the same song keeps its color across the UI.
 function stringToColor(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {

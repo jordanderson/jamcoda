@@ -77,7 +77,7 @@ async function main() {
   }
 
   // The models read through `@config/database`, which resolves the DB path
-  // from JAMCODA_DB_PATH. Honour --db by setting it before connecting.
+  // from JAMCODA_DB_PATH. Honor --db by setting it before connecting.
   process.env.JAMCODA_DB_PATH = resolveDbPath();
 
   // Applies pending migrations too, so the schema this CLI writes against is

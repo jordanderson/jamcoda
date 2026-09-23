@@ -33,7 +33,7 @@ export interface OverviewSpan {
 
 /**
  * Left edge, in percent of the row, of the closest span that begins at or
- * after `span` ends — the nearest neighbour to the right that its rendered
+ * after `span` ends — the nearest neighbor to the right that its rendered
  * width must stop short of. A span that begins earlier is either behind it or
  * genuinely overlapping it, and places no limit: only a real overlap in time
  * may render as an overlap.
@@ -78,17 +78,24 @@ export const SpanRow = memo(function SpanRow({ spans, durationSec, onSeek, empty
       {spans.map((span) => {
         const left = (span.start / durationSec) * 100
         const naturalWidth = ((span.end - span.start) / durationSec) * 100
-        // Sub-second spans still need to be clickable, so clamp the width up —
-        // but never past the start of the next span, or a span that merely
-        // abuts its neighbour would be drawn overlapping it. Only the clamp is
-        // capped: a span already wide enough keeps every pixel it earned, and
-        // the white right border is what separates two that touch.
-        const neighbourLeft = nextNonOverlappingLeftPercent(spans, span, durationSec)
-        const roomToGrow = neighbourLeft === null ? Infinity : neighbourLeft - left
+        // Sub-second spans still need to be clickable, so clamp the hit target
+        // up — but never past the start of the next span, or a span that
+        // merely abuts its neighbor would steal its clicks. Only the clamp is
+        // capped: a span already wide enough keeps every pixel it earned.
+        //
+        // This padding is deliberately invisible. Painting it in the span's
+        // color would draw the span past its real end time — on a long,
+        // zoomed-out recording a 28px floor can be a minute or more, easily
+        // reaching into a neighboring row's real content and implying an
+        // overlap that timestamps don't back up. The colored box always
+        // matches `naturalWidth`; only the click target grows.
+        const neighborLeft = nextNonOverlappingLeftPercent(spans, span, durationSec)
+        const roomToGrow = neighborLeft === null ? Infinity : neighborLeft - left
         const width = Math.max(0, naturalWidth, Math.min(minSpanPercent, roomToGrow))
+        const visibleWidthPercentOfHit = width > 0 ? (naturalWidth / width) * 100 : 100
         // Too narrow to hold two handles inside it: click-only, and resized
         // from the piano roll instead. This asks the span's own width, never
-        // its rendered one, so a neighbour can never revoke resizability.
+        // its rendered one, so a neighbor can never revoke resizability.
         const showHandles = onResizePointerDown !== undefined && naturalWidth >= minSpanPercent
         const handleClasses = resizingKey === span.key ? 'opacity-100' : 'opacity-60 hover:opacity-100'
         return (
@@ -97,16 +104,23 @@ export const SpanRow = memo(function SpanRow({ spans, durationSec, onSeek, empty
               type="button"
               onClick={() => onSeek(span.start)}
               title={`${span.label} — ${formatClock(span.start)} to ${formatClock(span.end)}`}
-              className="absolute top-0 h-full flex items-center justify-center overflow-hidden border-r border-white/60 px-1 text-[10px] leading-tight text-gray-900 hover:brightness-95"
-              style={{
-                left: `${left}%`,
-                width: `${width}%`,
-                backgroundColor: stringToTimelineColor(span.label)
-              }}
+              className="group absolute top-0 h-full overflow-hidden"
+              style={{ left: `${left}%`, width: `${width}%` }}
             >
-              {/* Clipped at a line boundary rather than mid-glyph, and broken
-                  mid-word so a narrow span still shows the start of the name. */}
-              <span className="line-clamp-2 break-words">{span.label}</span>
+              {/* Sized to the span's true duration, never the padded hit
+                  target above, so the white right border still marks exactly
+                  where two touching or overlapping spans meet. */}
+              <span
+                className="absolute inset-y-0 left-0 flex items-center justify-center overflow-hidden border-r border-white/60 px-1 text-[10px] leading-tight text-gray-900 group-hover:brightness-95"
+                style={{
+                  width: `${visibleWidthPercentOfHit}%`,
+                  backgroundColor: stringToTimelineColor(span.label)
+                }}
+              >
+                {/* Clipped at a line boundary rather than mid-glyph, and broken
+                    mid-word so a narrow span still shows the start of the name. */}
+                <span className="line-clamp-2 break-words">{span.label}</span>
+              </span>
             </button>
             {showHandles && (
               <>
@@ -170,7 +184,7 @@ const Playhead = memo(function Playhead({ currentTime, durationSec }: {
   )
 })
 
-/** A labelled row with the playhead drawn over it. */
+/** A labeled row with the playhead drawn over it. */
 export function TimelineBar({
   label, detail, spans, durationSec, currentTime, onSeek, emptyLabel, trailing, minSpanPercent, onResizePointerDown, resizingKey, containerRef
 }: {

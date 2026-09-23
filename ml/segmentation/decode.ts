@@ -240,7 +240,7 @@ function anchorLinkDecode(
   evidence: WindowEvidence[],
   config: TrainConfig,
   noneLabelIndex: number,
-  /** Per-window: may this window be linked into a neighbouring anchor run? */
+  /** Per-window: may this window be linked into a neighboring anchor run? */
   linkable: boolean[]
 ): { labels: number[]; confidence: number[] } {
   const n = evidence.length;
@@ -479,7 +479,7 @@ function anchorLinkDecode(
       if (reach > 0) {
         // Creep inwards from each end while that side's own lookahead holds.
         // Where both sides qualify they meet in the middle, and where neither
-        // does the span stays unlabelled — the same arbitration the leash uses.
+        // does the span stays unlabeled — the same arbitration the leash uses.
         let lo = i;
         let hi = j;
         let leftAlive = claimable(left);
@@ -506,12 +506,12 @@ function anchorLinkDecode(
         continue;
       }
 
-      for (const neighbour of [left, right]) {
-        if (!claimable(neighbour) || neighbour === best) continue;
-        const rank = meanRank(i, j, neighbour);
+      for (const neighbor of [left, right]) {
+        if (!claimable(neighbor) || neighbor === best) continue;
+        const rank = meanRank(i, j, neighbor);
         if (rank <= bestRank) {
           bestRank = rank;
-          best = neighbour;
+          best = neighbor;
         }
       }
       if (best >= 0) {
@@ -673,25 +673,25 @@ export function windowsToSegments(
   const provisional: SongSegment[] = [];
   if (windows.length === 0) return provisional;
 
-  // A window label describes the song at the window centre. Training uses the
+  // A window label describes the song at the window center. Training uses the
   // same rule: `buildSamplesForFile` labels each window at
   // `startTime + windowSec / 2`.
   //
   // The full window extent is therefore the wrong span. It made each segment
   // half a window too long at each end, and made adjacent segments overlap by
   // `windowSec - stepSec` (3s at the 4s/1s default). These segments go into
-  // `prediction_reviews` and then into annotations. Centres give the correct
+  // `prediction_reviews` and then into annotations. Centers give the correct
   // span.
   const lastIndex = windows.length - 1;
   const stepSec = inferStepSec(windows);
-  const centreOf = (i: number) => (windows[i].startTime + windows[i].endTime) / 2;
+  const centerOf = (i: number) => (windows[i].startTime + windows[i].endTime) / 2;
   // The first run starts at the start of the audio. The last run continues
-  // to the end. Other runs continue to the centre of the next window.
-  const boundStart = (i: number) => (i === 0 ? windows[0].startTime : centreOf(i));
+  // to the end. Other runs continue to the center of the next window.
+  const boundStart = (i: number) => (i === 0 ? windows[0].startTime : centerOf(i));
   const boundEnd = (i: number) => (
     i === lastIndex
       ? windows[i].endTime
-      : Math.min(centreOf(i) + stepSec, windows[i].endTime)
+      : Math.min(centerOf(i) + stepSec, windows[i].endTime)
   );
 
   let runStartIndex = 0;

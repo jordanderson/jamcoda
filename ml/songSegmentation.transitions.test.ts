@@ -9,7 +9,7 @@ const config: TrainConfig = {
 };
 const left = [-10, -1, -5];
 const right = [-10, -5, -1];
-// Weak evidence favouring A for two windows, then B for four. The old
+// Weak evidence favoring A for two windows, then B for four. The old
 // left-to-right extension gives A all six despite B winning four of them.
 const gap = [[-10, -2, -2.1], [-10, -2, -2.1], ...Array.from({ length: 4 }, () => [-10, -2.1, -2])];
 const scores = [...Array(3).fill(left), ...gap, ...Array(3).fill(right)];

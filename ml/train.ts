@@ -99,8 +99,8 @@ Options:
                                2026-09-06 before turning it on
   --link-tail-sec <float>      Seconds an unvouched tail may run past its anchor
                                run (bridge only; default: 2)
-  --link-rescue-rank <float>   Mean span rank at which an unlabelled span is
-                               given to a neighbouring song (bridge only;
+  --link-rescue-rank <float>   Mean span rank at which an unlabeled span is
+                               given to a neighboring song (bridge only;
                                default: 5; -1 disables the pass)
   --link-rescue-lookahead <float>  Seconds of lookahead the rescue tests instead
                                of the whole span at once, so a song keeps only the

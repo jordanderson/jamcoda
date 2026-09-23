@@ -51,7 +51,7 @@ describe('bridge linking', () => {
 
   it('leashes both songs across a transition instead of giving the gap to the earlier one', () => {
     // Each side reaches 3 windows into the gap; the unexplained middle is left
-    // unlabelled rather than assigned to whichever song came first.
+    // unlabeled rather than assigned to whichever song came first.
     assert.deepEqual(decode(LEASH, transition),
       [...runs(6, 'A'), ...runs(4, '__none__'), ...runs(6, 'B')]);
   });
@@ -109,15 +109,15 @@ describe('bridge linking', () => {
 });
 
 describe('span rescue', () => {
-  it('gives a leashed-off span to the song the whole span favours, not the earlier one', () => {
+  it('gives a leashed-off span to the song the whole span favors, not the earlier one', () => {
     // B is the runner-up in every gap window while A sits 8th, so the middle
-    // the leash left unlabelled belongs to B — though A reaches it first.
+    // the leash left unlabeled belongs to B — though A reaches it first.
     assert.deepEqual(decode(BRIDGE, towardB), [...runs(6, 'A'), ...runs(10, 'B')]);
     // Legacy hands the same windows to A purely because it comes first.
     assert.deepEqual(decode({}, towardB), [...runs(13, 'A'), ...runs(3, 'B')]);
   });
 
-  it('leaves a span alone when neither neighbour ranks well across it', () => {
+  it('leaves a span alone when neither neighbor ranks well across it', () => {
     // Both songs sit 8th and 9th through the gap: dead air between takes.
     assert.deepEqual(decode(BRIDGE, transition), decode(LEASH, transition));
   });
@@ -135,7 +135,7 @@ describe('span rescue', () => {
   });
 
   it('does not claim silence, and splits a span at it', () => {
-    // The silent window at 8 stays unlabelled and cuts the rescued span, so
+    // The silent window at 8 stays unlabeled and cuts the rescued span, so
     // only the part still touching B's segment is absorbed.
     assert.deepEqual(decode(BRIDGE, towardB, [8]),
       [...runs(6, 'A'), ...runs(3, '__none__'), ...runs(7, 'B')]);
@@ -188,17 +188,17 @@ describe('bridge linking config resolution', () => {
 });
 
 describe('span rescue lookahead', () => {
-  // A span that favours B only in the windows nearest B. Averaged whole, B
+  // A span that favors B only in the windows nearest B. Averaged whole, B
   // fails the rank test and the span is abandoned; tested a few windows at a
   // time, B keeps the part it explains.
   const nearB = [...runs(3, anchorA), ...runs(14, vagueFar), ...runs(6, vagueTowardB),
     ...runs(3, anchorB)];
 
   it('claims only the part of a span a song explains', () => {
-    // Whole-span mean: B ranks 9th across most of the 14 unlabelled windows,
+    // Whole-span mean: B ranks 9th across most of the 14 unlabeled windows,
     // so the leash result stands and every one of them is dropped.
     assert.deepEqual(decode(BRIDGE, nearB), decode(LEASH, nearB));
-    // With a lookahead, B creeps back over the windows that do favour it and
+    // With a lookahead, B creeps back over the windows that do favor it and
     // stops where its evidence stops, instead of taking all or nothing.
     assert.deepEqual(decode({ ...BRIDGE, linkRescueLookaheadSec: 4 }, nearB),
       [...runs(6, 'A'), ...runs(12, '__none__'), ...runs(8, 'B')]);

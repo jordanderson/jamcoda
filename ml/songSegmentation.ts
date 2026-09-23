@@ -6,7 +6,7 @@
  *   config.ts    training defaults and config resolution
  *   dataset.ts   loading annotated recordings and their notes
  *   vectors.ts   feature-vector maths
- *   features.ts  recording -> labelled feature windows
+ *   features.ts  recording -> labeled feature windows
  *   model.ts     fitting, saving and loading a prototype model
  *   decode.ts    scoring windows and joining them into segments
  *

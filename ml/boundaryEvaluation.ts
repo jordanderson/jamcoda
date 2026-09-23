@@ -12,7 +12,7 @@ export interface BoundaryMatch {
 }
 
 /**
- * Mutual best-overlap same-song matches avoid pairing a take with its neighbour
+ * Mutual best-overlap same-song matches avoid pairing a take with its neighbor
  * or counting a fragment/merged prediction more than once. IoU >= 0.5 limits
  * boundary diagnostics to recognized takes; always report unmatched counts too.
  */

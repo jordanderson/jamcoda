@@ -191,7 +191,8 @@ a change replaced or improved — that belongs in git. Model results are the
 exception: `ml/CHANGELOG.md` keeps the before/after so failed ideas are not
 retried.
 
-Prose is American English — `behavior`, `color`, `gray`, `labeled`,
-`recognize`, `normalized` — in comments, docs, `docs/*.html` and UI copy alike,
-with dates written `September 7, 2026`. Identifiers and third-party names keep
-their own spelling.
+Write American English — `behavior`, `color`, `gray`, `labeled`, `neighbor`,
+`recognize`, `normalized` — in comments, docs, `docs/*.html`, UI copy, and our
+own identifiers (variables, functions, types, test names) alike, with dates
+written `September 7, 2026`. Third-party names and APIs keep their own
+spelling.

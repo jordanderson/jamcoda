@@ -1,7 +1,7 @@
 /**
  * Fitting, saving and loading a prototype model.
  *
- * Training keeps an evenly spaced sample of the labelled windows -- the
+ * Training keeps an evenly spaced sample of the labeled windows -- the
  * prototypes -- and a new window is scored by its distance to the nearest
  * one. There is no neural network here.
  */
@@ -113,7 +113,7 @@ function buildPrototypesFromGroups(
     prototypeCounts[labelIndex] = sampled.length;
   }
 
-  // Score every label on the same number of neighbours. More neighbours give
+  // Score every label on the same number of neighbors. More neighbors give
   // a label an advantage, so the smallest per-label count sets the limit.
   const smallestCount = prototypeCounts.reduce(
     (min, count) => (count > 0 && count < min ? count : min),
@@ -160,7 +160,7 @@ function buildPrototypesFromGroups(
  *
  * A window whose target register already carries no content is left alone:
  * zeroing the last active register would turn a song window into a
- * silence-shaped vector still labelled as the song, which is exactly the
+ * silence-shaped vector still labeled as the song, which is exactly the
  * false-positive source this augmentation must avoid.
  *
  * Selection uses an even stride over the positive windows and alternates
@@ -267,7 +267,7 @@ export function fitModelFromSamples(
     createdAt: new Date().toISOString(),
     // Save the resolved config, not the partial config from the caller. A
     // model that omits `decoder`, `scoreMode` or `featureScaling` changes
-    // behaviour when a default changes.
+    // behavior when a default changes.
     config: resolved,
     featureNames: [...FEATURE_NAMES],
     labels,

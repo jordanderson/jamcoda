@@ -162,7 +162,7 @@ describe('hand-mask augmentation', () => {
     const samples = makeSamples(20).map((sample) => {
       if (sample.label === NO_SONG_LABEL) return sample;
       // Low-only window: high chroma (indices 12-23) is already zero. A
-      // low-mask would blank it into a silence-shaped vector still labelled
+      // low-mask would blank it into a silence-shaped vector still labeled
       // as the song.
       const features = new Array(37).fill(0.1);
       for (let i = 12; i < 24; i++) features[i] = 0;
@@ -236,7 +236,7 @@ describe('anchor-link decoder', () => {
     ];
     const predicted = predictWindowsFromSamples(model, windows, { minWindowConfidence: 0.45, smoothingWindows: 5 });
     const labelsInSong = predicted.filter((p) => p.startTime >= 10 && p.startTime < 25).map((p) => p.label);
-    // The anchored Song A span (including the linked gap) must be labelled Song A.
+    // The anchored Song A span (including the linked gap) must be labeled Song A.
     assert.ok(labelsInSong.length > 0);
     assert.ok(labelsInSong.every((label) => label === 'Song A'));
     // Silence after the song must not be linked into the song.
@@ -421,22 +421,22 @@ describe('windowsToSegments', () => {
   });
 });
 describe('segment boundaries', () => {
-  // A window label applies at the window centre. A run of windows must
-  // therefore cover the span of its centres, not the union of its full
+  // A window label applies at the window center. A run of windows must
+  // therefore cover the span of its centers, not the union of its full
   // extents.
   function windowsForTruth(windowSec: number, stepSec: number, totalSec: number) {
     const windows = [];
     for (let t = 0; t + windowSec <= totalSec; t += stepSec) {
-      const centre = t + windowSec / 2;
-      const label = centre >= 20 && centre < 40
+      const center = t + windowSec / 2;
+      const label = center >= 20 && center < 40
         ? 'Song A'
-        : (centre >= 40 && centre < 55 ? 'Song B' : NO_SONG_LABEL);
+        : (center >= 40 && center < 55 ? 'Song B' : NO_SONG_LABEL);
       windows.push({ startTime: t, endTime: t + windowSec, label, confidence: 0.9 });
     }
     return windows;
   }
 
-  it('reproduces the annotated span from centre-labelled windows', () => {
+  it('reproduces the annotated span from center-labeled windows', () => {
     const segments = windowsToSegments(windowsForTruth(4, 1, 60), {
       minSegmentSec: 8,
       minSegmentConfidence: 0.3,
@@ -500,7 +500,7 @@ describe('per-label scoring fairness', () => {
 
   // This test records a known defect. It does not approve of it. Three
   // corrections failed; see ml/CHANGELOG.md. The test pins the current
-  // behaviour, so a future correction has a baseline to change.
+  // behavior, so a future correction has a baseline to change.
   it('selects a label with more training windows too often (known defect)', () => {
     // Both songs use one distribution, so a correct scorer selects each song
     // equally often.
@@ -610,7 +610,7 @@ describe('loadModel', () => {
     assert.equal(loaded.featureNames.length, 37);
     assert.equal(loaded.modelVersion, MODEL_VERSION);
     // The model stores the resolved config, so a change to a default does
-    // not change the behaviour of this model.
+    // not change the behavior of this model.
     assert.equal(loaded.config.decoder, 'anchor');
     assert.equal(loaded.config.scoreMode, 'min');
     assert.equal(loaded.config.featureScaling, 'minmax');

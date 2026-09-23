@@ -8,7 +8,7 @@ import {
 } from '@core/predictionConfidence'
 import { formatTime } from '@/utils/format'
 
-/** Badge colour per calibrated confidence band. */
+/** Badge color per calibrated confidence band. */
 const BADGE_CLASS: Record<ConfidenceBand, string> = {
   strong: 'bg-emerald-100 text-emerald-800',
   likely: 'bg-amber-100 text-amber-800',

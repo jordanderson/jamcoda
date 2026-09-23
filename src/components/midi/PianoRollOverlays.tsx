@@ -17,7 +17,7 @@ interface AnnotationBandsProps {
   hasNotes: boolean
 }
 
-/** Translucent song-coloured bands behind the note rectangles. */
+/** Translucent song-colored bands behind the note rectangles. */
 export const AnnotationBands = memo(function AnnotationBands({
   annotations,
   pixelsPerTimeStep,

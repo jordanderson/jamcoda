@@ -9,7 +9,7 @@ export const NO_SONG_LABEL = '__none__';
 
 /**
  * Human-readable model release stamp, written into every fitted model.
- * Bump it whenever the features, config resolution or decoding behaviour that
+ * Bump it whenever the features, config resolution or decoding behavior that
  * a model captures change. `ml:eval` uses it (and the `createdAt` fallback)
  * to name its report files, so runs stay referable without manual renaming.
  * Keep `ml/CHANGELOG.md` in sync with each bump.
@@ -163,7 +163,7 @@ export interface TrainConfig {
    * an anchor run (default 0.7; 1 or more disables).
    *
    * Anchor linking fills any window whose evidence is weak, and a window of
-   * dead air always has weak evidence, so one recognisable phrase could claim
+   * dead air always has weak evidence, so one recognizable phrase could claim
    * the silence after it and then carry on into whatever followed. Silence is
    * not ambiguous evidence that the song continues; it is evidence that
    * nothing is being played.
@@ -224,7 +224,7 @@ export interface TrainConfig {
    */
   linkTailSec?: number;
   /**
-   * Rescue pass: an unlabelled span may be given to a neighbouring song when
+   * Rescue pass: an unlabeled span may be given to a neighboring song when
    * that song's *mean* score rank across the whole span is at most this value
    * (0 = the model's top choice throughout). Inside a take a song stays near the
    * top even where it never wins a single window; in the dead air between takes
@@ -241,7 +241,7 @@ export interface TrainConfig {
    * the whole span at once. 0 keeps the all-or-nothing span test.
    *
    * A span's mean is only a fair statement about the span when the span is one
-   * thing. An unlabelled region often is not: a take whose middle the model
+   * thing. An unlabeled region often is not: a take whose middle the model
    * half-recognizes runs straight into the dead air after it, and averaging the
    * two together rejects both. With a lookahead the span is claimed by creeping
    * inwards from each end while the *local* mean holds, so a song keeps the
@@ -287,7 +287,7 @@ export interface SongSegmentModel {
   prototypeCounts?: number[];
   /** v2: kernel scale for exp(-d/sigma). */
   kernelScale?: number;
-  /** v2: neighbours averaged per label in 'min' scoring, resolved at fit time. */
+  /** v2: neighbors averaged per label in 'min' scoring, resolved at fit time. */
   scoreNeighbors?: number;
   trainingSummary: {
     filesUsed: number;

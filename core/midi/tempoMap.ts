@@ -3,7 +3,7 @@ import type { MidiData, MidiEvent } from 'midi-file';
 /**
  * Tick-to-seconds conversion for Standard MIDI Files.
  *
- * We decode notes ourselves so All Notes Off is honoured (see
+ * We decode notes ourselves so All Notes Off is honored (see
  * `noteSequence.ts`), which means owning the time base too.
  */
 
@@ -39,7 +39,7 @@ export interface TempoMap {
  * When we see the Jamcorder-style "1ms per tick" pattern, mirror that first
  * tempo at tick 0. The JMX time model is 458 ticks per quarter note with a
  * Set Tempo of 458,000 microseconds per quarter note -- exactly 1,000
- * microseconds per tick. The check generalises the ratio rather than
+ * microseconds per tick. The check generalizes the ratio rather than
  * hard-coding 458.
  * See https://www.jamcorder.com/docs/jmx-midi-files
  */

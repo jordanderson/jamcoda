@@ -67,7 +67,7 @@ export function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Resolve the SQLite path the CLIs operate on, honouring `--db` then
+ * Resolve the SQLite path the CLIs operate on, honoring `--db` then
  * `JAMCODA_DB_PATH` then the repo default.
  */
 export function resolveDbPath(argv: string[] = process.argv): string {

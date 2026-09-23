@@ -51,18 +51,18 @@ release stamp `v2.12`):
      different song, at genuine silence, or at a window whose `silence_ratio`
      reaches `linkMaxSilenceRatio`. That last rule exists because dead air
      always has a low margin, and a low margin is exactly what makes a window
-     fillable, so without it one recognisable phrase could claim the silence
+     fillable, so without it one recognizable phrase could claim the silence
      after it and carry on into whatever followed
   3. bounds that linking on the right with **bridge** linking (the default since
      v2.11): a span is linked freely only when an anchor run of the *same* song
      closes it, an unvouched tail runs `linkTailSec` and then only while the song
      is still the model's own top choice, competing tails advance in lockstep,
-     and a rescue pass hands a leftover span to a neighbour whose mean rank
+     and a rescue pass hands a leftover span to a neighbor whose mean rank
      across it is at most `linkRescueRank`. Without it the earlier song owns
      every ambiguous window until the next one anchors, and a finished take ran a
      median 5.85s long
-- converts window runs into segments. Boundaries come from window **centres**,
-  because a window label applies at its centre. Training uses the same rule.
+- converts window runs into segments. Boundaries come from window **centers**,
+  because a window label applies at its center. Training uses the same rule.
 - filters and merges the segments with confidence and duration limits
 
 This is intentionally simple so you can retrain often as annotations grow. The
@@ -160,7 +160,7 @@ Notes:
 - `--scaling` is the per-feature normalization (`minmax`, `zscore`, or `none`).
 - `--score-neighbors` is the number of nearest prototypes to average per label
   (default 1, the single nearest). The fit clamps this value to the smallest
-  per-label prototype count, so each label uses the same number of neighbours.
+  per-label prototype count, so each label uses the same number of neighbors.
 - `--decoder` is `anchor` (default, two-pass anchor-and-link), `viterbi`, or
   `smooth`. `--anchor-margin` and `--min-anchor-run` tune how easily anchor
   runs form; `--fill-topk -1` links across all windows (a positive value
@@ -294,7 +294,7 @@ See the 2026-09-07 and 2026-09-06 entries in [`CHANGELOG.md`](CHANGELOG.md) for
 the method, the held-out check and the rejected alternatives.
 
 `--link-rescue-lookahead <seconds>` is an experimental, eval-only override, off
-at 0. The rescue pass normally judges an unlabelled span by its mean rank as a
+at 0. The rescue pass normally judges an unlabeled span by its mean rank as a
 whole; a lookahead makes each end creep inwards while its own local mean holds,
 so a song keeps the part of a span its evidence covers. It fixes the specific
 files where a take's weak middle gets truncated, and is a wash overall
@@ -475,7 +475,7 @@ model ignores. `decoderIgnoredOptions()` holds this mapping.
 usually 0.15 to 0.3. A linked window gets the `linkConfidence` value, 0.5.
 `minSegmentConfidence` can therefore discard a segment of strong anchors and keep
 a segment of mostly linked windows. One shared scale decreased accuracy (v2.3 in
-[`CHANGELOG.md`](CHANGELOG.md)). A test records the current behaviour.
+[`CHANGELOG.md`](CHANGELOG.md)). A test records the current behavior.
 
 Prediction output is post-filtered against:
 - existing `annotations` for the target file
@@ -610,11 +610,11 @@ experiment, including the ones that failed.
 - `ml/segmentation/config.ts`: training defaults and config resolution
 - `ml/segmentation/dataset.ts`: loading annotated recordings and their notes
 - `ml/segmentation/vectors.ts`: feature-vector maths
-- `ml/segmentation/features.ts`: recording -> labelled feature windows
+- `ml/segmentation/features.ts`: recording -> labeled feature windows
 - `ml/segmentation/model.ts`: fitting, saving and loading a prototype model
 - `ml/segmentation/decode.ts`: scoring windows and joining them into segments
 - `ml/songSegmentation.test.ts`: co-located tests for feature extraction, prototype training, and decoding
-- `ml/prototypeScorer.ts`: packed nearest-prototype scoring for the default `min`/single-neighbour mode
+- `ml/prototypeScorer.ts`: packed nearest-prototype scoring for the default `min`/single-neighbor mode
 - `ml/evalCache.ts`: dataset/config/source fingerprints and the persistent per-fold score cache
 - `ml/boundaryEvaluation.ts`: take-level boundary matching and signed start/end error
 - `ml/evalComparison.ts` + `ml/compareEvals.ts`: paired comparison of two eval reports (`ml:compare`)

@@ -159,8 +159,8 @@ router.put('/:id', route('update annotation', async (req, res) => {
   // ordinary edit (nothing else moved -- patch the one row) from a merge
   // (other rows are gone -- refetch). An empty array is the common case.
   //
-  // `notes` is normalised the way `GET /api/files/:id` does it, so the same
-  // annotation serialises identically on both routes. A client patching its
+  // `notes` is normalized the way `GET /api/files/:id` does it, so the same
+  // annotation serializes identically on both routes. A client patching its
   // cache from this response has to end up deep-equal to what the file
   // refetch returns, or it pays for a redundant re-render of the roll.
   res.json({ ...annotation, notes: annotation.notes ?? undefined, absorbedIds });

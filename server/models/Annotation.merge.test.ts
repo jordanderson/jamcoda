@@ -343,7 +343,7 @@ test('an edit that absorbs nothing reports no absorbed ids', () => {
     endTime: 40
   });
 
-  // A plain resize that reaches no same-song neighbour. The empty list is what
+  // A plain resize that reaches no same-song neighbor. The empty list is what
   // lets the detail page patch its cache instead of refetching the file.
   AnnotationModel.update(id, { endTime: 25 });
   const merged = AnnotationModel.mergeOverlappingSameSong(id);
@@ -353,7 +353,7 @@ test('an edit that absorbs nothing reports no absorbed ids', () => {
   assert.equal(AnnotationModel.findByFileId(fileId).length, 2);
 });
 
-test('an overlapping neighbour of a different song is not absorbed', () => {
+test('an overlapping neighbor of a different song is not absorbed', () => {
   const fileId = createTestFile();
   const id = AnnotationModel.create({
     fileId,

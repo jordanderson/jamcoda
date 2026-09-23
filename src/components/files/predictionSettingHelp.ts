@@ -24,7 +24,7 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
   mergeGapSec: {
     title: 'Merge gap',
     body: [
-      'Two neighbouring predictions of the same song less than this far apart are joined into one. Default 5 seconds.',
+      'Two neighboring predictions of the same song less than this far apart are joined into one. Default 5 seconds.',
       'Raise it if one take keeps arriving in pieces. Lower it if two separate takes of the same song keep being glued together — though that is usually better fixed in decoding than here.'
     ]
   },
@@ -32,7 +32,7 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
     title: 'Min window confidence',
     body: [
       'Not used by the anchor decoder, which is the default and almost certainly what this model uses. With an anchor model this field changes nothing.',
-      'It applies to the viterbi and smooth decoders, where a window scoring below this is left unlabelled.'
+      'It applies to the viterbi and smooth decoders, where a window scoring below this is left unlabeled.'
     ]
   },
   smoothingWindows: {
@@ -56,7 +56,7 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
     body: [
       'How the ambiguous stretches between takes — warm-up, noodling, talking — get attached to a song.',
       'legacy: any window that is not confidently something else joins whichever song reaches it first, with no limit. Runs extend in recording order, so the earlier song claims the whole gap. This is why a finished take tends to run past its ending and the next one starts late.',
-      'bridge: a stretch is linked freely only when the same song is anchored on both sides of it, which means it sits inside one take. Past a song’s outermost anchor the run gets a short leash, and two competing songs advance in step so they meet in the middle instead of the earlier one taking everything. A second pass then hands leftover stretches back to a neighbouring song when the evidence across the whole stretch supports it.',
+      'bridge: a stretch is linked freely only when the same song is anchored on both sides of it, which means it sits inside one take. Past a song’s outermost anchor the run gets a short leash, and two competing songs advance in step so they meet in the middle instead of the earlier one taking everything. A second pass then hands leftover stretches back to a neighboring song when the evidence across the whole stretch supports it.',
       'bridge is the default a new model is trained with. Measured over 103 fully annotated files: the median ending error falls from +5.85s to +0.81s and complete-file F1 rises 2.17 points, recognizing four more takes.',
       'Empty means whatever this model was trained with — legacy for a model built before 2026-09-07.'
     ]
@@ -78,7 +78,7 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
   linkMaxSilenceRatio: {
     title: 'Max link silence',
     body: [
-      'A window whose silence ratio is at or above this cannot be joined to a neighbouring song, so a real pause acts as a barrier. Default 0.7; 1 disables the rule.',
+      'A window whose silence ratio is at or above this cannot be joined to a neighboring song, so a real pause acts as a barrier. Default 0.7; 1 disables the rule.',
       'Lower it to make a song stop sooner at quiet passages. Raise it to link across rests, at the risk of carrying a take through the gap before the next one.',
       'It does not catch the usual overrun: the stretch between takes is normally full of playing, not silence.'
     ]
@@ -102,7 +102,7 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
   linkRescueRank: {
     title: 'Rescue rank',
     body: [
-      'Bridge linking only. After leashing, an unlabelled stretch is handed back to a neighbouring song when that song’s average rank across the whole stretch is at most this. Default 5; -1 switches the pass off.',
+      'Bridge linking only. After leashing, an unlabeled stretch is handed back to a neighboring song when that song’s average rank across the whole stretch is at most this. Default 5; -1 switches the pass off.',
       'Inside a take a song sits at a median rank of 1.3 even where it never wins a single window; in the dead air between takes it falls to 16. Five sits in the gap between those.',
       'Raise it to recover more coverage, lower it to keep predictions tight. A stretch with the same song on both sides is always skipped — that is the break between two takes of it, and joining them would merge the takes.'
     ]

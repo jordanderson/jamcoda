@@ -366,7 +366,7 @@ scores, so they differ only in decoding.
   test asserts both halves of it.
 - `--link-rescue-lookahead <seconds>` (`linkRescueLookaheadSec`, decode-only,
   default 0/off) is a new experimental knob: instead of testing a whole
-  unlabelled span's mean rank at once, each end creeps inwards while its own
+  unlabeled span's mean rank at once, each end creeps inwards while its own
   local mean holds. Measured below; **not** enabled.
 - The sidebar `Rebuild Model` button and `POST /api/prediction-reviews/rebuild-model`
   send no policy, so they now build a bridge model too.
@@ -546,7 +546,7 @@ one across all 22 metric keys.
    there is nothing to arbitrate against, so silence stays the only stop.
 3. Unvouched tails advance in lockstep, so two songs reaching for the same
    window meet in the middle rather than the earlier one taking all of it.
-4. A rescue pass then gives an unlabelled span to a neighbouring song when that
+4. A rescue pass then gives an unlabeled span to a neighboring song when that
    song's mean rank across the whole span is at most `linkRescueRank`. Silence
    splits a span rather than being claimed with it, and a span with the same song
    on both sides is skipped — that is the break between two takes of it.
@@ -666,7 +666,7 @@ decoder error.
 The practical damage is that the aggregate metric is nearly blind. Across window
 lengths 4s to 8s it moves between 67.7% and 68.7%, under a point and
 non-monotone, which reads as noise; the complete-files metric moves 83.1% to
-86.4% over the same sweep. Precision lost on incomplete files was cancelling
+86.4% over the same sweep. Precision lost on incomplete files was canceling
 recall gained, and several sweeps were read as flat when they were not.
 
 ### What changed
@@ -693,10 +693,10 @@ recall gained, and several sweeps were read as flat when they were not.
   hypothesis that did not survive its control. See "Rejected" below.
 - **Silence-blocked anchor linking (`linkMaxSilenceRatio`, default 0.7).** The
   anchor decoder fills any window whose evidence is weak, and dead air always has
-  weak evidence, so one recognisable phrase could claim the silence after it and
+  weak evidence, so one recognizable phrase could claim the silence after it and
   carry on into whatever followed. Silence is not ambiguous evidence that the
   song continues. A model saved before this release has no value for the field
-  and keeps the old behaviour.
+  and keeps the old behavior.
 - **Window length 5s -> 6s**, re-tuned on top of the larger budget rather than
   carried over from the sweep that predates it.
 - **One set of training defaults.** `POST /api/prediction-reviews/rebuild-model`
@@ -913,7 +913,7 @@ All numbers are 73 annotated files, evaluated via full Leave-One-File-Out cross-
 
 ### Context
 
-The app started modelling the damper (sustain) pedal in playback: a key released
+The app started modeling the damper (sustain) pedal in playback: a key released
 while the pedal is down keeps ringing until the pedal lifts (`pianoSampler.ts`,
 CC 64 via `core/midi/noteSequence`). The pedal events are decoded in 235 of 236
 files, and a pianist's pedalling is part of a song's identity -- ragtime's
@@ -1071,14 +1071,14 @@ files. The failed experiments are recorded because they are expensive to repeat.
 
 ### What changed
 
-**Segment boundaries now use window centres.** Training labels a window at its
-centre: `buildSamplesForFile` calls `getLabelAtTime` at
+**Segment boundaries now use window centers.** Training labels a window at its
+center: `buildSamplesForFile` calls `getLabelAtTime` at
 `startTime + windowSec / 2`. But `windowsToSegments` built spans from the full
 window extent. With truth `A=[20,40)` and `B=[40,55)` and correct window labels,
 it produced `A=[18,41]` and `B=[38,56]`. Each segment was 3s too long, and each
 adjacent pair overlapped by `windowSec - stepSec`. These segments go into
 `prediction_reviews`, and then into `annotations`, so the error entered the next
-training set. Centres give the correct span. A 7000s file now gives 48 segments
+training set. Centers give the correct span. A 7000s file now gives 48 segments
 and 0 overlapping pairs.
 
 **`loadModel` rejects a model with a different feature set.** The feature vector
@@ -1332,8 +1332,8 @@ Insample: window accuracy 84.9% (annotated windows), segment recall /
 precision / F1 = 87.1% / 57.9% / 69.5%.
 
 Concrete: recordings whose ground truth is a single dominant song now come
-back as one contiguous, correctly-labelled span (previously they fragmented or
-were mislabelled), and `ml:predict-import` fills annotation gaps with the
+back as one contiguous, correctly-labeled span (previously they fragmented or
+were mislabeled), and `ml:predict-import` fills annotation gaps with the
 correct song instead of the wrong ones v1 proposed.
 
 ### Known limitations / next candidates

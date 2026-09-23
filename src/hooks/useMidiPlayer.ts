@@ -299,7 +299,7 @@ export function useMidiPlayer(): UseMidiPlayerResult {
     if (!sequence || !isLoadedRef.current) return
 
     // A start still loading samples counts as playing. Seeking during it
-    // moves the playhead and keeps going rather than cancelling playback.
+    // moves the playhead and keeps going rather than canceling playback.
     const wasPlaying = playbackRef.current !== null || isStartPendingRef.current
     const target = Math.min(Math.max(0, time), sequence.totalTime)
 

@@ -1,7 +1,7 @@
 /**
- * Colour and label helpers for the piano roll's overlay layers.
+ * Color and label helpers for the piano roll's overlay layers.
  *
- * Song colours are derived from the name, so the same song keeps its colour
+ * Song colors are derived from the name, so the same song keeps its color
  * across files and across the annotation, timeline, and prediction rows.
  */
 
@@ -18,7 +18,7 @@ export function stringToColor(str: string): string {
   return `hsl(${hashString(str) % 360}, 70%, 60%)`
 }
 
-/** Readable text on top of a song-coloured chip. */
+/** Readable text on top of a song-colored chip. */
 export function stringToTextColor(str: string): string {
   return `hsl(${hashString(str) % 360}, 80%, 20%)`
 }

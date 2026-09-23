@@ -1,9 +1,9 @@
 /**
- * Turning a recording into labelled feature windows.
+ * Turning a recording into labeled feature windows.
  *
- * One window is `windowSec` of playing summarised as `FEATURE_NAMES.length`
+ * One window is `windowSec` of playing summarized as `FEATURE_NAMES.length`
  * numbers; windows step forward by `stepSec` and take the label of whatever
- * is sounding at their centre.
+ * is sounding at their center.
  */
 import { clamp, roundTo } from '@core/cli/args';
 import {

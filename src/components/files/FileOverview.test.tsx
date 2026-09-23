@@ -177,7 +177,7 @@ describe('SpanRow', () => {
     )
     // There is no room to clamp into, but a span never renders narrower than
     // the time it covers: a four-second song is still on the bar, and still
-    // clickable, rather than collapsing to nothing against its neighbour.
+    // clickable, rather than collapsing to nothing against its neighbor.
     const short = screen.getByRole('button', { name: 'Short' })
     const width = Number.parseFloat(short.style.width)
     expect(width).toBeGreaterThan(0)
@@ -201,7 +201,7 @@ describe('SpanRow', () => {
     expect(screen.getByRole('button', { name: 'Second' })).toHaveStyle({ left: '15%', width: '10%' })
   })
 
-  it('keeps the handles on a wide span that abuts a neighbour', () => {
+  it('keeps the handles on a wide span that abuts a neighbor', () => {
     render(
       <SpanRow
         durationSec={1000}
@@ -218,6 +218,27 @@ describe('SpanRow', () => {
     // next to: Abutting is exactly at the 5% floor and keeps its handles.
     expect(screen.getByRole('button', { name: 'Abutting' })).toHaveStyle({ width: '5%' })
     expect(screen.getByRole('button', { name: 'Resize end of Abutting' })).toBeInTheDocument()
+  })
+
+  it('pads the click target without painting past the span\'s real end', () => {
+    render(
+      <SpanRow
+        durationSec={3600}
+        onSeek={vi.fn()}
+        spans={[{ key: 'a', label: 'Blip', start: 10, end: 10.2 }]}
+      />
+    )
+    // The button (the click target) still gets the 0.4% floor so it stays
+    // hittable, but the colored, labeled box inside it — what a viewer reads
+    // as "this is where the span is" — stops at the span's true 0.2s width.
+    // Otherwise a short span at a zoomed-out scale can visually reach into
+    // whatever a neighboring row draws well after it actually ends.
+    const button = screen.getByRole('button', { name: 'Blip' })
+    expect(button).toHaveStyle({ width: '0.4%' })
+    const naturalWidthPercent = (0.2 / 3600) * 100
+    const visible = button.querySelector('span')
+    const visibleWidth = Number.parseFloat(visible?.style.width ?? '')
+    expect(visibleWidth).toBeCloseTo((naturalWidthPercent / 0.4) * 100, 6)
   })
 
   it('wraps a long label instead of pushing the row taller', () => {
