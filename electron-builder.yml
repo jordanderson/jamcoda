@@ -32,13 +32,20 @@ mac:
     - dmg
     - zip
   category: public.app-category.music
-  # Unsigned for v1 -- no Apple Developer cert yet. gatekeeperAssess skips a
-  # spctl check at build time that would otherwise fail on an unsigned app.
+  # Ad-hoc signed: there is no Apple Developer certificate. Apple silicon runs
+  # no arm64 code without a valid signature, and a downloaded app whose
+  # bundle is unsigned reads as "damaged" with no way past it. Ad-hoc signing
+  # the whole bundle makes it an unverified app instead, which the user can
+  # allow in System Settings. Hardened runtime matters only for notarization,
+  # and with an ad-hoc identity it would reject Electron's own frameworks.
+  # gatekeeperAssess skips a build-time spctl check that rejects any
+  # unnotarized app.
+  identity: '-'
+  hardenedRuntime: false
   gatekeeperAssess: false
-  # Signing/notarization slot in here later, e.g.:
-  # hardenedRuntime: true
-  # notarize: { teamId: '<TEAM_ID>' }
-  # driven by CSC_LINK / CSC_KEY_PASSWORD / APPLE_ID env vars at build time.
+  # Developer ID signing and notarization replace the three lines above
+  # later: an identity from CSC_LINK / CSC_KEY_PASSWORD, `hardenedRuntime:
+  # true`, and `notarize` driven by APPLE_ID env vars.
 
 win:
   target:
