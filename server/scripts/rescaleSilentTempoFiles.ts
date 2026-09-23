@@ -6,6 +6,7 @@ import { parseNoteSequence } from '@core/midi/noteSequence';
 import { closeDatabase, getDb, initializeDatabase } from '../config/database';
 import { parseJmxMetadata } from '../utils/jmxParser';
 import { nowUnix } from '@utils/time';
+import { transaction } from '../config/transaction';
 
 /**
  * Rescale times stored against recordings that never declared a tempo.
@@ -164,7 +165,7 @@ function annotationsFor(fileIds: number[]): AnnotationRow[] {
       `SELECT id, file_id, start_time, end_time FROM annotations
        WHERE file_id IN (${fileIds.map(() => '?').join(',')}) ORDER BY id`
     )
-    .all(...fileIds) as AnnotationRow[];
+    .all(...fileIds) as unknown as AnnotationRow[];
 }
 
 /**
@@ -291,7 +292,7 @@ async function main() {
     // against a model's `createdAt` in seconds. A millisecond value here dates
     // the row to the year 58000, so the rebuild badge can never clear.
     const now = nowUnix();
-    db.transaction(() => {
+    transaction(db, () => {
       const scaleAnnotation = db.prepare(
         'UPDATE annotations SET start_time = start_time / ?, end_time = end_time / ?, updated_at = ? WHERE file_id = ?'
       );

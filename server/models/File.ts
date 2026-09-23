@@ -1,3 +1,4 @@
+import type { SQLInputValue } from 'node:sqlite';
 import { getDb } from '@config/database';
 import { getMidiDuration } from '@utils/midiUtils';
 import type { FileRecord, CreateFileData, UpdateSyncedFileData } from '@server/types';
@@ -56,7 +57,7 @@ const NOT_EMPTY_RECORDING = '(midi_duration IS NULL OR midi_duration > 0)';
  */
 export function findAll(): FileRecord[] {
   const db = getDb();
-  return db.prepare('SELECT * FROM files').all() as FileRecord[];
+  return db.prepare('SELECT * FROM files').all() as unknown as FileRecord[];
 }
 
 /** Browse listing. Excludes empty recordings; see {@link NOT_EMPTY_RECORDING}. */
@@ -73,7 +74,7 @@ export function findByDate(startDate?: string, endDate?: string): FileRecord[] {
   const query = `SELECT * FROM files WHERE ${conditions.join(' AND ')}`
     + ' ORDER BY date_recorded DESC, filename ASC';
 
-  return db.prepare(query).all(...params) as FileRecord[];
+  return db.prepare(query).all(...params) as unknown as FileRecord[];
 }
 
 /**
@@ -186,7 +187,7 @@ export function getResolvedDuration(file: FileRecord): number {
 export function updateSyncedFile(id: number, data: UpdateSyncedFileData): boolean {
   const db = getDb();
   const sets: string[] = [];
-  const params: unknown[] = [];
+  const params: SQLInputValue[] = [];
 
   if (data.fileSize !== undefined) {
     sets.push('file_size = ?');

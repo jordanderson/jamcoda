@@ -144,7 +144,7 @@ async function main() {
       FROM prediction_reviews
       WHERE status <> 'unsure' AND predicted_confidence IS NOT NULL
       ORDER BY id
-    `).all() as ReviewRow[];
+    `).all() as unknown as ReviewRow[];
 
     if (rows.length < 30) {
       throw new Error(

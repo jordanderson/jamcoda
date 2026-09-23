@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 import type { Migration, MigrationResult } from './types';
 import { initialSchemaMigration } from './001-initial-schema';
 import { syncAssetMetadataMigration } from './002-sync-asset-metadata';
@@ -7,6 +7,7 @@ import { bookmarksMigration } from './004-file-bookmarks';
 import { skipsMigration } from './005-file-skips';
 import { dropIgnoredSectionsMigration } from './006-drop-ignored-sections';
 import { nowUnix } from '@utils/time';
+import { transaction } from '../transaction';
 
 /**
  * All migrations, in application order. New migrations should be added as
@@ -21,7 +22,7 @@ const migrations: Migration[] = [
   dropIgnoredSectionsMigration
 ];
 
-export function runMigrations(db: Database.Database): MigrationResult {
+export function runMigrations(db: DatabaseSync): MigrationResult {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id TEXT PRIMARY KEY,
@@ -44,7 +45,7 @@ export function runMigrations(db: Database.Database): MigrationResult {
       continue;
     }
 
-    const tx = db.transaction(() => {
+    const tx = transaction(db, () => {
       migration.up(db);
       insertApplied.run(migration.id, migration.description, nowUnix());
     });

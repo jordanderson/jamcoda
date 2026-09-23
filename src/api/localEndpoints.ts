@@ -21,8 +21,17 @@ import type {
   UpdateAnnotationResponse,
   SetFileCompletionResponse,
   RunPredictionForFileRequest,
-  RunPredictionForFileResponse
+  RunPredictionForFileResponse,
+  SettingsResponse
 } from './localTypes';
+
+export const settingsApi = {
+  get: async (): Promise<SettingsResponse> => {
+    const response = await fetch('/api/settings');
+    if (!response.ok) return throwApiError(response, 'Failed to get settings');
+    return response.json();
+  }
+};
 
 export const syncApi = {
   start: async (full = false) => {

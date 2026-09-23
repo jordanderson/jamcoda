@@ -141,7 +141,7 @@ function renderResize() {
   // resize into four parallel requests.
   const view = renderHook(() => {
     const detail = useFileDetail(FILE_ID)
-    if (detail.data && detail.data.annotations !== annotationIdentities.at(-1)) {
+    if (detail.data && detail.data.annotations !== annotationIdentities[annotationIdentities.length - 1]) {
       annotationIdentities.push(detail.data.annotations)
     }
     return {

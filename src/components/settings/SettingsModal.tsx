@@ -1,6 +1,8 @@
-import { ExternalLink, RefreshCw, X } from 'lucide-react'
+import { useState } from 'react'
+import { ExternalLink, FolderOpen, RefreshCw, X } from 'lucide-react'
 import { useSyncStatus } from '../../hooks/useSyncStatus'
 import { useRebuildPredictionModel } from '../../hooks/usePredictionReviews'
+import { useSettings } from '../../hooks/useSettings'
 import type { Toast } from '../../hooks/useToasts'
 import { errorMessage } from '@core/errors'
 
@@ -11,8 +13,6 @@ interface SettingsModalProps {
   onClose: () => void
   showToast: (toast: Omit<Toast, 'id'>) => void
 }
-
-const jamcorderHost = (import.meta.env.JAMCORDER_URL || 'http://jamcorder.local').replace(/^https?:\/\//, '')
 
 function formatLastSync(timestamp: number | null): string {
   if (!timestamp) return 'Never'
@@ -29,9 +29,119 @@ function formatLastSync(timestamp: number | null): string {
   return `${diffDays}d ago`
 }
 
+/**
+ * Editing the Jamcorder address and revealing the data folder act on the
+ * desktop app's own configuration and data. `window.jamcoda` is undefined in
+ * a browser and under `npm run electron:dev`, so this renders nothing there.
+ *
+ * Saving relaunches the app, so it waits out a running sync or model rebuild
+ * rather than cutting it short.
+ */
+function JamcorderUrlControls({ currentUrl, isBusy }: { currentUrl: string; isBusy: boolean }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [urlDraft, setUrlDraft] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const bridge = window.jamcoda
+  if (!bridge) {
+    return null
+  }
+
+  const handleSave = async () => {
+    const url = urlDraft.trim()
+    if (!url || isBusy) return
+    setIsSaving(true)
+    setError(null)
+    try {
+      const result = await bridge.setJamcorderUrl(url)
+      if (!result.ok) {
+        setError(result.error)
+        setIsSaving(false)
+      }
+    } catch (saveError) {
+      setError(errorMessage(saveError, 'Could not save the address'))
+      setIsSaving(false)
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <form
+        className="mt-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void handleSave()
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={urlDraft}
+            onChange={(e) => {
+              setUrlDraft(e.target.value)
+              setError(null)
+            }}
+            placeholder="jamcorder.local"
+            aria-label="Jamcorder address"
+            className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
+          />
+          <button
+            type="submit"
+            disabled={isBusy || isSaving || !urlDraft.trim()}
+            className="text-xs text-emerald-700 hover:text-emerald-600 font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Save & restart
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsEditing(false)
+              setError(null)
+            }}
+            className="text-xs text-gray-400 hover:text-gray-600"
+          >
+            Cancel
+          </button>
+        </div>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        {isBusy && !error && (
+          <p className="mt-1 text-xs text-gray-500">Available once the current sync or model rebuild finishes.</p>
+        )}
+      </form>
+    )
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => {
+          setUrlDraft(currentUrl)
+          setIsEditing(true)
+        }}
+        className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
+      >
+        Change Jamcorder address
+      </button>
+      <button
+        type="button"
+        onClick={() => void bridge.revealDataFolder()}
+        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+      >
+        <FolderOpen className="w-3 h-3" />
+        Reveal data folder
+      </button>
+    </div>
+  )
+}
+
 export function SettingsModal({ isOpen, isSyncStarting, onStartSync, onClose, showToast }: SettingsModalProps) {
   const { data: syncStatus } = useSyncStatus()
+  const { data: settings } = useSettings()
   const rebuildModel = useRebuildPredictionModel()
+
+  const jamcorderHost = (settings?.jamcorderUrl ?? 'http://jamcorder.local').replace(/^https?:\/\//, '')
 
   const handleRebuildWithRescore = () => {
     rebuildModel.mutate(
@@ -108,6 +218,10 @@ export function SettingsModal({ isOpen, isSyncStarting, onStartSync, onClose, sh
             <div>Last sync: {formatLastSync(syncStatus?.lastSyncAt ?? null)}</div>
             <div>Connected to {jamcorderHost}</div>
           </div>
+          <JamcorderUrlControls
+            currentUrl={settings?.jamcorderUrl ?? ''}
+            isBusy={isSyncStarting || rebuildModel.isPending}
+          />
         </section>
 
         <section className="mt-6 border-t border-gray-100 pt-6">

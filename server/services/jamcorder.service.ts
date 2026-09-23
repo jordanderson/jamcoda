@@ -10,7 +10,7 @@ import { sleep } from '@core/cli/args';
 
 const execFileAsync = promisify(execFile);
 
-const JAMCORDER_URL = process.env.JAMCORDER_URL || 'http://jamcorder.local';
+export const JAMCORDER_URL = process.env.JAMCORDER_URL || 'http://jamcorder.local';
 const REQUEST_TIMEOUT = 30000; // 30 seconds
 // The firmware runs on low-power hardware (e.g. Raspberry Pi 3) and can
 // crash under load. Keep pages small, pause generously between them, and

@@ -1,10 +1,15 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { runMigrations } from './migrations/index';
 
 const APP_DB_PATH = './data/jamcoda.db';
-let db: Database.Database | undefined;
+/**
+ * How long a statement waits for another connection's lock (a `db:*` or
+ * `ml:*` script beside the running server) before failing with SQLITE_BUSY.
+ */
+export const BUSY_TIMEOUT_MS = 5000;
+let db: DatabaseSync | undefined;
 let activeDbPath: string | undefined;
 
 export interface InitializeDatabaseResult {
@@ -51,11 +56,11 @@ export function initializeDatabase(): InitializeDatabaseResult {
     mkdirSync(dir, { recursive: true });
   }
 
-  db = new Database(dbPath);
+  db = new DatabaseSync(dbPath, { timeout: BUSY_TIMEOUT_MS });
   activeDbPath = dbPath;
 
   // Enable foreign keys
-  db.pragma('foreign_keys = ON');
+  db.exec('PRAGMA foreign_keys = ON');
 
   const migrationResult = runMigrations(db);
   if (migrationResult.appliedIds.length > 0) {
@@ -71,7 +76,7 @@ export function initializeDatabase(): InitializeDatabaseResult {
   };
 }
 
-export function getDb() {
+export function getDb(): DatabaseSync {
   if (!db) {
     throw new Error('Database not initialized. Call initializeDatabase() first.');
   }

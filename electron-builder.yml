@@ -1,0 +1,54 @@
+appId: com.jordanderson.jamcoda
+productName: JamCoda
+copyright: Copyright © JamCoda
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the builds: esbuild inlines every server dependency into
+# dist-electron/server.cjs, and SQLite is Node's own `node:sqlite`, so the app
+# needs nothing from node_modules and there is no native module to rebuild.
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+  - '!node_modules{,/**/*}'
+npmRebuild: false
+
+publish:
+  provider: github
+  owner: jordanderson
+  repo: jamcoda
+  # `draft` is intentionally left unset (defaults to true): each tagged push
+  # produces a draft release so the three platform artifacts can be
+  # sanity-checked before anyone downloads an unsigned, warning-flagged
+  # binary. Flip to `draft: false` later for fully automatic publishing.
+
+mac:
+  # No arch here: each run builds the host's unless `--arm64`/`--x64` says
+  # otherwise, and the release workflow runs once per arch.
+  target:
+    - dmg
+    - zip
+  category: public.app-category.music
+  # Unsigned for v1 -- no Apple Developer cert yet. gatekeeperAssess skips a
+  # spctl check at build time that would otherwise fail on an unsigned app.
+  gatekeeperAssess: false
+  # Signing/notarization slot in here later, e.g.:
+  # hardenedRuntime: true
+  # notarize: { teamId: '<TEAM_ID>' }
+  # driven by CSC_LINK / CSC_KEY_PASSWORD / APPLE_ID env vars at build time.
+
+win:
+  target:
+    - nsis
+  # Signing slots in here later, e.g. certificateFile/certificatePassword or
+  # signtoolOptions for an EV cert, driven by CSC_LINK / CSC_KEY_PASSWORD env
+  # vars at build time.
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Audio

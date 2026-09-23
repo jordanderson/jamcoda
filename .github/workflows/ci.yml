@@ -22,8 +22,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Pinned by .nvmrc. better-sqlite3 is native, so the Node major here
-          # must match the one the binary is built against.
+          # Pinned by .nvmrc: Node 24 for `node:sqlite`.
           node-version-file: .nvmrc
           cache: npm
 

@@ -4,6 +4,7 @@ import { hasFlag, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import { closeDatabase, getDb, initializeDatabase } from '../config/database';
 import { parseJmxMetadata } from '../utils/jmxParser';
 import { errorMessage } from '@core/errors';
+import { transaction } from '../config/transaction';
 
 /**
  * Remove already-synced empty recordings — assets the Jamcorder opened and
@@ -50,7 +51,7 @@ function findCandidates(): Candidate[] {
     FROM files
     WHERE midi_duration = 0
     ORDER BY date_recorded, filename
-  `).all() as Candidate[];
+  `).all() as unknown as Candidate[];
 }
 
 /** Rows with annotation work attached are never pruned, whatever their duration. */
@@ -177,7 +178,7 @@ async function main() {
       dirs.add(path.dirname(candidate.localPath));
     }
 
-    db.transaction(() => {
+    transaction(db, () => {
       for (const candidate of deletable) {
         deleteRow.run(candidate.id);
       }

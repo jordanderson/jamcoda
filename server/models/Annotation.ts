@@ -6,6 +6,7 @@ import type {
   UpdateAnnotationData
 } from '@server/types';
 import { nowUnix } from '@utils/time';
+import { transaction } from '@config/transaction';
 
 export function create(data: CreateAnnotationData): number {
   const db = getDb();
@@ -32,7 +33,7 @@ export function create(data: CreateAnnotationData): number {
 export function findByFileId(fileId: number): Annotation[] {
   const db = getDb();
   const stmt = db.prepare('SELECT * FROM annotations WHERE file_id = ? ORDER BY start_time ASC');
-  return stmt.all(fileId) as Annotation[];
+  return stmt.all(fileId) as unknown as Annotation[];
 }
 
 export function findById(id: number): Annotation | undefined {
@@ -103,7 +104,7 @@ export function mergeOverlappingSameSong(id: number): MergeSameSongResult | unde
       AND song_name = ?
       AND id != ?
     ORDER BY start_time ASC, end_time ASC, id ASC
-  `).all(current.file_id, current.song_name, current.id) as Annotation[];
+  `).all(current.file_id, current.song_name, current.id) as unknown as Annotation[];
 
   let mergedStart = current.start_time;
   let mergedEnd = current.end_time;
@@ -135,7 +136,7 @@ export function mergeOverlappingSameSong(id: number): MergeSameSongResult | unde
   }
 
   const now = nowUnix();
-  const tx = db.transaction(() => {
+  const tx = transaction(db, () => {
     db.prepare(`
       UPDATE annotations
       SET start_time = ?, end_time = ?, updated_at = ?
@@ -169,7 +170,7 @@ export function remove(id: number): boolean {
   const db = getDb();
   const now = nowUnix();
 
-  const tx = db.transaction(() => {
+  const tx = transaction(db, () => {
     // Deleting the annotation a review was promoted into un-promotes that
     // review. Clear the promotion here rather than rely on the foreign key:
     // it nulls promoted_annotation_id but would leave promoted_at set for a
@@ -263,7 +264,7 @@ export function getSongPlayHistory(): SongPlayHistoryRow[] {
     FROM annotations a
     JOIN files f ON f.id = a.file_id
     ORDER BY f.date_recorded DESC, a.start_time DESC, a.id DESC
-  `).all() as SongPlayHistoryRow[];
+  `).all() as unknown as SongPlayHistoryRow[];
 }
 
 export function renameSongName(oldSongName: string, newSongName: string): number {
@@ -274,7 +275,7 @@ export function renameSongName(oldSongName: string, newSongName: string): number
     SET song_name = ?, updated_at = ?
     WHERE song_name = ?
   `).run(newSongName, now, oldSongName);
-  return result.changes;
+  return result.changes as number;
 }
 
 export function split(
@@ -301,7 +302,7 @@ export function split(
   }
 
   const now = nowUnix();
-  const tx = db.transaction(() => {
+  const tx = transaction(db, () => {
     db.prepare(`
       UPDATE annotations
       SET end_time = ?, updated_at = ?

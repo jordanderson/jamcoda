@@ -5,6 +5,7 @@ import { resolveReviewFields } from '@core/predictionReview';
 import { closeDatabase, getDb, initializeDatabase } from '../config/database';
 import type { PredictionReview } from '@server/types';
 import { nowUnix } from '@utils/time';
+import { transaction } from '../config/transaction';
 
 /**
  * Repair prediction reviews whose promotion was silently undone.
@@ -70,7 +71,7 @@ function findOrphans(): OrphanRow[] {
     JOIN files f ON f.id = r.file_id
     WHERE r.promoted_at IS NOT NULL
       AND r.promoted_annotation_id IS NULL
-  `).all() as Array<PredictionReview & { filename: string }>;
+  `).all() as unknown as Array<PredictionReview & { filename: string }>;
 
   return rows
     .map((row) => {
@@ -102,7 +103,7 @@ function findCovering(row: OrphanRow): CoveringRow[] {
       AND start_time <= ?
       AND end_time >= ?
     ORDER BY (end_time - start_time) ASC, id ASC
-  `).all(row.fileId, row.song, row.startTime, row.endTime) as CoveringRow[];
+  `).all(row.fileId, row.song, row.startTime, row.endTime) as unknown as CoveringRow[];
 }
 
 function fmt(seconds: number): string {
@@ -207,7 +208,7 @@ async function main() {
       WHERE id = ?
     `);
 
-    db.transaction(() => {
+    transaction(db, () => {
       for (const { row, annotation } of relink) {
         relinkStmt.run(annotation.id, now, row.id);
       }

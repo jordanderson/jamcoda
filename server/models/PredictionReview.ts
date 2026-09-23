@@ -15,6 +15,7 @@ import type {
   UpdatePredictionReviewData
 } from '@server/types';
 import { nowUnix } from '@utils/time';
+import { transaction } from '@config/transaction';
 
 /** Type guard for validating untrusted status input. */
 export const isPredictionReviewStatus = isStatus;
@@ -84,7 +85,7 @@ export function list(filters: ListPredictionReviewsFilters = {}): PredictionRevi
     LIMIT ? OFFSET ?
   `;
 
-  return db.prepare(sql).all(...where.params, limit, offset) as PredictionReview[];
+  return db.prepare(sql).all(...where.params, limit, offset) as unknown as PredictionReview[];
 }
 
 /** Count reviews matching the same filter contract as `list`. */
@@ -224,7 +225,7 @@ export function createMany(items: CreatePredictionReviewData[]): number[] {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  const tx = db.transaction((rows: CreatePredictionReviewData[]) => {
+  const tx = transaction(db, (rows: CreatePredictionReviewData[]) => {
     for (const item of rows) {
       const status = item.status ?? 'unsure';
       const reviewedAt = shouldSetReviewedAt(status, item) ? now : null;
@@ -340,7 +341,7 @@ export function getReviewQueue(limit = 50, fileId?: number): PredictionReview[] 
     LIMIT ?
   `;
 
-  return db.prepare(sql).all(...params, limit) as PredictionReview[];
+  return db.prepare(sql).all(...params, limit) as unknown as PredictionReview[];
 }
 
 /** List reviewed rows that are eligible for annotation promotion. */
@@ -365,7 +366,7 @@ export function listPromotableUnpromoted(limit = 100, fileId?: number): Predicti
     LIMIT ?
   `;
 
-  return db.prepare(sql).all(...params, limit) as PredictionReview[];
+  return db.prepare(sql).all(...params, limit) as unknown as PredictionReview[];
 }
 
 /**
@@ -399,7 +400,7 @@ export function deleteUnpromotedByFileId(fileId: number): number {
     WHERE file_id = ?
       AND promoted_annotation_id IS NULL
   `).run(fileId);
-  return result.changes;
+  return result.changes as number;
 }
 
 /** Delete unpromoted rows whose effective range overlaps `[startTime, endTime)`. */
@@ -416,7 +417,7 @@ export function deleteUnpromotedOverlappingRange(
       AND ${RESOLVED_END_TIME_SQL} > ?
       AND ${RESOLVED_START_TIME_SQL} < ?
   `).run(fileId, startTime, endTime);
-  return result.changes;
+  return result.changes as number;
 }
 
 /** Delete all review rows for a file (promoted and unpromoted). */
@@ -426,7 +427,7 @@ export function deleteByFileId(fileId: number): number {
     DELETE FROM prediction_reviews
     WHERE file_id = ?
   `).run(fileId);
-  return result.changes;
+  return result.changes as number;
 }
 
 /** Rename song references in both predicted and reviewed song-name fields. */
@@ -437,7 +438,7 @@ export function renameSongNameReferences(oldSongName: string, newSongName: strin
   const db = getDb();
   const now = nowUnix();
 
-  const tx = db.transaction(() => {
+  const tx = transaction(db, () => {
     const predictedResult = db.prepare(`
       UPDATE prediction_reviews
       SET predicted_song_name = ?, updated_at = ?
@@ -451,8 +452,8 @@ export function renameSongNameReferences(oldSongName: string, newSongName: strin
     `).run(newSongName, now, oldSongName);
 
     return {
-      predictedUpdated: predictedResult.changes,
-      reviewedUpdated: reviewedResult.changes
+      predictedUpdated: predictedResult.changes as number,
+      reviewedUpdated: reviewedResult.changes as number
     };
   });
 
@@ -471,7 +472,7 @@ export function mergeReviews(reviewIds: number[]): MergePredictionReviewsResult 
     throw new Error('Select at least 2 reviews to merge.');
   }
 
-  const tx = db.transaction(() => {
+  const tx = transaction(db, () => {
     const reviews = uniqueIds
       .map((id) => findById(id))
       .filter((review): review is PredictionReview => review !== undefined);
@@ -613,7 +614,7 @@ export function promoteToAnnotation(id: number): PromotePredictionReviewResult {
 
   const now = nowUnix();
 
-  const tx = db.transaction(() => {
+  const tx = transaction(db, () => {
     let annotationId = existing.promoted_annotation_id;
     let created = false;
 

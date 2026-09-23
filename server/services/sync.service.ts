@@ -52,6 +52,14 @@ export async function startSync(full = false): Promise<string> {
   return syncId;
 }
 
+/** Whether any sync is still downloading or writing. */
+export function isSyncRunning(): boolean {
+  for (const progress of syncJobs.values()) {
+    if (progress.status === 'in_progress') return true;
+  }
+  return false;
+}
+
 export function getSyncProgress(syncId: string): SyncProgress | null {
   return syncJobs.get(syncId) || null;
 }

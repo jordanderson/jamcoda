@@ -48,7 +48,7 @@ async function main() {
   try {
     const rows = getDb().prepare(
       'SELECT id, local_path as localPath FROM files'
-    ).all() as FileRow[];
+    ).all() as unknown as FileRow[];
 
     const update = getDb().prepare('UPDATE files SET bookmarks_json = ?, skips_json = ? WHERE id = ?');
     let updated = 0;

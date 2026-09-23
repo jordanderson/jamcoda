@@ -3,7 +3,7 @@ import { afterAll as after, beforeAll as before, beforeEach, test } from 'vitest
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 
 const tempDir = mkdtempSync(join(tmpdir(), 'jamcoda-annotation-'));
 const testDbPath = join(tempDir, 'jamcoda.db');
@@ -11,7 +11,7 @@ process.env.JAMCODA_DB_PATH = testDbPath;
 
 let initializeDatabase: () => void;
 let closeDatabase: () => void;
-let getDb: () => Database.Database;
+let getDb: () => DatabaseSync;
 let FileModel: typeof import('./File');
 let AnnotationModel: typeof import('./Annotation');
 let fileCounter = 0;

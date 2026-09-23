@@ -2,7 +2,8 @@
  * Reading annotated recordings out of the app database, and their notes off
  * disk. The only part of segmentation that touches I/O.
  */
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
+import { BUSY_TIMEOUT_MS } from '@config/database';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildPedalIntervals, heldByPedal, parseNoteSequence } from '@core/midi/noteSequence';
@@ -24,11 +25,11 @@ function toNum(value: unknown): number {
 }
 
 /**
- * Read-only query against the app database. It uses the server's own
- * better-sqlite3 dependency, so training needs no `sqlite3` command-line tool.
+ * Read-only query against the app database through `node:sqlite`, so
+ * training needs no `sqlite3` command-line tool.
  */
 function sqliteJsonQuery<T>(dbPath: string, sql: string): T[] {
-  const db = new Database(dbPath, { readonly: true });
+  const db = new DatabaseSync(dbPath, { readOnly: true, timeout: BUSY_TIMEOUT_MS });
   try {
     return db.prepare(sql).all() as T[];
   } finally {

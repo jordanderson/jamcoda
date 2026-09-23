@@ -17,6 +17,7 @@ const LOCAL_API_PREFIXES = [
   '/api/files',
   '/api/annotations',
   '/api/prediction-reviews',
+  '/api/settings',
 ] as const
 
 const LOCAL_API_TARGET = 'http://localhost:3001'
@@ -58,10 +59,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    // Vite only exposes VITE_-prefixed vars to the browser. Allowing the
-    // JAMCORDER_ prefix too means one JAMCORDER_URL serves the backend, the
-    // dev proxy, and the client badge. JAMCODA_ stays server-only.
-    envPrefix: ['VITE_', 'JAMCORDER_'],
     resolve: {
       alias: {
         '@core': path.resolve(import.meta.dirname, './core'),
@@ -99,7 +96,7 @@ export default defineConfig(({ mode }) => {
           test: {
             name: 'server',
             environment: 'node',
-            include: ['server/**/*.test.ts', 'ml/**/*.test.ts'],
+            include: ['server/**/*.test.ts', 'ml/**/*.test.ts', 'electron/**/*.test.ts'],
           },
         },
       ],

@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Pinned by .nvmrc, same as ci.yml: Node 24 for `node:sqlite`.
+          node-version-file: .nvmrc
+          cache: npm
+
+      # electron-builder names the release after package.json's version, not
+      # the tag, so a tag that disagrees would publish under the wrong name.
+      - name: Check tag matches package.json version
+        shell: bash
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+
+      - run: npm ci
+
+      # The same checks ci.yml runs, in case the tagged commit never went
+      # through a PR/CI run of its own.
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      - run: npm run electron:bundle
+
+      # One run per Mac arch; see the note on `mac:` in electron-builder.yml.
+      - if: runner.os == 'macOS'
+        run: |
+          npx electron-builder --mac --arm64 --publish always
+          npx electron-builder --mac --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - if: runner.os != 'macOS'
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

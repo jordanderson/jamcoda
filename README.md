@@ -102,11 +102,29 @@ whose unpromoted proposals are all still `unsure`.
 [How JamCoda works](https://jordanderson.github.io/jamcoda/)
 is an illustrated walkthrough of how the model finds songs in a recording.
 
+## Download the desktop app
+
+Prebuilt desktop apps for macOS, Windows and Linux are on the
+[Releases page](https://github.com/jordanderson/jamcoda/releases). No Node,
+terminal or `.env` file is needed: data lives in the OS's standard per-user
+app-data directory, and the Jamcorder address is set from the app's own
+Settings dialog.
+
+These builds are currently unsigned. On macOS, the first launch is blocked;
+open System Settings → Privacy & Security, choose "Open Anyway" beside the
+JamCoda message, and confirm. Windows SmartScreen shows a similar warning —
+choose "More info", then "Run anyway".
+
+The desktop app's server listens on `127.0.0.1:47831` and answers only the
+app's own page, so neither other devices on the network nor websites open in
+a browser can reach it. It does not interfere with `npm run dev`, which
+keeps port 3001.
+
 ## Getting started
 
 ### Prerequisites
 
-- Node.js 22.9+ (`.nvmrc` pins 22; run `nvm use` if you use nvm)
+- Node.js 24+ (`.nvmrc` pins 24; run `nvm use` if you use nvm)
 - A Jamcorder reachable at `http://jamcorder.local`, or set `JAMCORDER_URL`
 
 ### Install and set up
@@ -123,12 +141,9 @@ your latest answers become the defaults.
 To do it by hand, copy `.env.example` to `.env` and edit. Skipping setup
 entirely also works: the defaults below apply.
 
-> `better-sqlite3` is a native module, and its compiled binary is tied to the
-> Node major version that installed it. Installing under a different major
-> may leave the server failing at startup with `ERR_DLOPEN_FAILED` and a
-> `NODE_MODULE_VERSION` mismatch. Typecheck, build and the client are all
-> unaffected, which makes the cause easy to miss. Fix with
-> `nvm use && npm rebuild better-sqlite3`.
+The database is SQLite through Node's built-in `node:sqlite`, so there is no
+native module to compile, and the same code runs under Node and in the
+desktop app.
 
 ### Run
 
@@ -196,6 +211,9 @@ Run them by hand with `npm run db:migrate`, adding
 | `npm run ml:eval`                 | Evaluate the model, leave-one-out by default (`--mode insample`); writes a JSON report                        |
 | `npm run ml:compare`              | Paired comparison of two evaluation reports                                                                   |
 | `npm run ml:fit-confidence`       | Refit the display-only confidence calibration (prints weights; writes nothing)                                |
+| `npm run electron:dev`            | Electron shell + Vite dev server, for fast desktop-UI iteration                                               |
+| `npm run electron:build`          | Build the packaged desktop app locally, unpublished (`release/`)                                              |
+| `npm run electron:release`        | Same, then publish to GitHub Releases                                                                          |
 
 ## Playback
 
@@ -214,11 +232,15 @@ memory for the session; the browser's cache serves them after that.
   calibration. `core/cli/` is its one Node-only part. Start here.
 - `src/` — React + Vite, hash routing (`#/browse`, `#/detail/:id`, `#/songs`,
   `#/analytics`).
-- `server/` — Express (port 3001 by default), `better-sqlite3`, migrations, and
+- `server/` — Express (port 3001 by default), `node:sqlite`, migrations, and
   the maintenance scripts behind `db:*`.
 - `ml/` — the segmentation model; `ml/songSegmentation.ts` is the public
   surface over `ml/segmentation/`.
-- `scripts/` — `npm run setup`.
+- `scripts/` — `npm run setup`, `npm run electron:bundle`.
+- `electron/` — the desktop app shell: window/lifecycle, per-user config, and
+  the IPC bridge Settings uses to edit the Jamcorder address and reveal the
+  data folder. It runs `server/` in a utility process through
+  `server/desktopHost.ts`, with `JAMCODA_LOOPBACK_ONLY=1`.
 
 ## Documentation
 

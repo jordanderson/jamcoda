@@ -378,3 +378,8 @@ export interface SetFileCompletionResponse {
   completedAt: number | null;
   clearedPredictionCount: number;
 }
+
+/** The server's actual effective runtime configuration. */
+export interface SettingsResponse {
+  jamcorderUrl: string;
+}

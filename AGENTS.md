@@ -10,13 +10,18 @@ deliberately Node-only part.
 
 ## Gotchas
 
-- **Node 22 only for `npm install` / `npm rebuild`.** `better-sqlite3` is
-  native, and its binary is tied to the installing Node major. Installing under
-  another major (an agent shell defaulting to Node 20, say) leaves a binary
-  Node 22 cannot load and the server dies at `initializeDatabase()` with
-  `ERR_DLOPEN_FAILED` / `NODE_MODULE_VERSION`. Typecheck, build and the client
-  are unaffected, so it is easy to misread. Recover with
-  `nvm use && npm rebuild better-sqlite3`.
+- **SQLite is Node's built-in `node:sqlite`, which needs Node 24** (`.nvmrc`).
+  There is no native module, so no rebuild for Electron or across Node
+  versions. Transactions go through `transaction(db, fn)` in
+  `server/config/transaction.ts` (savepoints when nested). Rows are typed
+  `Record<string, SQLOutputValue>` and cast via `unknown`; `changes` and
+  `lastInsertRowid` are typed `number | bigint` but are numbers unless
+  `readBigInts` is set.
+- **The desktop app runs the server as an Electron utility process**
+  (`server/desktopHost.ts`) with `JAMCODA_LOOPBACK_ONLY=1`: loopback bind, no
+  CORS, and `server/utils/loopbackGuard.ts` refusing any other `Host` or
+  `Origin`. Unset, the server behaves as it does for `npm run dev`. Keep
+  desktop-only behavior behind that flag or `JAMCODA_CLIENT_DIST_DIR`.
 - **`.env` reaches server code only through `--env-file-if-exists=.env`** on
   each tsx script in `package.json`; Vite reads it separately. The flag applies
   before any module reads `process.env` at import time, which a

@@ -79,7 +79,7 @@ function findCandidates(force: boolean, limit: number | null): Candidate[] {
       ${forceClause}
     ORDER BY f.date_recorded DESC, f.filename ASC
     ${limitSql}
-  `).all() as Candidate[];
+  `).all() as unknown as Candidate[];
   return rows;
 }
 
