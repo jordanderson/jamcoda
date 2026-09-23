@@ -86,8 +86,8 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
   return (
     <aside className="w-64 bg-gray-900 text-white h-screen flex flex-col">
       <div className="p-6 border-b border-gray-800">
-        <h1 className="flex items-center gap-2 font-wordmark text-[28px] leading-8 font-bold text-white">
-          <JamCodaLogo className="h-8 w-auto shrink-0" />
+        <h1 className="flex items-center gap-1 font-wordmark text-[30px] leading-8 text-white">
+          <JamCodaLogo className="h-6 w-auto shrink-0" />
           JamCoda
         </h1>
         <p className="text-sm text-gray-400 mt-1">Jamcorder Practice Journal</p>

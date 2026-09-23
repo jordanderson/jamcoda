@@ -9,8 +9,9 @@ export default {
       // Removed custom theme colors - using black/white/gray only
       // Color is reserved for data visualization (progress bars, song pills, piano roll)
       fontFamily: {
-        // The wordmark's Didone serif, matching the J in the logo mark.
-        wordmark: ['"Bodoni 72"', 'Didot', 'Georgia', 'serif'],
+        // Georgia ships with every OS, so the wordmark renders the same
+        // everywhere.
+        wordmark: ['Georgia', 'serif'],
       },
     },
   },
