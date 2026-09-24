@@ -4,6 +4,7 @@ import path from 'node:path';
 import * as AnnotationModel from '@models/Annotation';
 import * as PredictionReviewModel from '@models/PredictionReview';
 import * as FileModel from '@models/File';
+import { libraryModelPath, resolveStoredMidiPath } from '@config/library';
 import { loadModel, suggestSongsForRange } from '../../ml/songSegmentation';
 import type { Annotation, RenameSongNameResult } from '@server/types';
 import { route } from '@utils/route';
@@ -26,18 +27,14 @@ router.post('/song-suggestions', route('suggest songs', async (req, res) => {
     return res.status(404).json({ error: 'File not found' });
   }
 
-  const modelPath = path.resolve(
-    (typeof req.body.modelPath === 'string' && req.body.modelPath.trim())
-      ? req.body.modelPath.trim()
-      : 'data/ml/model.json'
-  );
+  const modelPath = (typeof req.body.modelPath === 'string' && req.body.modelPath.trim())
+    ? path.resolve(req.body.modelPath.trim())
+    : libraryModelPath();
   if (!existsSync(modelPath)) {
     return res.json({ suggestions: [] });
   }
 
-  const midiPath = path.isAbsolute(file.local_path)
-    ? file.local_path
-    : path.resolve(process.cwd(), file.local_path);
+  const midiPath = resolveStoredMidiPath(file.local_path);
   if (!existsSync(midiPath)) {
     return res.json({ suggestions: [] });
   }

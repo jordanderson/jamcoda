@@ -3,7 +3,8 @@ import type { DatabaseSync } from 'node:sqlite';
 export interface Migration {
   id: string;
   description: string;
-  up: (db: DatabaseSync) => void;
+  /** `dbPath` is the absolute path of the database being migrated. */
+  up: (db: DatabaseSync, dbPath: string) => void;
 }
 
 export interface MigrationResult {

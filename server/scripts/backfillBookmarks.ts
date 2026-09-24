@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { hasFlag, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import { closeDatabase, getDb, initializeDatabase } from '../config/database';
+import { resolveStoredMidiPath } from '../config/library';
 import { parseJmxMetadata } from '../utils/jmxParser';
 import type { JmxBookmark, JmxSkip } from '../types';
 
@@ -56,8 +57,9 @@ async function main() {
     let withSkips = 0;
 
     for (const row of rows) {
-      if (!existsSync(row.localPath)) continue;
-      const jmx = parseJmxMetadata(readFileSync(row.localPath));
+      const midiPath = resolveStoredMidiPath(row.localPath, dbPath);
+      if (!existsSync(midiPath)) continue;
+      const jmx = parseJmxMetadata(readFileSync(midiPath));
       const bookmarksJson = serializeList<JmxBookmark>(jmx.bookmarks);
       const skipsJson = serializeList<JmxSkip>(jmx.skips);
       if (bookmarksJson === null && skipsJson === null) continue;

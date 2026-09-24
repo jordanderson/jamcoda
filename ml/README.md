@@ -61,6 +61,10 @@ release stamp `v2.12`):
      across it is at most `linkRescueRank`. Without it the earlier song owns
      every ambiguous window until the next one anchors, and a finished take ran a
      median 5.85s long
+  4. drops a run of one song lasting at most `dropFlankedRunSec` (30s) that has
+     a single other song directly on both sides. That run is the model
+     misreading a moment of the flanking song, usually at a restart, so it is
+     left unlabeled rather than absorbed, which would merge the two takes
 - converts window runs into segments. Boundaries come from window **centers**,
   because a window label applies at its center. Training uses the same rule.
 - filters and merges the segments with confidence and duration limits
@@ -75,7 +79,8 @@ into the surrounding song.
 Training pulls from:
 - `data/jamcoda.db`
 - `annotations` joined to `files.local_path`
-- local MIDI files under `data/midi/...`
+- local MIDI files under `data/midi/...` (`local_path` is relative to the
+  database's folder, so `--db` alone points at another library)
 
 Prediction review/promotion uses:
 - `prediction_reviews` table
@@ -104,7 +109,6 @@ Common options:
 ```bash
 npm run ml:train -- \
   --db data/jamcoda.db \
-  --root . \
   --out data/ml/model.json \
   --window 6 \
   --step 1 \
@@ -121,7 +125,8 @@ npm run ml:train -- \
   --link-max-silence 0.7 \
   --link-policy bridge \
   --link-tail-sec 2 \
-  --link-rescue-rank 5
+  --link-rescue-rank 5 \
+  --drop-flanked-run-sec 30
 ```
 
 Notes:
@@ -157,6 +162,12 @@ Notes:
   instead of testing the whole span at once. It recognizes more takes and places
   endings better, at the cost of starts, and is a wash on F1 — see the 2026-09-07
   entry in [`CHANGELOG.md`](CHANGELOG.md).
+- `--drop-flanked-run-sec` (default 30, `0` off) sets the longest run of one
+  song that is dropped when a single other song sits directly on both sides of
+  it. The decoder reads an absent value as 0, so a model saved before v2.13
+  keeps decoding as it was built. See the v2.13 entry in
+  [`CHANGELOG.md`](CHANGELOG.md) for why the run is dropped rather than given
+  to its neighbor.
 - `--scaling` is the per-feature normalization (`minmax`, `zscore`, or `none`).
 - `--score-neighbors` is the number of nearest prototypes to average per label
   (default 1, the single nearest). The fit clamps this value to the smallest
@@ -197,7 +208,7 @@ Useful flags:
 - `--out <path>`: also save JSON payload
 - `--clear-unpromoted false`: keep existing unpromoted rows
 - `--dry-run`: no DB writes
-- `--db <path>` and `--root <path>` for non-default layouts
+- `--db <path>` for another library; `--model` defaults to `ml/model.json` beside it
 
 After import, open:
 - `#/detail/<id>` and use the `Predictions to Review` section below the piano roll

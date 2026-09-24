@@ -1,6 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { useSyncProgress } from '../../hooks/useSyncProgress';
+import { syncApi } from '../../api/localEndpoints';
+import { errorMessage } from '@core/errors';
+import { formatEta } from '../../utils/format';
+import { estimateSyncSecondsRemaining } from './syncEta';
 
 interface SyncModalProps {
   syncId: string | null;
@@ -9,9 +13,11 @@ interface SyncModalProps {
 
 export function SyncModal({ syncId, onComplete }: SyncModalProps) {
   const { data: progress } = useSyncProgress(syncId, true);
+  const [isCanceling, setIsCanceling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (progress?.status === 'completed') {
+    if (progress?.status === 'completed' || progress?.status === 'canceled') {
       setTimeout(onComplete, 2000); // Auto-close after 2s.
     }
   }, [progress?.status, onComplete]);
@@ -25,6 +31,23 @@ export function SyncModal({ syncId, onComplete }: SyncModalProps) {
   const percentage = progress.filesFound > 0
     ? (progress.filesDownloaded / progress.filesFound) * 100
     : 0;
+  const isRunning = progress.status === 'in_progress';
+  const cancelRequested = isCanceling || progress.cancelRequested;
+  const secondsRemaining = isRunning && !cancelRequested
+    ? estimateSyncSecondsRemaining(progress.filesProcessed, progress.filesFound, progress.downloadElapsedMs)
+    : null;
+
+  const handleCancel = async () => {
+    if (!syncId) return;
+    setIsCanceling(true);
+    setCancelError(null);
+    try {
+      await syncApi.cancel(syncId);
+    } catch (error) {
+      setCancelError(errorMessage(error, 'Could not cancel the sync'));
+      setIsCanceling(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
@@ -56,6 +79,9 @@ export function SyncModal({ syncId, onComplete }: SyncModalProps) {
                 style={{ width: `${percentage}%` }}
               />
             </div>
+            {secondsRemaining !== null && (
+              <p className="mt-2 text-xs text-gray-500">{formatEta(secondsRemaining)} remaining</p>
+            )}
           </div>
         )}
 
@@ -71,6 +97,15 @@ export function SyncModal({ syncId, onComplete }: SyncModalProps) {
             {progress.filesFound === 0
               ? 'All files are up to date!'
               : `Sync completed successfully! ${progress.filesDownloaded} file${progress.filesDownloaded !== 1 ? 's' : ''} downloaded.`
+            }
+          </p>
+        )}
+
+        {progress.status === 'canceled' && (
+          <p className="text-gray-700 font-medium mt-4">
+            {progress.filesDownloaded === 0
+              ? 'Sync canceled before any files were synced.'
+              : `Sync canceled after ${progress.filesDownloaded} file${progress.filesDownloaded !== 1 ? 's' : ''}. The rest will sync next time.`
             }
           </p>
         )}
@@ -97,6 +132,20 @@ export function SyncModal({ syncId, onComplete }: SyncModalProps) {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {isRunning && (
+          <div className="mt-6 flex items-center justify-end gap-3">
+            {cancelError && <p className="text-xs text-red-600">{cancelError}</p>}
+            <button
+              type="button"
+              onClick={() => void handleCancel()}
+              disabled={cancelRequested}
+              className="px-3 py-1.5 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {cancelRequested ? 'Stopping…' : 'Cancel'}
+            </button>
           </div>
         )}
 

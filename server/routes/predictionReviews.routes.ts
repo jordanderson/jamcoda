@@ -10,6 +10,7 @@ import {
   runPredictionImport
 } from '../services/predictionImport';
 import { getRebuildStatus } from '../services/rebuildStatus';
+import { libraryModelPath, dbPathFromEnv } from '@config/library';
 import {
   DECODE_ONLY_CONFIG_KEYS,
   evaluateLeaveOneOut,
@@ -350,14 +351,9 @@ router.post('/run', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'fileId is required' });
     }
 
-    const projectRoot = process.cwd();
-
-    const modelPathArg = typeof req.body.modelPath === 'string' && req.body.modelPath.trim().length > 0
-      ? req.body.modelPath.trim()
-      : 'data/ml/model.json';
-    const modelPath = path.isAbsolute(modelPathArg)
-      ? modelPathArg
-      : path.resolve(projectRoot, modelPathArg);
+    const modelPath = typeof req.body.modelPath === 'string' && req.body.modelPath.trim().length > 0
+      ? path.resolve(req.body.modelPath.trim())
+      : libraryModelPath();
     if (!existsSync(modelPath)) {
       return res.status(400).json({
         error: `Model file does not exist: ${modelPath}`
@@ -384,8 +380,7 @@ router.post('/run', async (req: Request, res: Response) => {
       clearUnpromoted,
       minSkipSplitSec,
       dryRun,
-      decoderOverrides: parseDecoderOverrides(req.body.decoderOverrides),
-      rootDir: projectRoot
+      decoderOverrides: parseDecoderOverrides(req.body.decoderOverrides)
     });
 
     res.json({
@@ -422,30 +417,18 @@ router.post('/run', async (req: Request, res: Response) => {
 });
 
 router.post('/rebuild-model', route('rebuild model', async (req: Request, res: Response) => {
-  const projectRoot = process.cwd();
-  const rootDirArg = typeof req.body.rootDir === 'string' && req.body.rootDir.trim().length > 0
-    ? req.body.rootDir.trim()
-    : projectRoot;
-  const rootDir = path.isAbsolute(rootDirArg)
-    ? rootDirArg
-    : path.resolve(projectRoot, rootDirArg);
-
-  const dbPathArg = typeof req.body.dbPath === 'string' && req.body.dbPath.trim().length > 0
-    ? req.body.dbPath.trim()
-    : process.env.JAMCODA_DB_PATH || 'data/jamcoda.db';
-  const dbPath = path.isAbsolute(dbPathArg)
-    ? dbPathArg
-    : path.resolve(projectRoot, dbPathArg);
+  const dbPath = path.resolve(
+    typeof req.body.dbPath === 'string' && req.body.dbPath.trim().length > 0
+      ? req.body.dbPath.trim()
+      : dbPathFromEnv()
+  );
   if (!existsSync(dbPath)) {
     return res.status(400).json({ error: `Database file does not exist: ${dbPath}` });
   }
 
-  const modelPathArg = typeof req.body.modelPath === 'string' && req.body.modelPath.trim().length > 0
-    ? req.body.modelPath.trim()
-    : 'data/ml/model.json';
-  const modelPath = path.isAbsolute(modelPathArg)
-    ? modelPathArg
-    : path.resolve(projectRoot, modelPathArg);
+  const modelPath = typeof req.body.modelPath === 'string' && req.body.modelPath.trim().length > 0
+    ? path.resolve(req.body.modelPath.trim())
+    : libraryModelPath(dbPath);
 
   // Anything the request does not set is left undefined so that
   // `resolveTrainConfig` supplies it. Repeating the defaults here is how this
@@ -482,6 +465,7 @@ router.post('/rebuild-model', route('rebuild model', async (req: Request, res: R
     linkPolicy: parseOptionalLinkPolicy(req.body.linkPolicy),
     linkTailSec: optionalNumber(req.body.linkTailSec, 0),
     linkRescueRank: optionalNumber(req.body.linkRescueRank, -1),
+    dropFlankedRunSec: optionalNumber(req.body.dropFlankedRunSec, 0),
     noneFromCompleteFilesOnly: parseOptionalBoolean(req.body.noneFromCompleteFilesOnly)
   };
   const includeEvaluation = parseOptionalBoolean(req.body.includeEvaluation) ?? false;
@@ -491,7 +475,7 @@ router.post('/rebuild-model', route('rebuild model', async (req: Request, res: R
     return res.status(400).json({ error: 'windowSec and stepSec must be > 0' });
   }
 
-  const files = loadAnnotatedMidiFiles(dbPath, rootDir);
+  const files = loadAnnotatedMidiFiles(dbPath);
   if (files.length < 2) {
     return res.status(400).json({
       error: `Need at least 2 annotated files to train robustly. Found ${files.length}.`
@@ -520,8 +504,7 @@ router.post('/rebuild-model', route('rebuild model', async (req: Request, res: R
           fileId,
           modelPath,
           config: { ...DEFAULT_PREDICT_CONFIG },
-          clearUnpromoted: true,
-          rootDir
+          clearUnpromoted: true
         });
         reRunResults.push({
           fileId: result.fileId,
@@ -572,8 +555,7 @@ router.post('/rebuild-model', route('rebuild model', async (req: Request, res: R
 }));
 
 router.get('/rebuild-status', route('get rebuild status', async (_req: Request, res: Response) => {
-  const modelPath = path.resolve(process.cwd(), 'data/ml/model.json');
-  res.json(getRebuildStatus(modelPath));
+  res.json(getRebuildStatus(libraryModelPath()));
 }));
 
 router.get('/:id', route('get prediction review', async (req: Request, res: Response) => {

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { clamp, ensureDirForFile, hasFlag, parseInt_, parseNum, readArg, runMain } from '@core/cli/args';
+import { clamp, ensureDirForFile, hasFlag, parseInt_, parseNum, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import {
   decoderIgnoredOptions,
   extractNotesFromMidi,
@@ -9,6 +9,7 @@ import {
   type PredictConfig
 } from './songSegmentation';
 import { writeFileSync } from 'node:fs';
+import { libraryModelPath } from '@config/library';
 
 interface OutputPayload {
   generatedAt: string;
@@ -36,7 +37,9 @@ Usage:
   npm run ml:predict -- --midi <path> [options]
 
 Options:
-  --model <path>              Model file path (default: data/ml/model.json)
+  --model <path>              Model file path (default: ml/model.json beside the database)
+  --db <path>                 SQLite DB path, used only to find the default model
+                              (default: data/jamcoda.db)
   --midi <path>               MIDI file to analyze (required)
   --out <path>                Optional JSON output file path
   --min-window-confidence <n> Confidence threshold for each window (default: 0.45)
@@ -60,7 +63,7 @@ async function main() {
     throw new Error('Missing required --midi path.');
   }
 
-  const modelPath = path.resolve(readArg('--model') || 'data/ml/model.json');
+  const modelPath = readArg('--model') ? path.resolve(readArg('--model')!) : libraryModelPath(resolveDbPath());
   const midiPath = path.resolve(midiArg);
   const outPathArg = readArg('--out');
   const outPath = outPathArg ? path.resolve(outPathArg) : undefined;

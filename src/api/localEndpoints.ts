@@ -22,7 +22,8 @@ import type {
   SetFileCompletionResponse,
   RunPredictionForFileRequest,
   RunPredictionForFileResponse,
-  SettingsResponse
+  SettingsResponse,
+  SyncProgressResponse
 } from './localTypes';
 
 export const settingsApi = {
@@ -40,9 +41,15 @@ export const syncApi = {
     return response.json();
   },
 
-  getProgress: async (syncId: string) => {
+  getProgress: async (syncId: string): Promise<SyncProgressResponse> => {
     const response = await fetch(`/api/sync/progress/${syncId}`);
     if (!response.ok) return throwApiError(response, 'Failed to get sync progress');
+    return response.json();
+  },
+
+  cancel: async (syncId: string) => {
+    const response = await fetch(`/api/sync/cancel/${syncId}`, { method: 'POST' });
+    if (!response.ok) return throwApiError(response, 'Failed to cancel sync');
     return response.json();
   },
 

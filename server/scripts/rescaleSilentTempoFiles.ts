@@ -4,6 +4,7 @@ import { parseMidi } from 'midi-file';
 import { hasFlag, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import { parseNoteSequence } from '@core/midi/noteSequence';
 import { closeDatabase, getDb, initializeDatabase } from '../config/database';
+import { libraryDir } from '../config/library';
 import { parseJmxMetadata } from '../utils/jmxParser';
 import { nowUnix } from '@utils/time';
 import { transaction } from '../config/transaction';
@@ -56,7 +57,6 @@ Options:
   --verify      Re-check the note-set invariant and durations, then exit.
   --repair-timestamps  Fix updated_at values written in milliseconds, then exit.
   --db <path>   SQLite DB path (default: data/jamcoda.db)
-  --root <path> Workspace root for resolving MIDI paths (default: .)
   --help        Show this help
 `);
 }
@@ -203,8 +203,8 @@ async function main() {
   const apply = hasFlag('--apply');
   const verifyOnly = hasFlag('--verify');
   const repairOnly = hasFlag('--repair-timestamps');
-  const rootDir = path.resolve(readArg('--root') || '.');
   const dbPath = readArg('--db') ? path.resolve(readArg('--db')!) : resolveDbPath();
+  const rootDir = libraryDir(dbPath);
 
   process.env.JAMCODA_DB_PATH = dbPath;
   initializeDatabase();

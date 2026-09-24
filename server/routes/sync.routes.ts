@@ -2,6 +2,7 @@ import express from 'express';
 import * as syncService from '@server/services/sync.service';
 import * as FileModel from '@models/File';
 import { route } from '@utils/route';
+import type { SyncProgressResponse } from '@core/types';
 
 const router = express.Router();
 
@@ -16,7 +17,18 @@ router.get('/progress/:syncId', (req, res) => {
   if (!progress) {
     return res.status(404).json({ error: 'Sync not found' });
   }
-  res.json(progress);
+  // Elapsed time is measured here, on the server's clock, so the client's
+  // ETA never depends on the two clocks agreeing.
+  const downloadElapsedMs = progress.downloadStartedAt === null ? null : Date.now() - progress.downloadStartedAt;
+  const body: SyncProgressResponse = { ...progress, downloadElapsedMs };
+  res.json(body);
+});
+
+router.post('/cancel/:syncId', (req, res) => {
+  if (!syncService.cancelSync(req.params.syncId)) {
+    return res.status(409).json({ error: 'No running sync with that id' });
+  }
+  res.json({ cancelRequested: true });
 });
 
 router.get('/status', (_req, res) => {

@@ -2,8 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { runMigrations } from './migrations/index';
-
-const APP_DB_PATH = './data/jamcoda.db';
+import { APP_DB_PATH, dbPathFromEnv } from './library';
 /**
  * How long a statement waits for another connection's lock (a `db:*` or
  * `ml:*` script beside the running server) before failing with SQLITE_BUSY.
@@ -18,12 +17,8 @@ export interface InitializeDatabaseResult {
   totalMigrations: number;
 }
 
-function resolveDbPath(): string {
-  return process.env.JAMCODA_DB_PATH || APP_DB_PATH;
-}
-
 export function initializeDatabase(): InitializeDatabaseResult {
-  const dbPath = resolveDbPath();
+  const dbPath = dbPathFromEnv();
   const isTestRun = process.env.NODE_ENV === 'test' || process.argv.includes('--test');
   if (isTestRun) {
     if (!process.env.JAMCODA_DB_PATH) {
@@ -62,7 +57,7 @@ export function initializeDatabase(): InitializeDatabaseResult {
   // Enable foreign keys
   db.exec('PRAGMA foreign_keys = ON');
 
-  const migrationResult = runMigrations(db);
+  const migrationResult = runMigrations(db, resolve(dbPath));
   if (migrationResult.appliedIds.length > 0) {
     console.log(`Database initialized successfully (${migrationResult.appliedIds.length} migration(s) applied)`);
   } else {

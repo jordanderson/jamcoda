@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Migration, MigrationResult } from './types';
 import { initialSchemaMigration } from './001-initial-schema';
@@ -6,6 +7,7 @@ import { syncHighWaterMarkMigration } from './003-sync-high-water-mark';
 import { bookmarksMigration } from './004-file-bookmarks';
 import { skipsMigration } from './005-file-skips';
 import { dropIgnoredSectionsMigration } from './006-drop-ignored-sections';
+import { libraryRelativePathsMigration } from './007-library-relative-paths';
 import { nowUnix } from '@utils/time';
 import { transaction } from '../transaction';
 
@@ -19,10 +21,11 @@ const migrations: Migration[] = [
   syncHighWaterMarkMigration,
   bookmarksMigration,
   skipsMigration,
-  dropIgnoredSectionsMigration
+  dropIgnoredSectionsMigration,
+  libraryRelativePathsMigration
 ];
 
-export function runMigrations(db: DatabaseSync): MigrationResult {
+export function runMigrations(db: DatabaseSync, dbPath: string): MigrationResult {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id TEXT PRIMARY KEY,
@@ -40,13 +43,23 @@ export function runMigrations(db: DatabaseSync): MigrationResult {
     VALUES (?, ?, ?)
   `);
 
-  for (const migration of migrations) {
-    if (applied.has(migration.id)) {
-      continue;
+  // An existing database is copied before anything is applied to it, so a
+  // migration that rewrites data can always be undone by hand. A new one has
+  // nothing to lose. The copy is named for the first pending migration and
+  // made once: a migration that refuses leaves the database unchanged, so a
+  // later attempt has nothing new to back up.
+  const pending = migrations.filter((migration) => !applied.has(migration.id));
+  if (pending.length > 0 && applied.size > 0) {
+    const backupPath = `${dbPath}.pre-${pending[0].id}`;
+    if (!existsSync(backupPath)) {
+      db.prepare('VACUUM INTO ?').run(backupPath);
+      console.log(`Backed up the database to ${backupPath} before migrating`);
     }
+  }
 
+  for (const migration of pending) {
     const tx = transaction(db, () => {
-      migration.up(db);
+      migration.up(db, dbPath);
       insertApplied.run(migration.id, migration.description, nowUnix());
     });
     tx();

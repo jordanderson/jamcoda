@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'fs';
-import { dirname, join, resolve } from 'path';
+import { dirname, join } from 'path';
 import * as jamcorderService from './jamcorder.service';
 import { jamcorderUuidFromPath } from './jamcorder.service';
 import * as FileModel from '../models/File';
@@ -9,8 +9,8 @@ import type { SyncProgress, JamcorderFileEntry } from '../types/index';
 import { getMidiDuration } from '../utils/midiUtils';
 import { sleep } from '@core/cli/args';
 import { errorMessage } from '@core/errors';
+import { libraryMidiDir, libraryModelPath, resolveStoredMidiPath, toStoredMidiPath } from '@config/library';
 
-const MIDI_DIR = process.env.JAMCODA_MIDI_DIR || 'data/midi';
 // Pause between individual file downloads to keep low-power firmware happy.
 const DOWNLOAD_PACE_MS = Number(process.env.JAMCODA_SYNC_DOWNLOAD_PACE_MS || 300);
 /**
@@ -27,6 +27,13 @@ const EMPTY_ASSET_MAX_BYTES = Number(process.env.JAMCODA_SYNC_EMPTY_ASSET_MAX_BY
 
 const syncJobs = new Map<string, SyncProgress>();
 
+/** Ends discovery when a cancel request arrives before downloading begins. */
+class SyncCanceledError extends Error {
+  constructor() {
+    super('Sync canceled');
+  }
+}
+
 export async function startSync(full = false): Promise<string> {
   const syncId = uuidv4();
   const progress: SyncProgress = {
@@ -34,6 +41,9 @@ export async function startSync(full = false): Promise<string> {
     status: 'in_progress',
     filesFound: 0,
     filesDownloaded: 0,
+    filesProcessed: 0,
+    downloadStartedAt: null,
+    cancelRequested: false,
     currentFile: null,
     errors: [],
     warnings: [],
@@ -60,6 +70,18 @@ export function isSyncRunning(): boolean {
   return false;
 }
 
+/**
+ * Asks a running sync to stop: during discovery, before the next directory
+ * or page is listed; while downloading, once the file in progress is
+ * written. Returns false when no such sync is running.
+ */
+export function cancelSync(syncId: string): boolean {
+  const progress = syncJobs.get(syncId);
+  if (!progress || progress.status !== 'in_progress') return false;
+  progress.cancelRequested = true;
+  return true;
+}
+
 export function getSyncProgress(syncId: string): SyncProgress | null {
   return syncJobs.get(syncId) || null;
 }
@@ -72,7 +94,7 @@ async function performSync(progress: SyncProgress, full = false) {
     //    fallback. On steady-state syncs, a high-water mark from the last
     //    clean sync lets discovery stop at the newest already-synced asset
     //    instead of walking the entire library.
-    const remoteFiles = await discoverFiles(full);
+    const remoteFiles = await discoverFiles(full, () => progress.cancelRequested);
     console.log(`Found ${remoteFiles.length} MIDI files on device to consider`);
 
     // 2. Compare against what we already have; download only new or changed files.
@@ -145,7 +167,14 @@ async function performSync(progress: SyncProgress, full = false) {
 
     // 3. Download each file
     const importedIds: number[] = [];
+    let stoppedEarly = false;
+    progress.downloadStartedAt = Date.now();
     for (const { entry, existing } of toDownload) {
+      if (progress.cancelRequested) {
+        console.log(`Sync canceled after ${progress.filesProcessed}/${toDownload.length} files`);
+        stoppedEarly = true;
+        break;
+      }
       try {
         progress.currentFile = entry.name;
         console.log(`Syncing: ${entry.name}`);
@@ -171,6 +200,8 @@ async function performSync(progress: SyncProgress, full = false) {
         const errorMsg = errorMessage(error, 'Unknown error');
         console.error(`Error syncing ${entry.name}:`, errorMsg);
         progress.errors.push({ file: entry.name, error: errorMsg });
+      } finally {
+        progress.filesProcessed++;
       }
     }
 
@@ -184,7 +215,8 @@ async function performSync(progress: SyncProgress, full = false) {
     // 4. Record a high-water mark only after a completely clean pass. If any
     //    download failed, the errored asset(s) are above any water mark we could
     //    safely record, so leave the old mark in place and re-check next time.
-    if (!hadErrors && remoteFiles.length > 0) {
+    //    A canceled pass left files unsynced, so it does the same.
+    if (!hadErrors && !stoppedEarly && remoteFiles.length > 0) {
       const newestUuid = remoteFiles[0].path ? jamcorderUuidFromPath(remoteFiles[0].path) : null;
       if (maxSyncedAssetIdx >= 0 && newestUuid) {
         FileModel.updateSyncHighWater(maxSyncedAssetIdx, newestUuid);
@@ -195,10 +227,17 @@ async function performSync(progress: SyncProgress, full = false) {
     // Update sync metadata
     FileModel.updateSyncMetadata(progress.filesDownloaded);
 
-    progress.status = 'completed';
+    // A cancel that arrives after the last file has nothing left to stop.
+    progress.status = stoppedEarly ? 'canceled' : 'completed';
     progress.currentFile = null;
-    console.log('Sync completed successfully');
+    console.log(stoppedEarly ? 'Sync canceled' : 'Sync completed successfully');
   } catch (error) {
+    if (error instanceof SyncCanceledError) {
+      progress.status = 'canceled';
+      progress.currentFile = null;
+      console.log('Sync canceled during discovery');
+      return;
+    }
     const errorMsg = errorMessage(error, 'Unknown error');
     console.error('Sync failed:', errorMsg);
     progress.status = 'error';
@@ -216,30 +255,30 @@ async function performSync(progress: SyncProgress, full = false) {
  * The library API is kept as a fallback and honors the high-water mark
  * for steady-state syncs when it is reachable.
  */
-async function discoverFiles(full: boolean): Promise<JamcorderFileEntry[]> {
+async function discoverFiles(full: boolean, isCanceled: () => boolean): Promise<JamcorderFileEntry[]> {
   try {
-    const walked = await discoverFilesDetailed('/JAMC/');
+    const walked = await discoverFilesDetailed('/JAMC/', isCanceled);
     if (walked.length > 0) {
       console.log(`Discovered ${walked.length} files via filesystem walk`);
       return walked;
     }
   } catch (error) {
+    if (error instanceof SyncCanceledError) throw error;
     console.error('Filesystem walk failed:', error);
   }
 
   try {
-    let options: { newerThanAssetIdx?: number; jamcorderUuid?: string } | undefined;
+    const options: jamcorderService.LibraryListOptions = { shouldStop: isCanceled };
     if (!full) {
       const metadata = FileModel.getSyncMetadata();
       if (metadata.high_water_asset_idx != null && metadata.high_water_jamcorder_uuid) {
-        options = {
-          newerThanAssetIdx: metadata.high_water_asset_idx,
-          jamcorderUuid: metadata.high_water_jamcorder_uuid
-        };
+        options.newerThanAssetIdx = metadata.high_water_asset_idx;
+        options.jamcorderUuid = metadata.high_water_jamcorder_uuid;
       }
     }
 
     const assets = await jamcorderService.listLibraryAssets(options);
+    if (isCanceled()) throw new SyncCanceledError();
     if (assets.length > 0) {
       console.log(`Discovered ${assets.length} assets via library API`);
       return assets.map(asset => ({
@@ -254,16 +293,18 @@ async function discoverFiles(full: boolean): Promise<JamcorderFileEntry[]> {
       }));
     }
   } catch (error) {
+    if (error instanceof SyncCanceledError) throw error;
     console.error('Library API unavailable:', error);
   }
 
   return [];
 }
 
-async function discoverFilesDetailed(basePath: string): Promise<JamcorderFileEntry[]> {
+async function discoverFilesDetailed(basePath: string, isCanceled: () => boolean): Promise<JamcorderFileEntry[]> {
   const allFiles: JamcorderFileEntry[] = [];
 
   async function traverse(dirPath: string) {
+    if (isCanceled()) throw new SyncCanceledError();
     let response;
     try {
       response = await jamcorderService.listFilesDetailed(dirPath);
@@ -338,7 +379,7 @@ async function syncNewFile(entry: JamcorderFileEntry): Promise<number | null> {
 
   return FileModel.create({
     jamcorderPath: entry.path,
-    localPath,
+    localPath: toStoredMidiPath(localPath),
     filename: entry.name,
     fileSize: data.length,
     jamcorderModified: entry.modified || 0,
@@ -365,7 +406,7 @@ function serializeJmxList<T>(items: T[] | undefined): string | null {
  * result) falls back to a full re-download.
  */
 async function resyncFile(entry: JamcorderFileEntry, existing: ReturnType<typeof FileModel.findAll>[number]): Promise<number> {
-  const localPath = existing.local_path;
+  const localPath = resolveStoredMidiPath(existing.local_path);
   const eofOffset = existing.jmx_eof_offset;
   const newSize = entry.size;
   const localSize = existsSync(localPath) ? statSync(localPath).size : 0;
@@ -432,7 +473,7 @@ async function resyncFile(entry: JamcorderFileEntry, existing: ReturnType<typeof
 async function runPredictionsForBookmarkedFiles(importedIds: number[]): Promise<void> {
   if (importedIds.length === 0) return;
 
-  const modelPath = resolve(process.env.JAMCODA_ML_MODEL_PATH || 'data/ml/model.json');
+  const modelPath = libraryModelPath();
   if (!existsSync(modelPath)) {
     console.log('No model file found; skipping auto-predictions for bookmarked files');
     return;
@@ -457,8 +498,7 @@ async function runPredictionsForBookmarkedFiles(importedIds: number[]): Promise<
         fileId,
         modelPath,
         config,
-        clearUnpromoted: true,
-        rootDir: process.cwd()
+        clearUnpromoted: true
       });
       predicted++;
       console.log(
@@ -533,18 +573,20 @@ function extractDate(path: string): string {
   return now.toISOString().split('T')[0];
 }
 
+/** A free absolute path for a new recording under the library's `midi/<date>/`. */
 function resolveLocalPath(date: string, filename: string): string {
-  let localPath = join(MIDI_DIR, date, filename);
+  const midiDir = libraryMidiDir();
+  let localPath = join(midiDir, date, filename);
   let counter = 1;
 
   while (existsSync(localPath)) {
     const lastDotIndex = filename.lastIndexOf('.');
     if (lastDotIndex === -1) {
-      localPath = join(MIDI_DIR, date, `${filename}_${counter}`);
+      localPath = join(midiDir, date, `${filename}_${counter}`);
     } else {
       const ext = filename.substring(lastDotIndex);
       const base = filename.substring(0, lastDotIndex);
-      localPath = join(MIDI_DIR, date, `${base}_${counter}${ext}`);
+      localPath = join(midiDir, date, `${base}_${counter}${ext}`);
     }
     counter++;
   }

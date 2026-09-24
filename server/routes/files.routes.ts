@@ -1,6 +1,7 @@
 import express from 'express';
 import { readFileSync } from 'fs';
 import * as FileModel from '@models/File';
+import { resolveStoredMidiPath } from '@config/library';
 import * as AnnotationModel from '@models/Annotation';
 import * as PredictionReviewModel from '@models/PredictionReview';
 import { route } from '@utils/route';
@@ -182,7 +183,7 @@ router.get('/:id/download', route('download file', async (req, res) => {
     return res.status(404).json({ error: 'File not found' });
   }
 
-  const data = readFileSync(file.local_path);
+  const data = readFileSync(resolveStoredMidiPath(file.local_path));
   res.setHeader('Content-Type', 'audio/midi');
   res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
   res.send(data);

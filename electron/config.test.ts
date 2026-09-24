@@ -36,3 +36,16 @@ test('config round-trips, and a bad stored value falls back to the default', () 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('libraryDir round-trips and ignores a relative path', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'jamcoda-config-'));
+  try {
+    const library = path.join(dir, 'library');
+    writeConfig(dir, { jamcorderUrl: 'http://jamcorder.local', libraryDir: library });
+    assert.equal(readConfig(dir).libraryDir, library);
+    writeFileSync(path.join(dir, 'jamcoda-config.json'), '{"libraryDir":"relative/data"}');
+    assert.equal(readConfig(dir).libraryDir, undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

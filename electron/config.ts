@@ -3,6 +3,11 @@ import path from 'node:path';
 
 export interface JamcodaConfig {
   jamcorderUrl: string;
+  /**
+   * The library folder: the one holding `jamcoda.db`, beside its `midi/` and
+   * `ml/` folders. Absent means `data/` in the app's userData folder.
+   */
+  libraryDir?: string;
 }
 
 const DEFAULT_CONFIG: JamcodaConfig = {
@@ -42,7 +47,10 @@ export function readConfig(userDataDir: string): JamcodaConfig {
   try {
     const raw = JSON.parse(readFileSync(configPath, 'utf-8'));
     const jamcorderUrl = typeof raw.jamcorderUrl === 'string' ? normalizeJamcorderUrl(raw.jamcorderUrl) : null;
-    return { jamcorderUrl: jamcorderUrl ?? DEFAULT_CONFIG.jamcorderUrl };
+    const libraryDir = typeof raw.libraryDir === 'string' && path.isAbsolute(raw.libraryDir)
+      ? raw.libraryDir
+      : undefined;
+    return { jamcorderUrl: jamcorderUrl ?? DEFAULT_CONFIG.jamcorderUrl, libraryDir };
   } catch {
     return DEFAULT_CONFIG;
   }

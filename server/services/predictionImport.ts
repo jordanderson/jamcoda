@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import * as AnnotationModel from '@models/Annotation';
 import * as FileModel from '@models/File';
 import * as PredictionReviewModel from '@models/PredictionReview';
+import { resolveStoredMidiPath, toStoredMidiPath } from '@config/library';
 import {
   countModifiedSegments,
   removeExcludedRangesFromSegments,
@@ -47,8 +48,6 @@ export interface RunPredictionOptions {
    * rebuilding. Anything absent falls back to what the model was trained with.
    */
   decoderOverrides?: DecodeOnlyConfig;
-  /** Root used to resolve the file's relative `local_path`. */
-  rootDir?: string;
   /**
    * Only silence gaps (`jmxSkip.millis`) at or above this many seconds become
    * boundary split hints (default 30). Bookmarks always split; silence gaps
@@ -100,10 +99,8 @@ export class PredictionImportError extends Error {
 }
 
 /** Resolve a file's MIDI path on disk, or throw a caller-friendly error. */
-export function resolveMidiPath(localPath: string, rootDir = process.cwd()): string {
-  const midiPath = path.isAbsolute(localPath)
-    ? localPath
-    : path.resolve(rootDir, localPath);
+export function resolveMidiPath(localPath: string): string {
+  const midiPath = resolveStoredMidiPath(localPath);
 
   if (!existsSync(midiPath)) {
     throw new PredictionImportError(`MIDI file not found on disk: ${midiPath}`, 'not_found');
@@ -113,19 +110,15 @@ export function resolveMidiPath(localPath: string, rootDir = process.cwd()): str
 
 /**
  * Find the `files` row for a MIDI path, matching the way the CLI is invoked
- * (an absolute or repo-relative path rather than a file id).
+ * (a path on disk rather than a file id).
  */
-export function findFileIdByMidiPath(midiPathAbs: string, rootDir = process.cwd()): number {
-  const relative = path.relative(rootDir, midiPathAbs).split(path.sep).join('/');
-  const absolute = midiPathAbs.split(path.sep).join('/');
-
-  const match = FileModel.findAll().find(
-    (file) => file.local_path === relative || file.local_path === absolute
-  );
+export function findFileIdByMidiPath(midiPathAbs: string): number {
+  const stored = toStoredMidiPath(path.resolve(midiPathAbs));
+  const match = FileModel.findAll().find((file) => file.local_path === stored);
 
   if (!match) {
     throw new PredictionImportError(
-      `Could not find a files row for MIDI path.\nTried local_path = ${relative} and ${absolute}`,
+      `Could not find a files row for MIDI path ${midiPathAbs} (local_path = ${stored})`,
       'not_found'
     );
   }
@@ -139,8 +132,7 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
     config,
     clearUnpromoted = true,
     dryRun = false,
-    decoderOverrides,
-    rootDir = process.cwd()
+    decoderOverrides
   } = options;
 
   const file = FileModel.findById(fileId);
@@ -160,7 +152,7 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
     );
   }
 
-  const midiPath = resolveMidiPath(file.local_path, rootDir);
+  const midiPath = resolveMidiPath(file.local_path);
 
   const model = loadModel(modelPath);
   if (decoderOverrides) {

@@ -10,7 +10,8 @@ export type {
   FileRecord,
   PredictionReview,
   PredictionReviewStatus,
-  SongPlayHistoryRow
+  SongPlayHistoryRow,
+  SyncProgress
 } from '@core/types';
 
 import type { PredictionReview, PredictionReviewStatus } from '@core/types';
@@ -18,6 +19,7 @@ import type { PredictionReview, PredictionReviewStatus } from '@core/types';
 /** Payload used when creating a new synced file row. */
 export interface CreateFileData {
   jamcorderPath: string;
+  /** Relative to the library folder; see `server/config/library.ts`. */
   localPath: string;
   filename: string;
   fileSize: number;
@@ -69,20 +71,6 @@ export interface RenameSongNameResult {
   annotationsUpdated: number;
   predictionReviewsPredictedUpdated: number;
   predictionReviewsReviewedUpdated: number;
-}
-
-/** Real-time sync status payload polled by the sync modal. */
-export interface SyncProgress {
-  syncId: string;
-  status: 'in_progress' | 'completed' | 'error';
-  filesFound: number;
-  filesDownloaded: number;
-  currentFile: string | null;
-  errors: Array<{ file: string; error: string }>;
-  /** Non-fatal issues (e.g. skipped because the device copy is smaller). */
-  warnings: Array<{ file: string; warning: string }>;
-  /** Device assets ignored because they contain no notes. */
-  emptySkipped: number;
 }
 
 /** Jamcorder API file entry returned by remote directory listing calls. */

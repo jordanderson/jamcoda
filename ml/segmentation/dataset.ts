@@ -4,8 +4,8 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { BUSY_TIMEOUT_MS } from '@config/database';
+import { resolveStoredMidiPath } from '@config/library';
 import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
 import { buildPedalIntervals, heldByPedal, parseNoteSequence } from '@core/midi/noteSequence';
 import type { AnnotatedMidiFile, NoteEvent } from './types';
 
@@ -37,7 +37,8 @@ function sqliteJsonQuery<T>(dbPath: string, sql: string): T[] {
   }
 }
 
-export function loadAnnotatedMidiFiles(dbPath: string, rootDir: string): AnnotatedMidiFile[] {
+/** MIDI paths resolve against `dbPath`'s library folder. */
+export function loadAnnotatedMidiFiles(dbPath: string): AnnotatedMidiFile[] {
   if (!existsSync(dbPath)) {
     throw new Error(`Database not found: ${dbPath}`);
   }
@@ -63,7 +64,7 @@ export function loadAnnotatedMidiFiles(dbPath: string, rootDir: string): Annotat
 
   for (const row of rows) {
     const fileId = toNum(row.file_id);
-    const midiPath = path.resolve(rootDir, row.local_path);
+    const midiPath = resolveStoredMidiPath(row.local_path, dbPath);
     if (!existsSync(midiPath)) {
       continue;
     }

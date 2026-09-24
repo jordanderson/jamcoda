@@ -40,3 +40,15 @@ export function formatHoursMinutes(seconds: number): string {
   const mins = Math.floor((total % 3600) / 60)
   return hours === 0 ? `${mins}m` : `${hours}h ${mins}m`
 }
+
+/**
+ * A remaining-time estimate as `about 5s`, `about 3m`, or `about 1h 20m`,
+ * rounded up so it never reads as zero while work remains.
+ */
+export function formatEta(seconds: number): string {
+  const total = Math.max(1, Math.ceil(seconds))
+  if (total < 60) return `about ${total}s`
+  const mins = Math.ceil(total / 60)
+  if (mins < 60) return `about ${mins}m`
+  return `about ${formatHoursMinutes(mins * 60)}`
+}

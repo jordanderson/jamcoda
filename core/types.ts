@@ -1,5 +1,5 @@
 /**
- * Row shapes that cross the HTTP boundary.
+ * Row shapes and payloads that cross the HTTP boundary.
  *
  * These live in `core/` because both the Express layer and the browser client
  * need the same definitions.
@@ -7,7 +7,8 @@
  * Server-only payload types (`Create...Data` / `Update...Data` shapes) stay
  * in `server/types`. These are what gets serialized to JSON.
  *
- * Field names are snake_case to match the SQLite columns they come from.
+ * Row field names are snake_case to match the SQLite columns they come from;
+ * the sync progress payload, which is not a row, is camelCase.
  */
 
 /** DB row stored in `files`. */
@@ -80,4 +81,34 @@ export interface PredictionReview {
   updated_at: number;
   reviewed_at: number | null;
   promoted_at: number | null;
+}
+
+/** Real-time sync status payload polled by the sync modal. */
+export interface SyncProgress {
+  syncId: string;
+  /**
+   * `canceled` ends a sync during discovery or after the file in progress;
+   * files already synced stay.
+   */
+  status: 'in_progress' | 'completed' | 'canceled' | 'error';
+  filesFound: number;
+  filesDownloaded: number;
+  /** Files handled so far, whether downloaded, skipped as empty, or failed. */
+  filesProcessed: number;
+  /** Epoch milliseconds when downloading began, after discovery; null before. */
+  downloadStartedAt: number | null;
+  /** Set by a cancel request; the sync stops at its next directory, page or file. */
+  cancelRequested: boolean;
+  currentFile: string | null;
+  errors: Array<{ file: string; error: string }>;
+  /** Non-fatal issues (e.g. skipped because the device copy is smaller). */
+  warnings: Array<{ file: string; warning: string }>;
+  /** Device assets ignored because they contain no notes. */
+  emptySkipped: number;
+}
+
+/** `GET /api/sync/progress/:syncId`: the progress, plus how long downloading has run. */
+export interface SyncProgressResponse extends SyncProgress {
+  /** Measured on the server's clock; null before downloading begins. */
+  downloadElapsedMs: number | null;
 }

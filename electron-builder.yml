@@ -32,6 +32,10 @@ mac:
     - dmg
     - zip
   category: public.app-category.music
+  # An Icon Composer icon with glass, specular and shadow off: macOS 26 draws
+  # a plain .icns with its own Liquid Glass lighting, which tints the logo.
+  # Windows and Linux use build/icon.png.
+  icon: build/icon.icon
   # Ad-hoc signed: there is no Apple Developer certificate. Apple silicon runs
   # no arm64 code without a valid signature, and a downloaded app whose
   # bundle is unsigned reads as "damaged" with no way past it. Ad-hoc signing

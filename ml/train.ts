@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { clamp, hasFlag, parseInt_, parseNum, pct, readArg, resolveDbPath, runMain } from '@core/cli/args';
+import { libraryModelPath } from '@config/library';
 import {
   TRAIN_CONFIG_DEFAULTS,
   evaluateLeaveOneOut,
@@ -72,8 +73,7 @@ Usage:
 
 Options:
   --db <path>            SQLite DB path (default: data/jamcoda.db)
-  --root <path>          Workspace root for resolving local MIDI paths (default: .)
-  --out <path>           Output model path (default: data/ml/model.json)
+  --out <path>           Output model path (default: ml/model.json beside the database)
   --window <seconds>     Window size in seconds (default: 6)
   --step <seconds>       Window step in seconds (default: 1)
   --k <int>              K nearest neighbors (legacy v1 models only; default: 7)
@@ -106,6 +106,9 @@ Options:
                                of the whole span at once, so a song keeps only the
                                part its evidence covers (bridge only; experimental;
                                default: 0, the whole-span test)
+  --drop-flanked-run-sec <float>  Leave unlabeled a run of one song this short
+                               with a single other song directly on both sides
+                               (default: 30; 0 disables)
   --none-from-all-files  Train __none__ on the unannotated time of every annotated
                          file, not only files marked complete (the default)
   --skip-eval            Skip leave-one-file-out evaluation
@@ -119,9 +122,8 @@ async function main() {
     return;
   }
 
-  const rootDir = path.resolve(readArg('--root') || '.');
   const dbPath = resolveDbPath();
-  const outPath = path.resolve(readArg('--out') || 'data/ml/model.json');
+  const outPath = readArg('--out') ? path.resolve(readArg('--out')!) : libraryModelPath(dbPath);
   const skipEval = hasFlag('--skip-eval');
 
   const config: TrainConfig = {
@@ -147,6 +149,7 @@ async function main() {
     linkTailSec: optionalNum('--link-tail-sec', 0),
     linkRescueRank: optionalNum('--link-rescue-rank', -1),
     linkRescueLookaheadSec: optionalNum('--link-rescue-lookahead', 0),
+    dropFlankedRunSec: optionalNum('--drop-flanked-run-sec', 0),
     noneFromCompleteFilesOnly: hasFlag('--none-from-all-files') ? false : undefined
   };
 
@@ -154,7 +157,7 @@ async function main() {
     throw new Error('--window and --step must be > 0.');
   }
 
-  const files = loadAnnotatedMidiFiles(dbPath, rootDir);
+  const files = loadAnnotatedMidiFiles(dbPath);
   if (files.length < 2) {
     throw new Error(`Need at least 2 annotated files to train robustly. Found ${files.length}.`);
   }

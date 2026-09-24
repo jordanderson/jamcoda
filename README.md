@@ -10,7 +10,7 @@ JamCoda does that for you. It:
 
 1. Syncs the MIDI files from the Jamcorder onto your computer.
 2. Gives you a user-friendly way to annotate song segments.
-3. Runs an ML segmentation model that learns from your annotations and proposes song segments.
+3. Learns from your annotations to suggest which songs you played, and when.
 4. Lets you review, edit, and promote those proposed songs into new annotations.
 
 The more you annotate, the better the model gets at proposing segments for you to review.
@@ -25,11 +25,13 @@ https://github.com/user-attachments/assets/34c06c95-3db9-446a-a16c-b6f8555c7923
 
 `Sync Now`, in the Settings modal opened from the sidebar, pulls new
 recordings. `Full re-sync` beneath it re-checks every file on the device.
-Recordings containing no notes are not imported — the device sometimes opens
-and closes assets without recording — and the sync summary reports how many
-were ignored.
+While a sync runs it shows an estimate of the time remaining, and `Cancel`
+stops it after the file in progress; files already copied are kept, and the
+rest sync next time. Recordings containing no notes are not imported — the
+device sometimes starts and stops a recording without anything played — and
+the sync summary reports how many were ignored.
 
-Files are listed in `#/browse` with annotation progress, an unreviewed prediction
+The Library page (`#/browse`) lists recordings with annotation progress, an unreviewed prediction
 count, and song chips that jump to a timestamp. Sort by date or by most
 unreviewed predictions.
 
@@ -37,7 +39,7 @@ unreviewed predictions.
 
 ### Annotate
 
-Open a file at `#/detail/:id` for the piano roll. Play with `P`, mark a segment
+Open a recording to see its piano roll (`#/detail/:id`). Play with `P`, mark a segment
 with `S` and `E`, clear the marks with `C`, or turn on `Select Region` and drag
 across the roll. `Add Annotation` enters one by hand. Annotations can be
 edited, split at a silent gap, trimmed, or snapped to the notes actually played.
@@ -67,8 +69,8 @@ proposal into an annotation the next rebuild can learn from.
 
 ![An unlabeled session in JamCoda: the annotations lane reads No annotations yet, while the predictions lane below shows fifteen proposed takes named Pathetique, Turkish March, Waltz in A, Bethena, Bink's Waltz and Blue Danube, the first labeled Pathetique 89%.](docs/images/only_predicted.jpg)
 
-Prediction Lab, on the same page, previews how different decoder settings would
-change the proposals before you commit a run.
+Prediction Lab, on the same page, previews how different prediction settings
+would change the proposals before you commit a run.
 
 ![The Prediction Lab panel: a Segment shaping row with minimum segment, merge gap and confidence fields, a Decoding group with link policy and related settings, Preview and Reset to defaults buttons, and a strip showing the twenty takes currently in the review queue.](docs/images/prediction_lab.jpg)
 
@@ -88,14 +90,14 @@ Month), with top-song bars, a practice-over-time trend, and a sortable table.
 
 ### Rebuild the model
 
-`Rebuild Model` in the sidebar retrains from all current annotations and writes
-`data/ml/model.json`. The button shows a badge when annotations have changed
+`Rebuild Model` in the sidebar retrains from all current annotations and saves
+the model as `ml/model.json` in your library folder. The button shows a badge when annotations have changed
 since the model was built, or when songs exist that the model has never seen.
 Rebuild after updating JamCoda, too: the badge doesn't track new releases, and a
 new release's training changes take effect only when you rebuild.
 
 `Rebuild Model + Re-score`, in Settings, also re-runs predictions for files
-whose unpromoted proposals are all still `unsure`.
+whose proposals you haven't reviewed yet.
 
 <img src="docs/images/settings.jpg" width="484" alt="The Settings dialog: a Sync section with a Sync Now button, a full re-sync option, the time of the last sync and the connected device address, and a Model section with a Rebuild Model and Re-score button.">
 
@@ -106,9 +108,9 @@ is an illustrated walkthrough of how the model finds songs in a recording.
 
 Prebuilt desktop apps for macOS, Windows and Linux are on the
 [Releases page](https://github.com/jordanderson/jamcoda/releases). No Node,
-terminal or `.env` file is needed: data lives in the OS's standard per-user
-app-data directory, and the Jamcorder address is set from the app's own
-Settings dialog.
+terminal or `.env` file is needed: your library lives in the OS's standard
+per-user app-data folder unless you choose another in Settings, and the
+Jamcorder address is set there too.
 
 These builds are currently unsigned. On macOS, the first launch is blocked;
 open System Settings → Privacy & Security, choose "Open Anyway" beside the
@@ -164,8 +166,7 @@ set in your shell takes precedence.
 | Variable                             | Default                  | Purpose                                                                                                                          |
 | ------------------------------------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | `JAMCORDER_URL`                      | `http://jamcorder.local` | Base URL of your Jamcorder (mDNS name or IP).                                                                                    |
-| `JAMCODA_DB_PATH`                    | `./data/jamcoda.db`      | SQLite database location.                                                                                                        |
-| `JAMCODA_MIDI_DIR`                   | `./data/midi`            | Where synced MIDI files are written. Absolute paths work, so the library can live outside the repo.                              |
+| `JAMCODA_DB_PATH`                    | `./data/jamcoda.db`      | SQLite database location. Its folder is the library (see [Local data](#local-data)), so an absolute path moves everything.        |
 | `JAMCODA_SERVER_PORT`                | `3001`                   | Port for the local backend. The Vite proxy targets 3001, so moving it also means editing `LOCAL_API_TARGET` in `vite.config.ts`. |
 | `JAMCORDER_LIBRARY_PAGE_SIZE`        | `5`                      | Assets per library API page during sync. Keep it small; large pages can crash low-power firmware.                                |
 | `JAMCORDER_LIBRARY_PAGE_DELAY_MS`    | `1000`                   | Pause between library pages.                                                                                                     |
@@ -176,18 +177,32 @@ set in your shell takes precedence.
 
 ## Local data
 
-By default everything lives under `data/`, which is gitignored:
+A library is the folder holding the database, with the recordings and the
+model beside it. The database refers to recordings by their place inside that
+folder, so you can move or back up the whole folder at once, or open it from
+the desktop app. By default the library is `data/`, which is gitignored:
 
-- `data/jamcoda.db` — SQLite
+- `data/jamcoda.db` — the SQLite database
 - `data/midi/YYYY-MM-DD/<filename>.mid` — synced recordings
-- `data/ml/` — trained models and evaluation reports
+- `data/ml/model.json` — the trained model (evaluation reports also land in
+  `data/ml/`)
+
+The desktop app keeps its library in its per-user data folder
+(`~/Library/Application Support/JamCoda/data` on macOS) until you choose another
+under Settings → Library. It opens a folder holding `jamcoda.db`, or starts a
+new library in an empty folder; nothing is copied. Avoid keeping a library in
+a cloud-synced folder while it is open: a sync client copying the database
+mid-write, or a second computer opening it, can corrupt it.
 
 Tables: `files` (synced metadata, completion, and the device's bookmarks and
 silence gaps), `annotations` (your labels),
 `prediction_reviews` (model proposals and review decisions), `sync_metadata`.
 
-Migrations run automatically at startup and are tracked in `schema_migrations`.
-Run them by hand with `npm run db:migrate`, adding
+Migrations (database upgrades) run automatically at startup and are tracked
+in `schema_migrations`. Before upgrading an existing database, the server saves
+a copy next to it named `jamcoda.db.pre-<migration name>`. These copies build
+up over time; once the app runs fine after an update, they are safe to delete.
+Run migrations by hand with `npm run db:migrate`, adding
 `-- --db /path/to/jamcoda.db` to target another database.
 
 ## Scripts
@@ -238,8 +253,8 @@ memory for the session; the browser's cache serves them after that.
   surface over `ml/segmentation/`.
 - `scripts/` — `npm run setup`, `npm run electron:bundle`.
 - `electron/` — the desktop app shell: window/lifecycle, per-user config, and
-  the IPC bridge Settings uses to edit the Jamcorder address and reveal the
-  data folder. It runs `server/` in a utility process through
+  the IPC bridge Settings uses to edit the Jamcorder address and to show or
+  change the library folder. It runs `server/` in a utility process through
   `server/desktopHost.ts`, with `JAMCODA_LOOPBACK_ONLY=1`.
 
 ## Documentation

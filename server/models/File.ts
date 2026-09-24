@@ -1,5 +1,6 @@
 import type { SQLInputValue } from 'node:sqlite';
 import { getDb } from '@config/database';
+import { resolveStoredMidiPath } from '@config/library';
 import { getMidiDuration } from '@utils/midiUtils';
 import type { FileRecord, CreateFileData, UpdateSyncedFileData } from '@server/types';
 import { nowUnix } from '@utils/time';
@@ -179,7 +180,7 @@ export function getResolvedDuration(file: FileRecord): number {
   ) {
     return file.midi_duration;
   }
-  const calculatedDuration = getMidiDuration(file.local_path);
+  const calculatedDuration = getMidiDuration(resolveStoredMidiPath(file.local_path));
   setMidiDuration(file.id, calculatedDuration);
   return calculatedDuration;
 }

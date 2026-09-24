@@ -8,7 +8,8 @@ export type {
   Annotation,
   PredictionReview,
   PredictionReviewStatus,
-  SongPlayHistoryRow
+  SongPlayHistoryRow,
+  SyncProgressResponse
 } from '@core/types';
 
 import type {
@@ -91,6 +92,7 @@ export interface PredictionDecoderOverrides {
   linkPolicy?: 'legacy' | 'bridge';
   linkTailSec?: number;
   linkRescueRank?: number;
+  dropFlankedRunSec?: number;
 }
 
 export interface RunPredictionForFileRequest {
@@ -157,7 +159,6 @@ export interface RunPredictionForFileResponse {
 /** Request body for rebuilding the segmentation model from annotations. */
 export interface RebuildPredictionModelRequest {
   dbPath?: string;
-  rootDir?: string;
   modelPath?: string;
   windowSec?: number;
   stepSec?: number;
@@ -382,4 +383,6 @@ export interface SetFileCompletionResponse {
 /** The server's actual effective runtime configuration. */
 export interface SettingsResponse {
   jamcorderUrl: string;
+  /** The folder holding the database, `midi/` and `ml/`. */
+  libraryDir: string;
 }

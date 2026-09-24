@@ -39,7 +39,7 @@ export const TRAIN_CONFIG_DEFAULTS = {
 export const DECODE_ONLY_CONFIG_KEYS = [
   'decoder', 'viterbiChangePenalty', 'temperature', 'anchorMargin', 'minAnchorRun',
   'fillMinMargin', 'fillTopK', 'linkConfidence', 'linkMaxSilenceRatio', 'anchorGapPolicy',
-  'linkPolicy', 'linkTailSec', 'linkRescueRank', 'linkRescueLookaheadSec'
+  'linkPolicy', 'linkTailSec', 'linkRescueRank', 'linkRescueLookaheadSec', 'dropFlankedRunSec'
 ] as const;
 
 export type DecodeOnlyConfig = Partial<Pick<TrainConfig, typeof DECODE_ONLY_CONFIG_KEYS[number]>>;
@@ -58,7 +58,7 @@ export type ResolvedTrainConfig = Required<
     | 'fillMinMargin' | 'fillTopK' | 'linkConfidence' | 'temperature'
     | 'viterbiChangePenalty' | 'kernelScale' | 'registerDivide'
     | 'handMaskAugmentFraction' | 'noneFromCompleteFilesOnly'
-    | 'linkMaxSilenceRatio' | 'linkPolicy'
+    | 'linkMaxSilenceRatio' | 'linkPolicy' | 'dropFlankedRunSec'
   >
 > & TrainConfig;
 
@@ -88,7 +88,8 @@ export function resolveTrainConfig(config: TrainConfig): ResolvedTrainConfig {
     temperature: config.temperature ?? 1,
     viterbiChangePenalty: config.viterbiChangePenalty ?? 1,
     kernelScale: config.kernelScale ?? 0,
-    linkPolicy: config.linkPolicy ?? 'bridge'
+    linkPolicy: config.linkPolicy ?? 'bridge',
+    dropFlankedRunSec: config.dropFlankedRunSec ?? 30
   };
 
   // Bridge linking's thresholds are resolved only when that policy is on. What

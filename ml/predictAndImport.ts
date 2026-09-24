@@ -13,6 +13,7 @@ import {
 } from '@core/cli/args';
 import { closeDatabase, initializeDatabase } from '@config/database';
 import type { PredictConfig } from './songSegmentation';
+import { libraryModelPath } from '@config/library';
 import {
   PredictionImportError,
   findFileIdByMidiPath,
@@ -37,9 +38,8 @@ Usage:
 
 Options:
   --midi <path>                 MIDI file path (required)
-  --model <path>                Model path (default: data/ml/model.json)
+  --model <path>                Model path (default: ml/model.json beside the database)
   --db <path>                   SQLite DB path (default: data/jamcoda.db)
-  --root <path>                 Workspace root for file lookup (default: .)
   --model-version <value>       Stored with imported rows (default: <modelType>@<createdAt>)
   --out <path>                  Optional prediction JSON output path
   --clear-unpromoted <true|false>  Clear existing unpromoted reviews for file first (default: true)
@@ -66,9 +66,8 @@ async function main() {
     throw new Error('Missing required --midi path.');
   }
 
-  const rootDir = path.resolve(readArg('--root') || '.');
   const midiPath = path.resolve(midiArg);
-  const modelPath = path.resolve(readArg('--model') || 'data/ml/model.json');
+  const modelPath = readArg('--model') ? path.resolve(readArg('--model')!) : libraryModelPath(resolveDbPath());
   const outArg = readArg('--out');
   const outPath = outArg ? path.resolve(outArg) : undefined;
 
@@ -95,7 +94,7 @@ async function main() {
     mergeGapSec: Math.max(0, parseNum(readArg('--merge-gap-sec'), 5))
   };
 
-  const fileId = findFileIdByMidiPath(midiPath, rootDir);
+  const fileId = findFileIdByMidiPath(midiPath);
 
   const result = runPredictionImport({
     fileId,
@@ -104,8 +103,7 @@ async function main() {
     clearUnpromoted: parseBoolean(readArg('--clear-unpromoted'), true),
     modelVersion: readArg('--model-version'),
     minSkipSplitSec: Math.max(0, parseNum(readArg('--min-skip-split-sec'), 30)),
-    dryRun: hasFlag('--dry-run'),
-    rootDir
+    dryRun: hasFlag('--dry-run')
   });
 
   if (result.segments.length === 0) {

@@ -1,8 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell, utilityProcess, type IpcMainInvokeEvent, type UtilityProcess } from 'electron';
+import { mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { errorMessage } from '../core/errors';
 import { normalizeJamcorderUrl, readConfig, writeConfig } from './config';
+import { classifyLibraryFolder, LIBRARY_DB_FILENAME } from './library';
 
 // This file always runs as the bundled dist-electron/main.js (esbuild ESM
 // output), so import.meta.url is safe to rely on throughout.
@@ -34,6 +36,13 @@ const appOrigin = devUrl ? new URL(devUrl).origin : APP_ORIGIN;
 
 const userDataDir = app.getPath('userData');
 
+const defaultLibraryDir = path.join(userDataDir, 'data');
+
+/** The library folder in use; see `JamcodaConfig.libraryDir`. */
+function currentLibraryDir(): string {
+  return readConfig(userDataDir).libraryDir ?? defaultLibraryDir;
+}
+
 /**
  * The server runs in a utility process, not in this one: model training and
  * prediction are synchronous and would otherwise stall the main process, and
@@ -58,16 +67,20 @@ class ServerStartError extends Error {
 
 function startServer(): Promise<void> {
   const config = readConfig(userDataDir);
+  const libraryDir = config.libraryDir ?? defaultLibraryDir;
+  // The child cannot start in a folder that does not exist. Only the default
+  // library is created here; a configured one that is missing never reaches
+  // this point (`startServerWithRecovery`).
+  if (!config.libraryDir) mkdirSync(defaultLibraryDir, { recursive: true });
   const child = utilityProcess.fork(path.join(__dirname, 'server.cjs'), [], {
     serviceName: 'JamCoda server',
-    // The server resolves its model path (data/ml/model.json) against the
-    // working directory, so running from userData puts the model beside the
-    // database and MIDI files.
-    cwd: userDataDir,
+    // Everything the server reads or writes is resolved against the
+    // database's folder, not the working directory; running there anyway
+    // keeps any stray relative path inside the library.
+    cwd: libraryDir,
     env: {
       ...process.env,
-      JAMCODA_DB_PATH: path.join(userDataDir, 'data', 'jamcoda.db'),
-      JAMCODA_MIDI_DIR: path.join(userDataDir, 'data', 'midi'),
+      JAMCODA_DB_PATH: path.join(libraryDir, LIBRARY_DB_FILENAME),
       JAMCORDER_URL: config.jamcorderUrl,
       JAMCODA_CLIENT_DIST_DIR: path.join(__dirname, '..', 'dist'),
       JAMCODA_SERVER_PORT: String(SERVER_PORT),
@@ -108,26 +121,30 @@ function startServer(): Promise<void> {
   });
 }
 
-/** Whether a sync is running, per the server. False when it cannot say. */
-function isSyncRunning(): Promise<boolean> {
+/**
+ * Why the server should not be restarted right now, or null when it can be.
+ * A server that does not answer within two seconds is treated as busy:
+ * model training and prediction are synchronous and hold its event loop
+ * until they finish, and a relaunch would kill them partway through.
+ */
+function restartBlocker(): Promise<string | null> {
   const child = serverProcess;
-  if (!child) return Promise.resolve(false);
+  if (!child) return Promise.resolve(null);
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       child.off('message', onMessage);
-      resolve(false);
+      resolve('JamCoda is busy; a model rebuild or prediction may be running.');
     }, 2000);
     const onMessage = (message: HostMessage) => {
       if (message.type !== 'status') return;
       clearTimeout(timer);
       child.off('message', onMessage);
-      resolve(message.syncing);
+      resolve(message.syncing ? 'A sync is running.' : null);
     };
     child.on('message', onMessage);
     child.postMessage({ type: 'status' });
   });
 }
-
 
 /**
  * Ask the server to close its database and exit, and wait for it. A server
@@ -221,12 +238,10 @@ function registerIpc(): void {
     if (!url) {
       return { ok: false, error: 'Enter a host name, IP address, or http(s) address, like jamcorder.local.' };
     }
-    // The server reads the address once, at startup, so saving relaunches;
-    // a sync would be cut off mid-download.
-    if (await isSyncRunning()) {
-      return { ok: false, error: 'A sync is running. Save again once it finishes.' };
-    }
-    writeConfig(userDataDir, { jamcorderUrl: url });
+    // The server reads the address once, at startup, so saving relaunches.
+    const blocker = await restartBlocker();
+    if (blocker) return { ok: false, error: `${blocker} Save again once it finishes.` };
+    writeConfig(userDataDir, { ...readConfig(userDataDir), jamcorderUrl: url });
     app.relaunch();
     app.quit();
     return { ok: true };
@@ -234,8 +249,125 @@ function registerIpc(): void {
 
   ipcMain.handle('jamcoda:reveal-data-folder', (event) => {
     if (!fromApp(event)) throw new Error('Rejected IPC from an untrusted frame.');
-    shell.showItemInFolder(path.join(userDataDir, 'data'));
+    shell.showItemInFolder(currentLibraryDir());
   });
+
+  ipcMain.handle('jamcoda:choose-library-folder', async (event) => {
+    if (!fromApp(event)) throw new Error('Rejected IPC from an untrusted frame.');
+    // Switching relaunches the app.
+    const blocker = await restartBlocker();
+    if (blocker) return { ok: false, error: `${blocker} Try again once it finishes.` };
+    const picked = await pickLibraryFolder();
+    if (picked.kind === 'canceled') return { ok: false, error: null };
+    if (picked.kind === 'refused') return { ok: false, error: picked.error };
+    if (path.resolve(picked.dir) === path.resolve(currentLibraryDir())) {
+      return { ok: false, error: 'That is already the library in use.' };
+    }
+    useLibrary(picked.dir);
+    app.relaunch();
+    app.quit();
+    return { ok: true };
+  });
+}
+
+type PickedLibrary =
+  | { kind: 'canceled' }
+  | { kind: 'refused'; error: string }
+  | { kind: 'picked'; dir: string };
+
+/**
+ * Asks for a library folder: one holding `jamcoda.db`, or an empty one for a
+ * new library. A folder holding anything else is refused rather than filled.
+ */
+async function pickLibraryFolder(): Promise<PickedLibrary> {
+  const options: Electron.OpenDialogOptions = {
+    title: 'Choose a JamCoda library folder',
+    message: `Choose the folder that contains ${LIBRARY_DB_FILENAME}, or an empty folder for a new library.`,
+    buttonLabel: 'Use Folder',
+    properties: ['openDirectory', 'createDirectory']
+  };
+  const picked = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, options)
+    : await dialog.showOpenDialog(options);
+  const dir = picked.filePaths[0];
+  if (picked.canceled || !dir) return { kind: 'canceled' };
+  if (classifyLibraryFolder(dir) === 'other') {
+    return {
+      kind: 'refused',
+      error: `That folder has no ${LIBRARY_DB_FILENAME} and is not empty. Choose the folder that contains ${LIBRARY_DB_FILENAME}, or an empty folder.`
+    };
+  }
+  return { kind: 'picked', dir };
+}
+
+/** Saves the library folder; the default one is stored as no setting at all. */
+function useLibrary(dir: string | null): void {
+  const { libraryDir: _previous, ...rest } = readConfig(userDataDir);
+  const isDefault = dir === null || path.resolve(dir) === path.resolve(defaultLibraryDir);
+  writeConfig(userDataDir, isDefault ? rest : { ...rest, libraryDir: dir });
+}
+
+function isDirectory(dir: string): boolean {
+  try {
+    return statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Starts the server on the configured library, and when that fails, asks the
+ * user whether to choose another library, go back to the default one, or
+ * quit. A configured library that is missing (an unplugged drive, say) is
+ * treated as a failure, never quietly replaced by a new empty one. Returns
+ * false when the app should quit.
+ */
+async function startServerWithRecovery(): Promise<boolean> {
+  for (;;) {
+    const configured = readConfig(userDataDir).libraryDir;
+    let problem: string | null = null;
+    if (configured && !isDirectory(configured)) {
+      problem = `The library folder ${configured} could not be found. If it is on an external or network drive, connect it and open JamCoda again.`;
+    } else {
+      try {
+        await startServer();
+        return true;
+      } catch (error) {
+        if (error instanceof ServerStartError && error.code === 'EADDRINUSE') {
+          dialog.showErrorBox(
+            'JamCoda could not start',
+            `Port ${SERVER_PORT} on this computer is already in use by another program. Close it and open JamCoda again.`
+          );
+          return false;
+        }
+        problem = `The library at ${configured ?? defaultLibraryDir} could not be opened.\n\n${errorMessage(error)}`;
+      }
+    }
+
+    const buttons = configured
+      ? ['Choose Library Folder…', 'Use Default Library', 'Quit']
+      : ['Choose Library Folder…', 'Quit'];
+    const { response } = await dialog.showMessageBox({
+      type: 'error',
+      message: 'JamCoda could not open its library',
+      detail: problem,
+      buttons,
+      defaultId: 0,
+      cancelId: buttons.length - 1
+    });
+    const choice = buttons[response];
+    if (choice === 'Quit') return false;
+    if (choice === 'Use Default Library') {
+      useLibrary(null);
+      continue;
+    }
+    const picked = await pickLibraryFolder();
+    if (picked.kind === 'refused') {
+      await dialog.showMessageBox({ type: 'warning', message: picked.error });
+    } else if (picked.kind === 'picked') {
+      useLibrary(picked.dir);
+    }
+  }
 }
 
 async function main(): Promise<void> {
@@ -272,18 +404,9 @@ async function main(): Promise<void> {
 
   registerIpc();
 
-  if (!devUrl) {
-    try {
-      await startServer();
-    } catch (error) {
-      const code = error instanceof ServerStartError ? error.code : null;
-      const detail = code === 'EADDRINUSE'
-        ? `Port ${SERVER_PORT} on this computer is already in use by another program. Close it and open JamCoda again.`
-        : errorMessage(error);
-      dialog.showErrorBox('JamCoda could not start', detail);
-      app.exit(1);
-      return;
-    }
+  if (!devUrl && !(await startServerWithRecovery())) {
+    app.exit(1);
+    return;
   }
 
   createWindow();

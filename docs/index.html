@@ -598,7 +598,7 @@
               </svg>
               JamCoda
             </a>
-            How predictions work · v2.12
+            How predictions work · v2.13
           </p>
           <nav class="bar-links">
             <a
@@ -1343,7 +1343,7 @@
               JamCoda first looks for <dfn>anchors</dfn>: at least three
               consecutive windows where the same song wins by a margin of 0.15
               or more. It then extends those runs into the less certain passages
-              around them. The current “bridge” decoder uses these rules:
+              around them, then cleans up the result with these rules:
             </p>
             <ol>
               <li>
@@ -1370,9 +1370,18 @@
                 that stretch. This rescue pass skips gaps with the same song on
                 both sides, to avoid merging more repeated takes.
               </li>
+              <li>
+                <strong>Drop a short run inside another song.</strong> If a run
+                of one song lasting 30 seconds or less has a single other song
+                directly on both sides, leave it unlabeled. It is almost always
+                the model misreading a moment of the surrounding piece, most
+                often where a take restarts. Giving it to the surrounding song
+                would erase that restart and merge two takes, so it is dropped
+                instead.
+              </li>
             </ol>
             <p>
-              The last rule helps with passages the model partly recognizes. A
+              The fourth rule helps with passages the model partly recognizes. A
               song may rarely win a window but still rank near the top
               throughout its own performance. The rescue threshold is a mean
               rank of at most five: on average across the gap, no more than
@@ -1381,10 +1390,10 @@
           </div>
           <div class="prose">
             <p>
-              Bridge linking became the training default in v2.11. Older saved
-              models without a link-policy setting still use the previous
-              decoder, so updating the app doesn’t silently change their
-              predictions.
+              The first four rules, called bridge linking, became the default
+              in v2.11; the fifth arrived in v2.13. Each applies only to models
+              rebuilt since it arrived, so updating the app never silently
+              changes the predictions of a model you already have.
             </p>
           </div>
         </section>
@@ -1399,8 +1408,8 @@
               default, segments shorter than eight seconds or below 0.3
               confidence are dropped, and remaining same-song segments separated
               by at most five seconds are merged. Boundaries then snap to nearby
-              note starts and releases. An ending-flourish heuristic can trim an
-              arpeggio after the final chord.
+              note starts and releases. A separate check can trim a closing
+              arpeggio played after the final chord.
             </p>
             <p>
               Before suggestions enter the review queue, the app removes time
@@ -1414,15 +1423,17 @@
               boundaries, or reject it. Promoting an accepted suggestion makes
               it an annotation that the next rebuild can learn from. Rebuilding
               is a manual action. Marking a file complete clears its predictions
-              and blocks further committed runs, though Prediction Lab can still
-              preview results on it.
+              and blocks further prediction runs, though Prediction Lab can
+              still preview results on it.
             </p>
             <p class="note">
-              The displayed confidence has a known inconsistency: anchor windows
-              keep their margins, while linked windows usually receive 0.5. A
-              segment made mostly of linked windows can therefore score higher
-              than one made of strong anchors. Treat it as a filtering value,
-              not a calibrated likelihood.
+              The confidence shown on a suggestion is not the model’s raw
+              margin, which can read backwards: a long, correct take averages
+              toward an ordinary margin, while a short wrong burst can score
+              high. Instead the app combines the margin with the segment’s
+              length to estimate how likely you are to confirm it, using
+              weights fitted to review decisions in this practice library. The
+              0.3 cutoff above still uses the raw margin.
             </p>
           </div>
         </section>
@@ -1483,8 +1494,8 @@
                   <td>Individual takes matched</td>
                   <td class="n">394 / 688</td>
                   <td>
-                    Mutual best same-song matches with intersection-over-union
-                    of at least 0.5
+                    Takes paired one-to-one with a same-song prediction that
+                    overlaps at least half their combined time
                   </td>
                 </tr>
                 <tr>
@@ -1514,8 +1525,9 @@
               the example recording.
             </p>
             <p>
-              Comparisons use the same dataset snapshot, with a per-file
-              bootstrap interval for the F1 change. Boundary comparisons also
+              Comparisons between versions use the same snapshot, and resample
+              the recordings thousands of times to estimate how much of a
+              change could be chance. Boundary comparisons also
               track the takes both runs matched, so an apparent improvement
               can’t be explained solely by dropping difficult takes. These
               results describe this practice library; they don’t establish
@@ -1586,13 +1598,26 @@
               annotation, including recordings the player hadn’t finished
               labeling. Those stretches are mostly real playing, often the very
               songs the model is trying to learn, so a new song’s unlabeled
-              takes were being taught as silence. v2.12 learns “no song” only
+              takes were being taught as “no song”. v2.12 learns “no song” only
               from recordings marked complete, and stores twice as many
               examples. For a song with one to three labeled takes and more
               still unlabeled, it finds 5 to 6 more of every 100 later takes.
               On this snapshot its overall score is unchanged (93.37% against
               93.33%); on the larger September 21 library it rises from 91.8% to
               92.9%.
+            </p>
+            <p>
+              v2.13 drops a short run of one song sitting inside another. In
+              a Maple Leaf Rag session from June 17, 2026, the model had
+              reported seven 9- to 15-second fragments of
+              <em>Bridge Over Troubled Water</em>. Raising the eight-second
+              minimum to catch them would also discard real short takes, so the
+              rule looks for the shape instead. Across the library it removed
+              25 wrong labels and no correct ones: every take the model found
+              before is still found, with the same start and end. The overall
+              score moves only slightly, from 93.10% to 93.15% on a newer
+              snapshot of 142 complete recordings, because those fragments are
+              short.
             </p>
           </div>
           <figure>
@@ -1782,8 +1807,9 @@
             <p>
               Several plausible changes failed: equal prototype budgets
               discarded useful examples, one-hand training copies reduced
-              accuracy, and stricter per-window rank checks broke takes into
-              more fragments. The
+              accuracy, stricter per-window rank checks broke takes into more
+              fragments, and giving a misread run to the song around it scored
+              higher but merged separate takes. The
               <a
                 href="https://github.com/jordanderson/jamcoda/blob/main/ml/CHANGELOG.md"
                 >ML changelog</a
@@ -1796,7 +1822,7 @@
       <footer>
         <div class="wrap col">
           <p>
-            Model snapshot: v2.12, 145 training recordings, 1,007 annotations,
+            Figures and example use model v2.12: 145 training recordings, 1,007 annotations,
             66 songs and 15,406 prototypes. Evaluation snapshot: September 7,
             2026, dataset <span class="mono">90836c7f…</span>. Example
             recording: <span class="mono">Jmx-A00058-Dec-17-2025</span>.

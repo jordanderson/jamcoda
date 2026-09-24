@@ -6,5 +6,6 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('jamcoda', {
   setJamcorderUrl: (url: string) => ipcRenderer.invoke('jamcoda:set-jamcorder-url', url),
-  revealDataFolder: () => ipcRenderer.invoke('jamcoda:reveal-data-folder')
+  revealDataFolder: () => ipcRenderer.invoke('jamcoda:reveal-data-folder'),
+  chooseLibraryFolder: () => ipcRenderer.invoke('jamcoda:choose-library-folder')
 });

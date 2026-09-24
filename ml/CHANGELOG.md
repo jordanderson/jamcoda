@@ -1,22 +1,129 @@
 # Model Changelog
 
 Track changes to the prediction model (`ml/songSegmentation.ts`, the
-`data/ml/model.json` it produces, and the CLI/API that drive it). Newest
-entries go on top. For each change, record *what* changed, *why*, and how it
-moved the evaluation numbers so we can judge whether a change helped.
+`ml/model.json` it writes into the library, and the CLI/API that drive it).
+Newest entries go on top. Each entry records *what* changed, *why*, and how it
+moved the evaluation numbers, including ideas that failed, so they are not
+retried. Recent entries open with **In plain terms**; the rest is written for
+someone changing the model.
+
+A status at the end of a heading says what became of the change:
+**accepted** (shipped as a default), **experimental** (behind a setting, off by
+default), or **rejected** / **not shipped** (measured, then removed or left
+off).
 
 How to read the numbers:
+- **LOO** — leave-one-file-out: each recording is predicted by a model trained
+  on all the others, so the model has never seen it. This is the honest number.
 - **Insample** — predictions on the same files the model was trained on
-  (optimistic; useful for catching regressions in the pipeline).
-- **LOO** — leave-one-file-out (honest generalization to files the model has
-  not seen). This is the number to watch.
+  (optimistic; useful only for catching regressions in the pipeline).
+- **Complete files** — recordings the player has marked complete. Compare
+  models on these only: in an unfinished recording, a correct prediction on
+  time not yet labeled counts as wrong, so an all-files number tracks how much
+  has been annotated rather than how good the model is (see v2.10).
 - **Segment F1** — overlap between predicted segments and annotations
   (recall = annotated time covered by a same-song segment; precision =
-  predicted time that overlaps a same-song annotation). This is the closest
-  single number to "predictions vs annotations".
+  predicted time that overlaps a same-song annotation; F1 combines the two).
+  This is the closest single number to "predictions vs annotations".
+- **Matched takes** — annotations paired one-to-one with a same-song
+  prediction that overlaps at least half their combined time. F1 can rise
+  while this falls, when one prediction swallows two takes.
+- **Points** — percentage points: 93.10% to 93.15% is +0.05 points.
+- **95% interval** — from a paired bootstrap over files: the recordings are
+  resampled thousands of times and the difference between two runs
+  recomputed. An interval that excludes zero means the change is unlikely to
+  be chance.
 - See `ml/eval.ts` for how these are computed.
 
 ---
+
+## 2026-09-23 — v2.13: drop a short misread run in the middle of a take (accepted)
+
+### In plain terms
+
+Sometimes the model hears a few seconds of one piece as another. On June 17,
+2026, a Maple Leaf Rag session came back with seven 9–15 second Bridge Over
+Troubled Water segments, each sitting between two Maple Leaf Rag segments. The
+8-second minimum segment length can't catch these without also discarding real
+short takes: 59 of 1,430 annotations are under 15 seconds.
+
+v2.13 recognizes the shape instead. A run of one song lasting 30 seconds or
+less, with the same other song directly on both sides, is left unlabeled.
+Across the library that removes 25 segments, and none of them was correct:
+
+- 16 overlapped an annotation of a different song.
+- 4 sat in a gap of a recording marked complete, where the player has declared
+  there is no song.
+- 4 were June 17 segments on time not yet annotated, all of which the player
+  had already reviewed as invalid.
+- 1 sits in an unreviewed stretch of an unfinished recording.
+
+Nothing correct is lost: every take the model found before is still found,
+with the same start and end. The overall score barely moves, because the
+fragments are short; the figures are under Measurements.
+
+### What changed
+
+- `TrainConfig.dropFlankedRunSec`, a decode-only setting.
+  `resolveTrainConfig` fills it with 30, so a model built from v2.13 records it.
+  The decoder reads an absent value as 0, so a saved model decodes as it was
+  built until it is rebuilt.
+- `ml:train --drop-flanked-run-sec`, `ml:eval --drop-flanked-run-sec` (applied
+  over the saved model without retraining), and `dropFlankedRunSec` on
+  `POST /api/prediction-reviews/rebuild-model` and in prediction decoder
+  overrides.
+- `MODEL_VERSION` bumped to `v2.13`.
+
+### Why dropped, not absorbed
+
+The obvious rule gives the misread run to the song on either side. That was
+tried first. Its F1 was higher (+0.053 at 10s, +0.091 at 30s, both intervals
+clear of zero), but it lost 13–19 matched annotations and gained 1. Reading the
+lost files one by one explains it: the misread run usually sits where a take
+restarts, and it is often the model's only sign of that restart.
+
+- Jmx-A00492 (Aug 22): Beethoven's 5th at 2008–2017s fills exactly the gap
+  between two Bridge Over Troubled Water takes (2007.5s → 2018.4s).
+- Jmx-A00444 (Jun 11): The Entertainer at 1753–1762s fills exactly the gap
+  between two Whiter Shade of Pale takes (1752.8s → 1762.1s).
+- Jmx-A00452 (Jun 20), Jmx-A00084, Jmx-A00439 and Jmx-A00048: the run is
+  within a few seconds of a restart. Absorbing it joined the two takes.
+- The June 17 file itself: the first misread run (870–883s) straddles the
+  player's own take break at 878.6s/882.9s.
+
+Absorbing merges two takes of one song, the error class that segment-overlap
+F1 barely penalizes and that matters most for practice sessions. Dropping the
+run removes the wrong song and keeps the split.
+
+### Measurements
+
+Leave-one-file-out, complete files only, frozen dataset
+`71ca3e73e8e1bd9eff8a008d8ddc4b023125d07daf6989fb61f512bb5bd47bba`, paired
+file bootstrap (3,000 resamples, seed 42) against the rule off:
+
+| Variant | Recall | Precision | F1 | Δ F1, 95% interval | Matched lost / gained |
+|---|---|---|---|---|---|
+| off (v2.12) | 92.08% | 94.14% | 93.099% | — | — |
+| absorb ≤ 10s | 92.16% | 94.17% | 93.152% | +0.053 [+0.029, +0.080] | 13 / 1 |
+| absorb ≤ 30s | 92.20% | 94.21% | 93.190% | +0.091 [+0.046, +0.142] | 19 / 1 |
+| drop ≤ 10s | 92.08% | 94.18% | 93.121% | +0.022 [+0.009, +0.036] | 0 / 0 |
+| drop ≤ 20s | 92.08% | 94.21% | 93.136% | +0.037 [+0.019, +0.056] | 0 / 0 |
+| **drop ≤ 30s** | 92.08% | 94.24% | 93.147% | +0.048 [+0.026, +0.073] | 0 / 0 |
+
+The shipped rule, drop ≤ 30s, gains only in precision (94.14% → 94.24%).
+Recall, all 758 matched annotations, and every matched boundary are unchanged.
+
+Wrong-song time on complete files falls from 11,747s to 11,539s, and their
+segment count from 974 to 958.
+
+### Why 30 seconds
+
+The longest misread run seen was 26.1s (Pathetique inside Maple Leaf Rag).
+The shortest real song annotated between two takes of another is 34s
+(Christmas Is Coming inside Winter Wonderland), and it has a pause on both
+sides, which strict adjacency already protects. Raising the limit to 45, 60 or
+90 seconds drops only one or two more runs, still none of them correct, but
+leaves less margin under that 34s take.
 
 ## 2026-09-22 — melody: not shipped, as a feature or as a second check
 
@@ -200,7 +307,7 @@ The model learns what a song sounds like from annotated takes. It learns what
 that "no song" time from every recording with at least one annotation,
 including recordings the player hadn't finished labeling. Those gaps are
 mostly real playing, often the very songs the model is trying to learn, so a
-new song's unlabeled takes were being taught as silence. v2.12 takes "no song"
+new song's unlabeled takes were being taught as "no song". v2.12 takes "no song"
 only from recordings marked complete. It also stores 16,000 examples instead
 of 8,000, which pays off once "no song" is cleaner.
 
@@ -339,6 +446,17 @@ trusted `__none__` sampling" result.
 ---
 
 ## 2026-09-07 — v2.11: bridge linking is the default (accepted)
+
+### In plain terms
+
+A finished song used to keep its label for several seconds after the player
+moved on, so the next song's prediction started late. Bridge linking, tried as
+an option in the 2026-09-06 entry, fixes most of that, and this release makes
+it the default for newly built models. On complete files the median take now
+ends 0.81s late instead of 5.85s, twice as many takes end within two seconds of
+the annotation (40.6% against 21.6%), and F1 rises from 91.16% to 93.33%. It
+does not fix the largest remaining error: two takes of the same song still
+merge.
 
 ### Context
 
@@ -634,6 +752,17 @@ rescue statistic, rescuing same-song spans, and `bridge` combined with
 ---
 
 ## 2026-09-03 — v2.10: honest evaluation scope, prototype budget, silence-blocked linking (accepted)
+
+### In plain terms
+
+Until this release, the headline precision mostly measured how much of the
+library had been annotated, not how good the model was: a correct prediction on
+an unlabeled stretch of an unfinished recording counted as wrong. `ml:eval` now
+scores recordings marked complete separately, and that is the number to
+compare models on. Measured that way, this release raises F1 from 83.08% to
+88.15%, by rescaling the features, using six-second windows, storing four
+times as many examples, and stopping a song from spilling into the silence
+after it.
 
 ### Context
 

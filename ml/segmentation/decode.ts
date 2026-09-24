@@ -524,6 +524,33 @@ function anchorLinkDecode(
     }
   }
 
+  // A short run of one song with another song directly on both sides is the
+  // model misreading a moment of that other song, and it most often happens
+  // where a take restarts: the pause and the opening bars resemble nothing
+  // the flanking song usually sounds like. So the run is dropped rather than
+  // given to its neighbor. Giving it away would erase the only mark of that
+  // restart and merge two takes; dropping it removes the wrong song and keeps
+  // the split. Adjacency is strict, so a real short piece played between
+  // takes, which has a pause on at least one side, is never considered.
+  const dropWindows = Math.round(
+    Math.max(0, config.dropFlankedRunSec ?? 0) / Math.max(1e-9, config.stepSec)
+  );
+  if (dropWindows > 0) {
+    for (let i = 0; i < n; ) {
+      let j = i + 1;
+      while (j < n && labels[j] === labels[i]) j++;
+      const left = i > 0 ? labels[i - 1] : -1;
+      const right = j < n ? labels[j] : -1;
+      if (labels[i] >= 0 && left >= 0 && left === right && j - i <= dropWindows) {
+        for (let k = i; k < j; k++) {
+          labels[k] = -1;
+          confidence[k] = 0;
+        }
+      }
+      i = j;
+    }
+  }
+
   for (let i = 0; i < n; i++) {
     if (labels[i] === -1) labels[i] = noneLabelIndex;
   }

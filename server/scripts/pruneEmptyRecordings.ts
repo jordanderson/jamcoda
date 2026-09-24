@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, rmdirSync, unlinkSync } from 'no
 import path from 'node:path';
 import { hasFlag, readArg, resolveDbPath, runMain } from '@core/cli/args';
 import { closeDatabase, getDb, initializeDatabase } from '../config/database';
+import { resolveStoredMidiPath } from '../config/library';
 import { parseJmxMetadata } from '../utils/jmxParser';
 import { errorMessage } from '@core/errors';
 import { transaction } from '../config/transaction';
@@ -42,16 +43,18 @@ Options:
 
 /**
  * A row qualifies only if its stored duration is exactly 0. NULL means "not
- * parsed yet", which is not the same thing and is left alone.
+ * parsed yet", which is not the same thing and is left alone. `localPath` is
+ * returned resolved to the file on disk.
  */
 function findCandidates(): Candidate[] {
-  return getDb().prepare(`
+  const rows = getDb().prepare(`
     SELECT id, filename, local_path as localPath, date_recorded as dateRecorded,
            file_size as fileSize
     FROM files
     WHERE midi_duration = 0
     ORDER BY date_recorded, filename
   `).all() as unknown as Candidate[];
+  return rows.map((row) => ({ ...row, localPath: resolveStoredMidiPath(row.localPath) }));
 }
 
 /** Rows with annotation work attached are never pruned, whatever their duration. */
@@ -87,7 +90,7 @@ function verifyEmptyOnDisk(localPath: string): { empty: boolean; reason: string 
   return { empty: false, reason: `JMX trailer reports ${jmx.totalNotes} notes` };
 }
 
-/** Drop a date directory once its last file is gone, so `data/midi` stays tidy. */
+/** Drop a date directory once its last file is gone, so the library's `midi` folder stays tidy. */
 function removeDirIfEmpty(dir: string): boolean {
   try {
     if (!existsSync(dir)) return false;

@@ -7,9 +7,9 @@ export function useSyncProgress(syncId: string | null, enabled: boolean) {
     queryFn: () => syncApi.getProgress(syncId!),
     enabled: enabled && !!syncId,
     refetchInterval: (query) => {
-      const data = query.state.data as any;
-      // Stop polling when completed or errored.
-      if (!data || data.status === 'completed' || data.status === 'error') {
+      const data = query.state.data;
+      // Poll only while the sync is running.
+      if (!data || data.status !== 'in_progress') {
         return false;
       }
       return 500; // Poll every 500ms during sync.

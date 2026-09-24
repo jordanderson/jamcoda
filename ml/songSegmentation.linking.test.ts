@@ -238,3 +238,41 @@ describe('span rescue lookahead', () => {
     );
   });
 });
+
+describe('flanked-run drop', () => {
+  // A misread moment of A: B anchors for four windows with A directly on both sides.
+  const misread = [...runs(5, anchorA), ...runs(4, anchorB), ...runs(5, anchorA)];
+
+  it('drops a short run flanked by one song, leaving the take split rather than merged', () => {
+    const dropped = [...runs(5, 'A'), ...runs(4, '__none__'), ...runs(5, 'A')];
+    assert.deepEqual(decode({ dropFlankedRunSec: 4 }, misread), dropped);
+    // Bridge linking's rescue must not refill the span: it is the break
+    // between two takes, which is what dropping rather than absorbing keeps.
+    assert.deepEqual(decode({ ...BRIDGE, dropFlankedRunSec: 4 }, misread), dropped);
+  });
+
+  it('leaves a run longer than the limit alone', () => {
+    assert.deepEqual(decode({ dropFlankedRunSec: 3 }, misread),
+      [...runs(5, 'A'), ...runs(4, 'B'), ...runs(5, 'A')]);
+  });
+
+  it('leaves a run alone when anything separates it from a flank', () => {
+    // A silent window between A and B: a pause, so B may be a real piece.
+    const paused = [...runs(5, anchorA), vagueFar, ...runs(4, anchorB), ...runs(5, anchorA)];
+    assert.deepEqual(decode({ dropFlankedRunSec: 4 }, paused, [5]),
+      [...runs(5, 'A'), '__none__', ...runs(4, 'B'), ...runs(5, 'A')]);
+  });
+
+  it('leaves a run between two different songs alone', () => {
+    const between = [...runs(5, anchorA), ...runs(4, anchorB), ...runs(5, anchorC)];
+    assert.deepEqual(decode({ dropFlankedRunSec: 4 }, between),
+      [...runs(5, 'A'), ...runs(4, 'B'), ...runs(5, 'C1')]);
+  });
+
+  it('is off for a saved model without the field, and recorded at 30 on a new one', () => {
+    assert.deepEqual(decode({}, misread), decode({ dropFlankedRunSec: 0 }, misread));
+    assert.equal(resolveTrainConfig(base).dropFlankedRunSec, 30);
+    assert.equal(resolveTrainConfig({ ...base, linkPolicy: 'legacy' }).dropFlankedRunSec, 30);
+    assert.equal(resolveTrainConfig({ ...base, dropFlankedRunSec: 0 }).dropFlankedRunSec, 0);
+  });
+});

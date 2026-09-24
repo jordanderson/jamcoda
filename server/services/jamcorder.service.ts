@@ -46,6 +46,8 @@ export interface LibraryListOptions {
    */
   newerThanAssetIdx?: number;
   jamcorderUuid?: string;
+  /** Checked before each page; true ends the listing with what it has. */
+  shouldStop?: () => boolean;
 }
 
 // got instance for JSON endpoints (listing/library). These endpoints do not
@@ -110,6 +112,7 @@ export async function listLibraryAssets(options?: LibraryListOptions): Promise<J
   let reachedWatermark = false;
 
   for (let page = 0; page < 500; page++) {
+    if (options?.shouldStop?.()) break;
     const body: Record<string, unknown> = {
       getJmxEof: false,
       getFilesize: true,

@@ -101,23 +101,19 @@ const QUESTIONS: Question[] = [
   {
     key: 'JAMCODA_DB_PATH',
     prompt: 'Where should JamCoda keep its database file?',
-    help: 'This small file holds your annotations and review history.\n'
-      + 'It is created automatically. Keep the default unless you have a reason not to.',
+    help: 'The folder holding this file is your library: synced recordings go in its\n'
+      + 'midi/ folder and the trained model in its ml/ folder. It can be outside the\n'
+      + 'project, such as on an external drive. Keep the default unless you have a reason not to.',
     fallback: './data/jamcoda.db',
-    normalize: normalizePath
-  },
-  {
-    key: 'JAMCODA_MIDI_DIR',
-    prompt: 'Where should synced MIDI recordings be stored?',
-    help: 'Recordings copied from your Jamcorder go here, in dated folders.\n'
-      + 'This can be a folder outside the project, such as an external drive.',
-    fallback: './data/midi',
     normalize: normalizePath
   }
 ];
 
 /** Keys this script manages. Anything else in .env is left untouched. */
 const MANAGED_KEYS = new Set(QUESTIONS.map((q) => q.key));
+
+/** Keys JamCoda no longer reads, dropped when the file is rewritten. */
+const RETIRED_KEYS = new Set(['JAMCODA_MIDI_DIR']);
 
 function parseEnvFile(contents: string): Map<string, string> {
   const values = new Map<string, string>();
@@ -139,7 +135,8 @@ function unmanagedLines(contents: string): string[] {
     if (!line || line.startsWith('#')) continue;
     const eq = line.indexOf('=');
     if (eq === -1) continue;
-    if (!MANAGED_KEYS.has(line.slice(0, eq).trim())) {
+    const key = line.slice(0, eq).trim();
+    if (!MANAGED_KEYS.has(key) && !RETIRED_KEYS.has(key)) {
       kept.push(rawLine);
     }
   }
@@ -153,11 +150,8 @@ function renderEnvFile(answers: Map<string, string>, preserved: string[]): strin
     '# Address of your Jamcorder device.',
     `JAMCORDER_URL=${answers.get('JAMCORDER_URL')}`,
     '',
-    '# Where the SQLite database lives.',
-    `JAMCODA_DB_PATH=${answers.get('JAMCODA_DB_PATH')}`,
-    '',
-    '# Where synced MIDI recordings are stored.',
-    `JAMCODA_MIDI_DIR=${answers.get('JAMCODA_MIDI_DIR')}`
+    '# The SQLite database. Its folder is the library: recordings in midi/, model in ml/.',
+    `JAMCODA_DB_PATH=${answers.get('JAMCODA_DB_PATH')}`
   ];
 
   if (preserved.length > 0) {

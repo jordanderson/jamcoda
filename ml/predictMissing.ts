@@ -16,6 +16,7 @@ import {
   runPredictionImport
 } from '../server/services/predictionImport';
 import { errorMessage } from '@core/errors';
+import { libraryModelPath, resolveStoredMidiPath } from '@config/library';
 
 /**
  * Run predictions for every file that is incomplete, has notes, and has no
@@ -46,9 +47,8 @@ Usage:
   npm run ml:predict-missing -- [options]
 
 Options:
-  --model <path>                Model path (default: data/ml/model.json)
+  --model <path>                Model path (default: ml/model.json beside the database)
   --db <path>                   SQLite DB path (default: data/jamcoda.db)
-  --root <path>                 Workspace root for file lookup (default: .)
   --force                       Also re-run files that already have predictions
   --limit <n>                   Only process the first n candidate files
   --dry-run                     Do not write to DB, only print what would run
@@ -89,9 +89,8 @@ async function main() {
     return;
   }
 
-  const modelPath = path.resolve(readArg('--model') || 'data/ml/model.json');
-  const rootDir = path.resolve(readArg('--root') || '.');
   const dbPath = resolveDbPath();
+  const modelPath = readArg('--model') ? path.resolve(readArg('--model')!) : libraryModelPath(dbPath);
   const force = hasFlag('--force');
   const dryRun = hasFlag('--dry-run');
   const limitArg = readArg('--limit');
@@ -140,7 +139,7 @@ async function main() {
     const errors: Array<{ file: string; error: string }> = [];
 
     for (const candidate of candidates) {
-      if (!existsSync(candidate.localPath)) {
+      if (!existsSync(resolveStoredMidiPath(candidate.localPath, dbPath))) {
         console.log(`  #${candidate.id} ${candidate.filename}: skipped (MIDI not on disk)`);
         skippedMissing++;
         continue;
@@ -153,8 +152,7 @@ async function main() {
           config,
           clearUnpromoted: true,
           modelVersion: readArg('--model-version'),
-          minSkipSplitSec,
-          rootDir
+          minSkipSplitSec
         });
         predicted++;
         segmentsInserted += result.insertedCount;

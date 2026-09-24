@@ -30,9 +30,9 @@ function formatLastSync(timestamp: number | null): string {
 }
 
 /**
- * Editing the Jamcorder address and revealing the data folder act on the
- * desktop app's own configuration and data. `window.jamcoda` is undefined in
- * a browser and under `npm run electron:dev`, so this renders nothing there.
+ * Editing the Jamcorder address acts on the desktop app's own configuration.
+ * `window.jamcoda` is undefined in a browser and under `npm run electron:dev`,
+ * so this renders nothing there.
  *
  * Saving relaunches the app, so it waits out a running sync or model rebuild
  * rather than cutting it short.
@@ -113,7 +113,7 @@ function JamcorderUrlControls({ currentUrl, isBusy }: { currentUrl: string; isBu
   }
 
   return (
-    <div className="mt-2 flex items-center gap-3">
+    <div className="mt-2">
       <button
         type="button"
         onClick={() => {
@@ -124,14 +124,64 @@ function JamcorderUrlControls({ currentUrl, isBusy }: { currentUrl: string; isBu
       >
         Change Jamcorder address
       </button>
-      <button
-        type="button"
-        onClick={() => void bridge.revealDataFolder()}
-        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
-      >
-        <FolderOpen className="w-3 h-3" />
-        Reveal data folder
-      </button>
+    </div>
+  )
+}
+
+/**
+ * The library folder holds the database, recordings and model together, so
+ * pointing the app at another folder switches all three. Switching relaunches
+ * the app, so it waits out a running sync or model rebuild. The controls act
+ * on the desktop app's own configuration; in a browser only the path shows.
+ */
+function LibraryControls({ libraryDir, isBusy }: { libraryDir: string | undefined; isBusy: boolean }) {
+  const [error, setError] = useState<string | null>(null)
+  const [isChoosing, setIsChoosing] = useState(false)
+  const bridge = window.jamcoda
+
+  const handleChoose = async () => {
+    if (!bridge || isBusy) return
+    setError(null)
+    setIsChoosing(true)
+    try {
+      const result = await bridge.chooseLibraryFolder()
+      if (!result.ok) {
+        setError(result.error)
+        setIsChoosing(false)
+      }
+    } catch (chooseError) {
+      setError(errorMessage(chooseError, 'Could not change the library folder'))
+      setIsChoosing(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 text-xs text-gray-500">
+      <div className="truncate" title={libraryDir}>{libraryDir ?? '…'}</div>
+      {bridge && (
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void bridge.revealDataFolder()}
+            className="flex items-center gap-1 text-gray-400 hover:text-gray-600"
+          >
+            <FolderOpen className="w-3 h-3" />
+            Show folder
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleChoose()}
+            disabled={isBusy || isChoosing}
+            className="text-gray-400 hover:text-gray-600 underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Change library folder…
+          </button>
+        </div>
+      )}
+      {error && <p className="mt-1 text-red-600">{error}</p>}
+      {bridge && isBusy && !error && (
+        <p className="mt-1">Changing the library is available once the current sync or model rebuild finishes.</p>
+      )}
     </div>
   )
 }
@@ -220,6 +270,14 @@ export function SettingsModal({ isOpen, isSyncStarting, onStartSync, onClose, sh
           </div>
           <JamcorderUrlControls
             currentUrl={settings?.jamcorderUrl ?? ''}
+            isBusy={isSyncStarting || rebuildModel.isPending}
+          />
+        </section>
+
+        <section className="mt-6 border-t border-gray-100 pt-6">
+          <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Library</h3>
+          <LibraryControls
+            libraryDir={settings?.libraryDir}
             isBusy={isSyncStarting || rebuildModel.isPending}
           />
         </section>

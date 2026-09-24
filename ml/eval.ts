@@ -24,6 +24,7 @@ import {
 import { datasetIdentity, digest, EvalScoreCache, scoringConfig, scoringSourceIdentity } from './evalCache';
 import { matchBoundaries, summarizeBoundaries, type BoundaryMatch } from './boundaryEvaluation';
 import { errorMessage } from '@core/errors';
+import { libraryModelPath } from '@config/library';
 
 interface FileEvalRow {
   fileId: number;
@@ -110,7 +111,6 @@ interface EvalReport {
   /** The model's `createdAt`, so a report pins the exact artifact. */
   modelCreatedAt: string;
   dbPath: string;
-  rootDir: string;
   includeNone: boolean;
   filesEvaluated: number;
   windowsEvaluated: number;
@@ -157,9 +157,8 @@ Usage:
   npm run ml:eval -- [options]
 
 Options:
-  --model <path>                 Model file path (default: data/ml/model.json)
+  --model <path>                 Model file path (default: ml/model.json beside the database)
   --db <path>                    SQLite DB path (default: data/jamcoda.db)
-  --root <path>                  Workspace root for resolving MIDI paths (default: .)
   --out <path>                   JSON output path (default: a stamped name like
                                  data/ml/eval-loo-v2.5-20260902-143000.json)
   --mode <insample|loo>          Eval mode (default: loo)
@@ -182,6 +181,8 @@ Options:
   --link-rescue-rank <n>        Mean-rank span rescue; -1 disables (bridge default 5)
   --link-rescue-lookahead <n>   Seconds of lookahead for the rescue's mean rank;
                                 0 tests the whole span at once (bridge default)
+  --drop-flanked-run-sec <n>    Drop a run this short with one other song directly
+                                on both sides; 0 disables (v2.13 default 30)
   --quiet                        Reduce per-file logging
   --help                         Show this help
 `);
@@ -355,9 +356,8 @@ async function main() {
     return;
   }
 
-  const modelPath = path.resolve(readArg('--model') || 'data/ml/model.json');
   const dbPath = resolveDbPath();
-  const rootDir = path.resolve(readArg('--root') || '.');
+  const modelPath = readArg('--model') ? path.resolve(readArg('--model')!) : libraryModelPath(dbPath);
   const outArg = readArg('--out');
   const includeNone = hasFlag('--include-none');
   const quiet = hasFlag('--quiet');
@@ -381,7 +381,8 @@ async function main() {
     ['--link-max-silence', 'linkMaxSilenceRatio', 0, 1, false],
     ['--link-tail-sec', 'linkTailSec', 0, Infinity, false],
     ['--link-rescue-rank', 'linkRescueRank', -1, Infinity, false],
-    ['--link-rescue-lookahead', 'linkRescueLookaheadSec', 0, Infinity, false]
+    ['--link-rescue-lookahead', 'linkRescueLookaheadSec', 0, Infinity, false],
+    ['--drop-flanked-run-sec', 'dropFlankedRunSec', 0, Infinity, false]
   ] as const;
   for (const [flag, key, min, max, integer] of numericOverrides) {
     const raw = readArg(flag);
@@ -416,7 +417,7 @@ async function main() {
       + ' Use --anchor-margin and --min-anchor-run instead.'
     );
   }
-  const files = loadAnnotatedMidiFiles(dbPath, rootDir);
+  const files = loadAnnotatedMidiFiles(dbPath);
   if (files.length === 0) {
     throw new Error('No annotated files found in DB.');
   }
@@ -475,7 +476,6 @@ async function main() {
   console.log('Starting evaluation...');
   console.log(`  model: ${modelPath} (${modelVersion}, ${model.createdAt})`);
   console.log(`  db: ${dbPath}`);
-  console.log(`  root: ${rootDir}`);
   console.log(`  out: ${outPath}`);
   console.log(`  mode: ${mode}`);
   console.log(`  scope: ${includeNone ? 'all windows (including __none__)' : 'annotated windows only'}`);
@@ -708,7 +708,7 @@ async function main() {
 
   // Detect edits to the live DB or MIDI while the run was in progress. A copied
   // DB (--db) is preferable for sweeps; never publish mixed-snapshot results.
-  if (datasetIdentity(loadAnnotatedMidiFiles(dbPath, rootDir)).sha256 !== dataset.sha256) {
+  if (datasetIdentity(loadAnnotatedMidiFiles(dbPath)).sha256 !== dataset.sha256) {
     throw new Error('Annotations or MIDI changed during evaluation. Re-run against a database snapshot.');
   }
   timingMs.total = performance.now() - startedAt;
@@ -722,7 +722,6 @@ async function main() {
     modelVersion,
     modelCreatedAt: model.createdAt,
     dbPath,
-    rootDir,
     includeNone,
     filesEvaluated: byFile.length,
     windowsEvaluated,

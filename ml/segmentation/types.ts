@@ -14,7 +14,7 @@ export const NO_SONG_LABEL = '__none__';
  * to name its report files, so runs stay referable without manual renaming.
  * Keep `ml/CHANGELOG.md` in sync with each bump.
  */
-export const MODEL_VERSION = 'v2.12';
+export const MODEL_VERSION = 'v2.13';
 
 /**
  * Version 2 features (v2.8 boundary snapping & cadence/flourish trimming, v2.7 acoustic sustain decay).
@@ -249,6 +249,23 @@ export interface TrainConfig {
    * two ends advance in lockstep, as unvouched tails do.
    */
   linkRescueLookaheadSec?: number;
+  /**
+   * Anchor-link decoder: a run of one song lasting at most this many seconds,
+   * with a single other song's windows directly on both sides, is left
+   * unlabeled. 0 disables.
+   *
+   * Such a run is almost always the model misreading a moment of the flanking
+   * song, most often where a take restarts. It is dropped rather than given to
+   * the flanking song because it is frequently the only mark of that restart,
+   * and absorbing it merges the two takes. Only immediate adjacency counts, so
+   * a real short piece with a pause on either side is untouched.
+   *
+   * `resolveTrainConfig` defaults this to 30, so every model built from v2.13
+   * records it. The decoder reads an absent value as 0, which keeps an older
+   * saved model decoding the way it was built. See the v2.13 entry in
+   * `ml/CHANGELOG.md`.
+   */
+  dropFlankedRunSec?: number;
   /** Anchor-link decoder: minimum margin for a window to be linked into a run (default 0). */
   fillMinMargin?: number;
   /** Anchor-link decoder: a linked window must rank the run's label within its

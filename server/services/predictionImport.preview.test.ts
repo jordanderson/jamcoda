@@ -60,7 +60,7 @@ before(async () => {
   writeFileSync(midiPath, buildMidi());
   fileId = FileModel.create({
     jamcorderPath: '/device/take.mid',
-    localPath: midiPath,
+    localPath: 'take.mid',
     filename: 'take.mid',
     fileSize: 1,
     jamcorderModified: 0,
@@ -102,7 +102,6 @@ const run = (overrides: Partial<Parameters<typeof runPredictionImport>[0]> = {})
       minWindowConfidence: 0.45, smoothingWindows: 5,
       minSegmentSec: 8, minSegmentConfidence: 0.3, mergeGapSec: 5
     },
-    rootDir: tempDir,
     ...overrides
   });
 

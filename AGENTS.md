@@ -141,6 +141,17 @@ rather than delegating to a library.
   trailer's `totalMillis`, the device's own statement of how long it recorded.
   `npm run db:rescale-silent-tempo -- --verify` asserts it across the library.
 
+### Library
+
+- **A library is the folder holding `jamcoda.db`**; `midi/` and `ml/model.json`
+  sit beside it. `server/config/library.ts` is the one place those paths are
+  derived, from `JAMCODA_DB_PATH`, never from the working directory.
+- **`files.local_path` is relative to the library folder**, forward-slashed.
+  Resolve it with `resolveStoredMidiPath` and write it with `toStoredMidiPath`;
+  an absolute path in the database ties the library to one machine.
+- The desktop app never creates a library in place of a configured one it
+  cannot find; it asks. `electron/main.ts`, `startServerWithRecovery`.
+
 ### Sync
 
 - Discovery is a filesystem walk over the detailed listing (real sizes → skip
