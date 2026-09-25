@@ -276,3 +276,41 @@ describe('flanked-run drop', () => {
     assert.equal(resolveTrainConfig({ ...base, dropFlankedRunSec: 0 }).dropFlankedRunSec, 0);
   });
 });
+
+describe('window basis', () => {
+  const decodeWindows = (config: Partial<TrainConfig>, matrix: number[][]) => decodeWindowScores(
+    { labels: LABELS, config: { ...base, ...config } },
+    matrix.map((_, i) => ({ startTime: i, endTime: i + 6, features: new Array(37).fill(0) })),
+    matrix, options
+  );
+
+  it('marks anchors, and the span bridged between two anchor runs of one song', () => {
+    const windows = decodeWindows(BRIDGE, [...runs(3, anchorA), ...runs(4, vagueFar), ...runs(3, anchorA)]);
+    assert.deepEqual(windows.map((w) => w.label), runs(10, 'A'));
+    assert.deepEqual(windows.map((w) => w.basis), [
+      ...runs(3, 'anchor'), ...runs(4, 'bridge'), ...runs(3, 'anchor')
+    ]);
+  });
+
+  it('gives each labeled window the rank of its song, 0 where the model chose it outright', () => {
+    const windows = decodeWindows(BRIDGE, [...runs(3, anchorA), ...runs(4, vagueFar), ...runs(3, anchorA)]);
+    assert.equal(windows[0].rank, 0);
+    // In `vagueFar`, `__none__` and all seven filler labels score above A.
+    assert.equal(windows[4].rank, 8);
+  });
+
+  it('marks a leashed tail, and leaves unlabeled windows without a basis', () => {
+    const windows = decodeWindows(LEASH, transition);
+    assert.equal(windows[3].basis, 'tail');
+    assert.equal(windows[3].label, 'A');
+    const unlabeled = windows.filter((w) => w.label === '__none__');
+    assert.ok(unlabeled.length > 0);
+    assert.ok(unlabeled.every((w) => w.basis === undefined));
+  });
+
+  it('marks legacy extension as linked, and any song from another decoder as decoded', () => {
+    assert.equal(decodeWindows({}, transition)[5].basis, 'linked');
+    const viterbi = decodeWindows({ decoder: 'viterbi' }, transition);
+    assert.ok(viterbi.filter((w) => w.label !== '__none__').every((w) => w.basis === 'decoded'));
+  });
+});

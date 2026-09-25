@@ -1,4 +1,5 @@
 import type { BoundaryMatch } from './boundaryEvaluation';
+import type { SessionScoreRow, SessionScoreSummary } from './sessionEvaluation';
 import type { AnnotationInterval } from './songSegmentation';
 
 /**
@@ -24,6 +25,9 @@ export interface ComparableReport {
   segmentComplete: { annotationRecall: number; segmentPrecision: number; segmentF1: number };
   byFileSegment: ComparableFileRow[];
   boundaryMatchesComplete: BoundaryMatch[];
+  /** Absent from reports written before session scoring. */
+  sessionByFileComplete?: SessionScoreRow[];
+  sessionComplete?: SessionScoreSummary;
 }
 
 const matchKey = (match: Pick<BoundaryMatch, 'fileId' | 'annotationIndex'>) =>
@@ -91,6 +95,81 @@ export function bootstrapF1DeltaPoints(
   deltas.sort((a, b) => a - b);
   const at = (p: number) => deltas[Math.min(deltas.length - 1, Math.max(0, Math.round(p * (deltas.length - 1))))];
   return { deltaPoints, ci95: [at(0.025), at(0.975)], resamples, seed };
+}
+
+/**
+ * Session totals compared: the review-cost view of the same two runs. Lower is
+ * better for every one of them.
+ */
+export const SESSION_COMPARED = {
+  wrongSongSec: (row: SessionScoreRow) => row.wrongSongSec,
+  missedSec: (row: SessionScoreRow) => row.missedSec,
+  bleedSec: (row: SessionScoreRow) => row.bleedSec,
+  gapFillSec: (row: SessionScoreRow) => row.gapFillSec,
+  overrunSec: (row: SessionScoreRow) => row.overrunSec,
+  strayBleedSec: (row: SessionScoreRow) => row.strayBleedSec,
+  gapsBridged: (row: SessionScoreRow) => row.gapsBridged,
+  sessionsSplit: (row: SessionScoreRow) => row.sessionsSplit,
+  sessionsMissed: (row: SessionScoreRow) => row.sessions - row.sessionsFound,
+  unsupportedSegments: (row: SessionScoreRow) => row.unsupportedSegments,
+  reviewEdits: (row: SessionScoreRow) => row.reviewEdits
+} as const;
+
+export type SessionMetric = keyof typeof SESSION_COMPARED;
+
+export interface SessionMetricDelta {
+  baseline: number;
+  variant: number;
+  delta: number;
+  /** File bootstrap interval for `delta`. */
+  ci95: [number, number];
+}
+
+/**
+ * Each session total for both runs, with a percentile interval for the
+ * difference from resampling whole files, as `bootstrapF1DeltaPoints` does.
+ * One resample draws the same files for every metric.
+ */
+export function compareSessionTotals(
+  baseline: SessionScoreRow[],
+  variant: SessionScoreRow[],
+  options: { resamples?: number; seed?: number } = {}
+): Record<SessionMetric, SessionMetricDelta> {
+  const resamples = options.resamples ?? 3000;
+  const random = mulberry32(options.seed ?? 42);
+  const variantById = new Map(variant.map((row) => [row.fileId, row]));
+  const paired = baseline
+    .filter((row) => variantById.has(row.fileId))
+    .map((row) => [row, variantById.get(row.fileId)!] as const);
+  const metrics = Object.keys(SESSION_COMPARED) as SessionMetric[];
+  const deltaOf = (metric: SessionMetric, pair: typeof paired[number]) =>
+    SESSION_COMPARED[metric](pair[1]) - SESSION_COMPARED[metric](pair[0]);
+
+  const samples = new Map(metrics.map((metric) => [metric, [] as number[]]));
+  for (let r = 0; r < resamples && paired.length > 0; r++) {
+    const sums = new Map(metrics.map((metric) => [metric, 0]));
+    for (let i = 0; i < paired.length; i++) {
+      const pick = paired[Math.floor(random() * paired.length)];
+      for (const metric of metrics) sums.set(metric, sums.get(metric)! + deltaOf(metric, pick));
+    }
+    for (const metric of metrics) samples.get(metric)!.push(sums.get(metric)!);
+  }
+
+  const result = {} as Record<SessionMetric, SessionMetricDelta>;
+  for (const metric of metrics) {
+    const total = (side: 0 | 1) => paired.reduce((sum, pair) => sum + SESSION_COMPARED[metric](pair[side]), 0);
+    const sorted = samples.get(metric)!.sort((a, b) => a - b);
+    const at = (p: number) => sorted.length === 0
+      ? 0
+      : sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))))];
+    result[metric] = {
+      baseline: total(0),
+      variant: total(1),
+      delta: total(1) - total(0),
+      ci95: [at(0.025), at(0.975)]
+    };
+  }
+  return result;
 }
 
 export interface PairedErrors {
@@ -216,6 +295,9 @@ export function compareReports(
       gainedByVariant: variantByKey.size - commonKeys.length
     },
     paired: { startErrorSec: pairedErrors(start), endErrorSec: pairedErrors(end) },
+    sessions: baseline.sessionByFileComplete && variant.sessionByFileComplete
+      ? compareSessionTotals(baseline.sessionByFileComplete, variant.sessionByFileComplete, options)
+      : null,
     closeTransitions: {
       count: transitions.length,
       baselineMedianEndSec: median(transitions.map((t) => t.baselineEndErrorSec)),

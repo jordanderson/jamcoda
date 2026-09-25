@@ -1,5 +1,7 @@
 /** Shapes shared by the piano roll container and its memoised layers. */
 
+import type { EvidencePart } from '@core/predictionEvidence'
+
 export interface RollAnnotation {
   id: number
   song_name: string
@@ -14,6 +16,12 @@ export interface RollPrediction {
   startTime: number
   endTime: number
   confidence: number | null
+  /**
+   * How the model reached the song over each stretch, for a prediction still
+   * awaiting review. Absent once it is reviewed, and for predictions stored
+   * before parts were.
+   */
+  parts?: EvidencePart[]
 }
 
 

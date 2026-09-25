@@ -12,9 +12,11 @@ import type {
   PredictionReview,
   PredictionReviewStatus,
   PromotePredictionReviewResult,
+  PromoteWithCutResult,
   UpdatePredictionReviewData
 } from '@server/types';
 import { nowUnix } from '@utils/time';
+import { cutPieces } from '@core/predictionEvidence';
 import { transaction } from '@config/transaction';
 
 /** Type guard for validating untrusted status input. */
@@ -176,10 +178,12 @@ export function create(data: CreatePredictionReviewData): number {
       reviewed_end_time,
       review_notes,
       model_version,
+      predicted_parts_json,
+      split_from_review_id,
       created_at,
       updated_at,
       reviewed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     data.fileId,
     data.predictedSongName,
@@ -192,6 +196,8 @@ export function create(data: CreatePredictionReviewData): number {
     data.reviewedEndTime ?? null,
     data.reviewNotes ?? null,
     data.modelVersion ?? null,
+    data.predictedParts ? JSON.stringify(data.predictedParts) : null,
+    data.splitFromReviewId ?? null,
     now,
     now,
     reviewedAt
@@ -219,10 +225,12 @@ export function createMany(items: CreatePredictionReviewData[]): number[] {
       reviewed_end_time,
       review_notes,
       model_version,
+      predicted_parts_json,
+      split_from_review_id,
       created_at,
       updated_at,
       reviewed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const tx = transaction(db, (rows: CreatePredictionReviewData[]) => {
@@ -242,6 +250,8 @@ export function createMany(items: CreatePredictionReviewData[]): number[] {
         item.reviewedEndTime ?? null,
         item.reviewNotes ?? null,
         item.modelVersion ?? null,
+        item.predictedParts ? JSON.stringify(item.predictedParts) : null,
+        item.splitFromReviewId ?? null,
         now,
         now,
         reviewedAt
@@ -699,6 +709,68 @@ export function promoteToAnnotation(id: number): PromotePredictionReviewResult {
       annotationId,
       created
     } satisfies PromotePredictionReviewResult;
+  });
+
+  return tx();
+}
+
+/**
+ * Accept a prediction with one stretch of it cut out: the review keeps the part
+ * before the cut, a new review holds the part after it, and both are promoted.
+ *
+ * This is how a reviewer answers a flagged stretch that turned out to be
+ * noodling between two sessions of the song. The source review becomes
+ * `edited`, not `invalid`: the song was right, and the confidence fit reads
+ * `invalid` as the model being wrong. The second review records the source in
+ * `split_from_review_id` and carries no confidence, so the fit does not count
+ * one prediction twice. A cut touching either end leaves one piece, which is
+ * promoted alone.
+ */
+export function promoteWithCut(id: number, cutStart: number, cutEnd: number): PromoteWithCutResult {
+  const db = getDb();
+  const existing = findById(id);
+  if (!existing) {
+    throw new Error('Prediction review not found.');
+  }
+  if (existing.promoted_annotation_id !== null) {
+    throw new Error('This review is already promoted.');
+  }
+  const { songName, startTime, endTime } = resolveReviewFields(existing);
+  if (!(cutStart < cutEnd) || cutEnd <= startTime || cutStart >= endTime) {
+    throw new Error('The cut must lie inside the review.');
+  }
+
+  const pieces = cutPieces(startTime, endTime, cutStart, cutEnd);
+  if (pieces.length === 0) {
+    throw new Error('Nothing is left to promote once the cut is removed.');
+  }
+
+  const tx = transaction(db, () => {
+    const [first, second] = pieces;
+    update(existing.id, {
+      status: 'edited',
+      reviewedSongName: songName,
+      reviewedStartTime: first.startTime,
+      reviewedEndTime: first.endTime
+    });
+    const promotions = [promoteToAnnotation(existing.id)];
+    if (second) {
+      const secondId = create({
+        fileId: existing.file_id,
+        predictedSongName: existing.predicted_song_name,
+        predictedStartTime: existing.predicted_start_time,
+        predictedEndTime: existing.predicted_end_time,
+        predictedConfidence: null,
+        status: 'edited',
+        reviewedSongName: songName,
+        reviewedStartTime: second.startTime,
+        reviewedEndTime: second.endTime,
+        modelVersion: existing.model_version,
+        splitFromReviewId: existing.id
+      });
+      promotions.push(promoteToAnnotation(secondId));
+    }
+    return { promotions } satisfies PromoteWithCutResult;
   });
 
   return tx();

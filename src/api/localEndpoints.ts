@@ -12,6 +12,8 @@ import type {
   RebuildPredictionModelRequest,
   RebuildPredictionModelResponse,
   RebuildStatusResponse,
+  LibraryModelSummary,
+  PromoteWithCutResponse,
   PromotePredictionReviewResponse,
   PromoteReviewedPredictionReviewsResponse,
   SongPlayHistoryResponse,
@@ -273,6 +275,21 @@ export const predictionReviewsApi = {
     return response.json();
   },
 
+  promoteWithCut: async (
+    id: number,
+    cut: { cutStart: number; cutEnd: number }
+  ): Promise<PromoteWithCutResponse> => {
+    const response = await fetch(`/api/prediction-reviews/${id}/promote-with-cut`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cut)
+    });
+    if (!response.ok) {
+      return throwApiError(response, 'Failed to promote prediction review');
+    }
+    return response.json();
+  },
+
   promoteReviewed: async (params: {
     fileId?: number;
     limit?: number;
@@ -330,6 +347,14 @@ export const predictionReviewsApi = {
     const response = await fetch('/api/prediction-reviews/rebuild-status');
     if (!response.ok) {
       return throwApiError(response, 'Failed to get rebuild status');
+    }
+    return response.json();
+  },
+
+  listModels: async (): Promise<LibraryModelSummary[]> => {
+    const response = await fetch('/api/prediction-reviews/models');
+    if (!response.ok) {
+      return throwApiError(response, 'Failed to list models');
     }
     return response.json();
   }

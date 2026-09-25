@@ -1,9 +1,9 @@
 /**
  * Turning a recording into labeled feature windows.
  *
- * One window is `windowSec` of playing summarized as `FEATURE_NAMES.length`
- * numbers; windows step forward by `stepSec` and take the label of whatever
- * is sounding at their center.
+ * One window is `windowSec` of playing summarized as the numbers
+ * `featureNamesFor(config)` names; windows step forward by `stepSec` and take
+ * the label of whatever is sounding at their center.
  */
 import { clamp, roundTo } from '@core/cli/args';
 import {
@@ -59,13 +59,32 @@ function onsetRegularity(density: number[]): number {
   return best;
 }
 
+/** How a window is summarized. A setting missing from a saved model takes the value that matches how models were built before it was added. */
+export interface WindowFeatureOptions {
+  registerDivide: number;
+  chordIoiFeatures: boolean;
+  /** 0 for no center features. */
+  centerWindowSec: number;
+}
+
+export function windowFeatureOptions(
+  config: Pick<TrainConfig, 'registerDivide' | 'chordIoiFeatures' | 'centerWindowSec'>
+): WindowFeatureOptions {
+  return {
+    registerDivide: config.registerDivide ?? 60,
+    chordIoiFeatures: config.chordIoiFeatures ?? false,
+    centerWindowSec: config.centerWindowSec ?? 0
+  };
+}
+
 export function extractWindowFeatures(
   notes: NoteEvent[],
   windowStart: number,
   windowSec: number,
   noteCursorHint: number,
-  registerDivide: number
+  options: WindowFeatureOptions
 ): { features: number[]; nextCursorHint: number } {
+  const { registerDivide, chordIoiFeatures, centerWindowSec } = options;
   const windowEnd = windowStart + windowSec;
   const lowPitchClassDurations = new Array<number>(CHROMA_SIZE).fill(0);
   const highPitchClassDurations = new Array<number>(CHROMA_SIZE).fill(0);
@@ -73,6 +92,11 @@ export function extractWindowFeatures(
   const polyBins = Math.max(1, Math.ceil(windowSec / POLYPHONY_BIN_SEC));
   const binActiveDur = new Array<number>(polyBins).fill(0);
   const binHasNote = new Array<boolean>(polyBins).fill(false);
+
+  const chordBins = 7;
+  const chordBinSec = windowSec / chordBins;
+  const chordPitchClasses = Array.from({ length: chordBins }, () => new Set<number>());
+  const ioiCounts = new Array<number>(10).fill(0);
 
   const regBins = Math.max(1, Math.ceil(windowSec / REGULARITY_BIN_SEC));
   const regDensity = new Array<number>(regBins).fill(0);
@@ -92,6 +116,7 @@ export function extractWindowFeatures(
   let activeDuration = 0;
   let minPitch = 127;
   let maxPitch = 0;
+  let previousOnsetSec = -1;
 
   for (let i = cursor; i < notes.length; i++) {
     const note = notes[i];
@@ -131,9 +156,34 @@ export function extractWindowFeatures(
         binActiveDur[b] += ov;
         if (ov > 0) binHasNote[b] = true;
       }
+
+      if (chordIoiFeatures) {
+        const chordStart = Math.max(0, Math.floor((overlapStart - windowStart) / chordBinSec));
+        const chordEnd = Math.min(
+          chordBins - 1,
+          Math.floor((overlapEnd - windowStart - 1e-9) / chordBinSec)
+        );
+        for (let b = chordStart; b <= chordEnd; b++) {
+          chordPitchClasses[b].add(pitchClass);
+        }
+      }
     }
 
     if (note.startSec >= windowStart && note.startSec < windowEnd) {
+      if (chordIoiFeatures && previousOnsetSec >= 0) {
+        const gap = note.startSec - previousOnsetSec;
+        const ioiBin = gap < 0.08 ? 0
+          : gap < 0.15 ? 1
+            : gap < 0.25 ? 2
+              : gap < 0.4 ? 3
+                : gap < 0.65 ? 4
+                  : gap < 1 ? 5
+                    : gap < 1.5 ? 6
+                      : gap < 2.5 ? 7
+                        : gap < 4 ? 8 : 9;
+        ioiCounts[ioiBin]++;
+      }
+      previousOnsetSec = note.startSec;
       onsetCount++;
       onsetPitchSum += note.pitch;
       onsetPitchSqSum += note.pitch * note.pitch;
@@ -203,26 +253,61 @@ export function extractWindowFeatures(
 
   const regularity = onsetRegularity(regDensity);
 
-  return {
-    features: [
-      ...normalizedLow,
-      ...normalizedHigh,
-      lowRegisterRatio,
-      onsetDensity,
-      meanPitch,
-      pitchStd,
-      meanVelocity,
-      meanDuration,
-      meanPolyphony,
-      velocityStd,
-      durationStd,
-      polyphonyStd,
-      silenceRatio,
-      pitchSpan,
-      regularity
-    ],
-    nextCursorHint: cursor
-  };
+  const features = [
+    ...normalizedLow,
+    ...normalizedHigh,
+    lowRegisterRatio,
+    onsetDensity,
+    meanPitch,
+    pitchStd,
+    meanVelocity,
+    meanDuration,
+    meanPolyphony,
+    velocityStd,
+    durationStd,
+    polyphonyStd,
+    silenceRatio,
+    pitchSpan,
+    regularity
+  ];
+  if (chordIoiFeatures) {
+    features.push(...chordIntervalProfile(chordPitchClasses), ...normalizeToSum(ioiCounts));
+  }
+  if (centerWindowSec > 0) {
+    if (centerWindowSec >= windowSec) {
+      throw new Error(`centerWindowSec (${centerWindowSec}) must be shorter than windowSec (${windowSec}).`);
+    }
+    // The center window starts later than this one, so this window's cursor
+    // hint is still a valid place to start looking.
+    const center = extractWindowFeatures(
+      notes, windowStart + (windowSec - centerWindowSec) / 2, centerWindowSec, noteCursorHint,
+      { registerDivide, chordIoiFeatures: false, centerWindowSec: 0 }
+    );
+    features.push(...center.features);
+  }
+
+  return { features, nextCursorHint: cursor };
+}
+
+/** Pairwise interval classes (1–6 semitones) among each bin's sounding pitch classes, normalized. */
+function chordIntervalProfile(chordPitchClasses: Set<number>[]): number[] {
+  const counts = new Array<number>(6).fill(0);
+  for (const pitchClasses of chordPitchClasses) {
+    const sorted = [...pitchClasses].sort((a, b) => a - b);
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        const d = Math.abs(sorted[i] - sorted[j]) % CHROMA_SIZE;
+        const interval = Math.min(d, CHROMA_SIZE - d);
+        if (interval > 0) counts[interval - 1]++;
+      }
+    }
+  }
+  return normalizeToSum(counts);
+}
+
+function normalizeToSum(values: number[]): number[] {
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return total > 0 ? values.map((value) => value / total) : values;
 }
 
 function getLabelAtTime(
@@ -249,7 +334,7 @@ function getLabelAtTime(
 export function buildSamplesForFile(
   file: AnnotatedMidiFile,
   notes: NoteEvent[],
-  config: Pick<TrainConfig, 'windowSec' | 'stepSec' | 'registerDivide'>
+  config: Pick<TrainConfig, 'windowSec' | 'stepSec' | 'registerDivide' | 'chordIoiFeatures' | 'centerWindowSec'>
 ): WindowSample[] {
   const noteMax = notes.length > 0 ? notes[notes.length - 1].endSec : 0;
   const annotationMax = file.annotations.length > 0
@@ -268,7 +353,7 @@ export function buildSamplesForFile(
       startTime,
       config.windowSec,
       noteCursorHint,
-      config.registerDivide ?? 60
+      windowFeatureOptions(config)
     );
     noteCursorHint = nextCursorHint;
 
@@ -291,14 +376,17 @@ export function buildSamplesForFile(
 }
 
 
-export function buildUnlabeledWindows(notes: NoteEvent[], config: Pick<TrainConfig, 'windowSec' | 'stepSec' | 'registerDivide'>): WindowSample[] {
+export function buildUnlabeledWindows(notes: NoteEvent[], config: Pick<TrainConfig, 'windowSec' | 'stepSec' | 'registerDivide' | 'chordIoiFeatures' | 'centerWindowSec'>): WindowSample[] {
   const noteMax = notes.length > 0 ? notes[notes.length - 1].endSec : 0;
   const starts = buildWindowStarts(noteMax, config.windowSec, config.stepSec);
 
   const windows: WindowSample[] = [];
   let noteCursorHint = 0;
   for (const startTime of starts) {
-    const featureInfo = extractWindowFeatures(notes, startTime, config.windowSec, noteCursorHint, config.registerDivide ?? 60);
+    const featureInfo = extractWindowFeatures(
+      notes, startTime, config.windowSec, noteCursorHint,
+      windowFeatureOptions(config)
+    );
     noteCursorHint = featureInfo.nextCursorHint;
     windows.push({
       fileId: -1,

@@ -32,9 +32,11 @@ import { normalizeVector } from './segmentation/vectors';
 import {
   buildSamplesForFile,
   buildUnlabeledWindows,
-  extractWindowFeatures
+  extractWindowFeatures,
+  windowFeatureOptions
 } from './segmentation/features';
 import { fitModelFromSamples } from './segmentation/model';
+import { resolveTrainConfig } from './segmentation/config';
 import { computeLabelScores, decodeWindowScores } from './segmentation/decode';
 
 export * from './segmentation/types';
@@ -52,16 +54,19 @@ export function trainModel(
   const samplesByFile = new Map<number, WindowSample[]>();
   const allSamples: WindowSample[] = [];
   let annotationsUsed = 0;
+  // Extract with the same resolved config the fit uses, so a default decides
+  // the features and the saved feature list together.
+  const resolved = resolveTrainConfig(config);
 
   for (const file of files) {
     const notes = extractNotesFromMidi(file.midiPath);
-    const windows = buildSamplesForFile(file, notes, config);
+    const windows = buildSamplesForFile(file, notes, resolved);
     samplesByFile.set(file.fileId, windows);
     allSamples.push(...windows);
     annotationsUsed += file.annotations.length;
   }
 
-  const model = fitModelFromSamples(allSamples, config, {
+  const model = fitModelFromSamples(allSamples, resolved, {
     filesUsed: files.length,
     annotationsUsed
   });
@@ -75,10 +80,11 @@ export function evaluateLeaveOneOut(
   samplesByFile?: Map<number, WindowSample[]>
 ): LeaveOneOutEvaluation {
   const windowsByFile = samplesByFile || new Map<number, WindowSample[]>();
+  const resolved = resolveTrainConfig(config);
   if (!samplesByFile) {
     for (const file of files) {
       const notes = extractNotesFromMidi(file.midiPath);
-      windowsByFile.set(file.fileId, buildSamplesForFile(file, notes, config));
+      windowsByFile.set(file.fileId, buildSamplesForFile(file, notes, resolved));
     }
   }
 
@@ -97,7 +103,7 @@ export function evaluateLeaveOneOut(
       continue;
     }
 
-    const foldModel = fitModelFromSamples(trainSamples, config);
+    const foldModel = fitModelFromSamples(trainSamples, resolved);
     let totalCorrect = 0;
     let songTotal = 0;
     let songCorrect = 0;
@@ -250,7 +256,7 @@ export function suggestSongsForRange(
       start,
       windowSec,
       noteCursor,
-      model.config.registerDivide ?? 60
+      windowFeatureOptions(model.config)
     );
     noteCursor = featureInfo.nextCursorHint;
     const normalized = normalizeVector(featureInfo.features, model.featureMeans, model.featureStds);

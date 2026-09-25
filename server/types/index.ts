@@ -14,6 +14,7 @@ export type {
   SyncProgress
 } from '@core/types';
 
+import type { EvidencePart } from '@core/predictionEvidence';
 import type { PredictionReview, PredictionReviewStatus } from '@core/types';
 
 /** Payload used when creating a new synced file row. */
@@ -165,6 +166,9 @@ export interface CreatePredictionReviewData {
   reviewedEndTime?: number | null;
   reviewNotes?: string | null;
   modelVersion?: string | null;
+  /** Evidence parts over the predicted bounds; stored as `predicted_parts_json`. */
+  predictedParts?: EvidencePart[] | null;
+  splitFromReviewId?: number | null;
 }
 
 /** Patch payload for updating review decision fields. */
@@ -191,6 +195,11 @@ export interface PromotePredictionReviewResult {
   review: PredictionReview;
   annotationId: number;
   created: boolean;
+}
+
+/** Result of promoting a review with a stretch cut out: one or two annotations. */
+export interface PromoteWithCutResult {
+  promotions: PromotePredictionReviewResult[];
 }
 
 /** Result returned when merging multiple review rows into one. */

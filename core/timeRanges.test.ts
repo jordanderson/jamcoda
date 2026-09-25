@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clipParts,
   countModifiedSegments,
   normalizeRanges,
   removeExcludedRangesFromSegments,
@@ -159,6 +160,33 @@ describe('splitSegmentsAtTimes', () => {
     expect(split).toEqual([
       segment(0, 25, 'Song A'),
       segment(30, 60, 'Song A')
+    ]);
+  });
+});
+
+describe('clipParts', () => {
+  const parts = [
+    { startTime: 0, endTime: 10, basis: 'anchor' },
+    { startTime: 10, endTime: 20, basis: 'bridge' },
+    { startTime: 20, endTime: 30, basis: 'anchor' }
+  ];
+
+  it('drops parts outside the range, clamps the rest, and stretches the ends to the edges', () => {
+    expect(clipParts(parts, 12, 25)).toEqual([
+      { startTime: 12, endTime: 20, basis: 'bridge' },
+      { startTime: 20, endTime: 25, basis: 'anchor' }
+    ]);
+    expect(clipParts(parts, -2, 31)[0].startTime).toBe(-2);
+    const stretched = clipParts(parts, -2, 31);
+    expect(stretched[stretched.length - 1].endTime).toBe(31);
+  });
+
+  it('is applied to every piece an exclusion leaves', () => {
+    const segment = { songName: 'A', startTime: 0, endTime: 30, durationSec: 30, confidence: 0.5, parts };
+    const pieces = removeExcludedRangesFromSegments([segment], [{ startTime: 8, endTime: 12 }], 0);
+    expect(pieces.map((piece) => piece.parts)).toEqual([
+      [{ startTime: 0, endTime: 8, basis: 'anchor' }],
+      [{ startTime: 12, endTime: 20, basis: 'bridge' }, { startTime: 20, endTime: 30, basis: 'anchor' }]
     ]);
   });
 });

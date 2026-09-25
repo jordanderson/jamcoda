@@ -1,6 +1,9 @@
 import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
-import { bootstrapF1DeltaPoints, closeTransitions, compareReports, f1OverFiles } from './evalComparison';
+import {
+  bootstrapF1DeltaPoints, closeTransitions, compareReports, compareSessionTotals, f1OverFiles
+} from './evalComparison';
+import { scoreSessions } from './sessionEvaluation';
 import type { BoundaryMatch } from './boundaryEvaluation';
 import type { ComparableFileRow, ComparableReport } from './evalComparison';
 
@@ -106,5 +109,32 @@ describe('paired evaluation comparison', () => {
     assert.notDeepEqual(run(lumpy, 2).ci95, first.ci95, 'a different seed must resample differently');
     assert.ok(width(first) > 0,
       'a gain resting on one file must carry a non-zero interval');
+  });
+});
+
+describe('session totals comparison', () => {
+  const segment = (songName: string, startTime: number, endTime: number) =>
+    ({ songName, startTime, endTime, durationSec: endTime - startTime, confidence: 0.5 });
+  const sessions = [
+    { songName: 'A', startTime: 0, endTime: 100 },
+    { songName: 'A', startTime: 110, endTime: 200 }
+  ];
+
+  it('reports each total for both runs, with an interval around the difference', () => {
+    const baseline = [1, 2, 3].map((id) => scoreSessions(id, sessions, [segment('A', 0, 100), segment('A', 110, 200)], 200));
+    const variant = [1, 2, 3].map((id) => scoreSessions(id, sessions, [segment('A', 0, 200)], 200));
+    const result = compareSessionTotals(baseline, variant, { resamples: 200, seed: 3 });
+
+    assert.deepEqual(
+      [result.gapsBridged.baseline, result.gapsBridged.variant, result.gapsBridged.delta],
+      [0, 3, 3]
+    );
+    assert.equal(result.gapFillSec.delta, 30);
+    assert.deepEqual(result.gapsBridged.ci95, [3, 3], 'every file changed alike, so resampling cannot vary it');
+    assert.equal(result.reviewEdits.delta, 3);
+  });
+
+  it('is left out when a report predates session scoring', () => {
+    assert.equal(compareReports(report(), report()).sessions, null);
   });
 });

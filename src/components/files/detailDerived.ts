@@ -8,6 +8,8 @@
 import type { NoteSequence } from '@core/midi/noteSequence'
 import { buildPedalIntervals, heldByPedal } from '@core/midi/noteSequence'
 import { resolveReviewFields } from '@core/predictionReview'
+import { partsForReview } from '@core/predictionEvidence'
+import { clipParts } from '@core/timeRanges'
 import type { BoundaryNote } from '@core/boundaries'
 import type { PredictionReview } from '@/api/localTypes'
 import type { RollBookmark, RollPrediction, RollSkip } from '@/components/midi/pianoRollTypes'
@@ -76,7 +78,10 @@ export function buildDeviceMarkers(
 /**
  * Reviews as drawable roll segments, clamped to the sequence's own end.
  *
- * `invalid` rows are rejected predictions and are not drawn.
+ * `invalid` rows are rejected predictions and are not drawn. A review still
+ * awaiting a verdict carries its evidence parts, fitted to the bounds it is
+ * drawn with; a reviewed one does not, since the reviewer has already checked
+ * the places the parts would flag.
  */
 export function buildPredictionSegments(
   reviews: PredictionReview[],
@@ -88,12 +93,16 @@ export function buildPredictionSegments(
       const { songName, startTime, endTime } = resolveReviewFields(review)
       if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return null
 
+      const drawnStart = Math.max(0, startTime)
+      const drawnEnd = timelineEndLimit === undefined ? endTime : Math.min(timelineEndLimit, endTime)
+      const parts = partsForReview(review)
       return {
         id: review.id,
         songName,
-        startTime: Math.max(0, startTime),
-        endTime: timelineEndLimit === undefined ? endTime : Math.min(timelineEndLimit, endTime),
-        confidence: review.predicted_confidence ?? null
+        startTime: drawnStart,
+        endTime: drawnEnd,
+        confidence: review.predicted_confidence ?? null,
+        ...(parts.length > 0 ? { parts: clipParts(parts, drawnStart, drawnEnd) } : {})
       }
     })
     .filter((segment): segment is RollPrediction => (

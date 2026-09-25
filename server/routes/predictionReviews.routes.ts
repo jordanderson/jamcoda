@@ -10,6 +10,7 @@ import {
   runPredictionImport
 } from '../services/predictionImport';
 import { getRebuildStatus } from '../services/rebuildStatus';
+import { listLibraryModels, resolveLibraryModel } from '../services/libraryModels';
 import { libraryModelPath, dbPathFromEnv } from '@config/library';
 import {
   DECODE_ONLY_CONFIG_KEYS,
@@ -351,9 +352,16 @@ router.post('/run', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'fileId is required' });
     }
 
-    const modelPath = typeof req.body.modelPath === 'string' && req.body.modelPath.trim().length > 0
-      ? path.resolve(req.body.modelPath.trim())
-      : libraryModelPath();
+    // `modelName` picks a model from the library's `ml/` folder by file name,
+    // which is all the Prediction Lab sends.
+    const modelName = typeof req.body.modelName === 'string' && req.body.modelName.trim().length > 0
+      ? req.body.modelName.trim()
+      : undefined;
+    const modelPath = modelName
+      ? resolveLibraryModel(modelName)
+      : typeof req.body.modelPath === 'string' && req.body.modelPath.trim().length > 0
+        ? path.resolve(req.body.modelPath.trim())
+        : libraryModelPath();
     if (!existsSync(modelPath)) {
       return res.status(400).json({
         error: `Model file does not exist: ${modelPath}`
@@ -380,7 +388,8 @@ router.post('/run', async (req: Request, res: Response) => {
       clearUnpromoted,
       minSkipSplitSec,
       dryRun,
-      decoderOverrides: parseDecoderOverrides(req.body.decoderOverrides)
+      decoderOverrides: parseDecoderOverrides(req.body.decoderOverrides),
+      holdOut: parseOptionalBoolean(req.body.holdOut) ?? false
     });
 
     res.json({
@@ -400,6 +409,8 @@ router.post('/run', async (req: Request, res: Response) => {
       skipCount: result.skips.length,
       dryRun: result.dryRun,
       decodeConfig: result.decodeConfig,
+      modelName: path.basename(modelPath),
+      heldOut: result.heldOut,
       // Only a preview needs the segments themselves; a committed run has
       // already written them and the client refetches the review rows.
       segments: result.dryRun ? result.segments : undefined,
@@ -466,7 +477,9 @@ router.post('/rebuild-model', route('rebuild model', async (req: Request, res: R
     linkTailSec: optionalNumber(req.body.linkTailSec, 0),
     linkRescueRank: optionalNumber(req.body.linkRescueRank, -1),
     dropFlankedRunSec: optionalNumber(req.body.dropFlankedRunSec, 0),
-    noneFromCompleteFilesOnly: parseOptionalBoolean(req.body.noneFromCompleteFilesOnly)
+    noneFromCompleteFilesOnly: parseOptionalBoolean(req.body.noneFromCompleteFilesOnly),
+    chordIoiFeatures: parseOptionalBoolean(req.body.chordIoiFeatures),
+    centerWindowSec: optionalNumber(req.body.centerWindowSec, 0)
   };
   const includeEvaluation = parseOptionalBoolean(req.body.includeEvaluation) ?? false;
   const reRunUnsure = parseOptionalBoolean(req.body.reRunUnsure) ?? false;
@@ -558,6 +571,10 @@ router.get('/rebuild-status', route('get rebuild status', async (_req: Request, 
   res.json(getRebuildStatus(libraryModelPath()));
 }));
 
+router.get('/models', route('list library models', async (_req: Request, res: Response) => {
+  res.json(listLibraryModels());
+}));
+
 router.get('/:id', route('get prediction review', async (req: Request, res: Response) => {
   const id = parseOptionalInt(req.params.id);
   if (!id) {
@@ -620,6 +637,40 @@ router.put('/:id', route('update prediction review', async (req: Request, res: R
   const review = PredictionReviewModel.findById(id);
   res.json(review);
 }));
+
+/**
+ * Promote a review with one stretch cut out, leaving one or two annotations.
+ * See `PredictionReviewModel.promoteWithCut`.
+ */
+router.post('/:id/promote-with-cut', async (req: Request, res: Response) => {
+  try {
+    const id = parseOptionalInt(req.params.id);
+    const cutStart = parseOptionalNumber(req.body.cutStart);
+    const cutEnd = parseOptionalNumber(req.body.cutEnd);
+    if (!id) {
+      return res.status(400).json({ error: 'Invalid review id' });
+    }
+    if (cutStart === undefined || cutEnd === undefined) {
+      return res.status(400).json({ error: 'cutStart and cutEnd are required' });
+    }
+
+    res.json(PredictionReviewModel.promoteWithCut(id, cutStart, cutEnd));
+  } catch (error) {
+    const message = errorMessage(error, 'Failed to promote prediction review');
+    if (message.includes('not found')) {
+      return res.status(404).json({ error: message });
+    }
+    if (
+      message.includes('already promoted') || message.includes('inside the review')
+      || message.includes('Nothing is left')
+    ) {
+      return res.status(400).json({ error: message });
+    }
+
+    console.error('Error promoting prediction review with a cut:', error);
+    res.status(500).json({ error: 'Failed to promote prediction review' });
+  }
+});
 
 router.post('/:id/promote', async (req: Request, res: Response) => {
   try {

@@ -57,10 +57,21 @@ export type ResolvedTrainConfig = Required<
     | 'scoreNeighbors' | 'decoder' | 'anchorMargin' | 'minAnchorRun'
     | 'fillMinMargin' | 'fillTopK' | 'linkConfidence' | 'temperature'
     | 'viterbiChangePenalty' | 'kernelScale' | 'registerDivide'
-    | 'handMaskAugmentFraction' | 'noneFromCompleteFilesOnly'
+    | 'handMaskAugmentFraction' | 'noneFromCompleteFilesOnly' | 'chordIoiFeatures' | 'centerWindowSec'
     | 'linkMaxSilenceRatio' | 'linkPolicy' | 'dropFlankedRunSec'
   >
 > & TrainConfig;
+
+/**
+ * The config to refit a saved model from, with every setting that decides
+ * which features are extracted pinned to how that model was built: a model
+ * saved without `chordIoiFeatures` extracts the base features. Refit from this,
+ * never from the raw saved config, or a later default would retrain an old
+ * model with features it never had.
+ */
+export function refitConfigOf(config: TrainConfig): TrainConfig {
+  return { ...config, chordIoiFeatures: config.chordIoiFeatures ?? false };
+}
 
 /**
  * Resolve each optional setting to the value that the fit and the decoder
@@ -76,6 +87,8 @@ export function resolveTrainConfig(config: TrainConfig): ResolvedTrainConfig {
     noneFromCompleteFilesOnly: config.noneFromCompleteFilesOnly ?? true,
     linkMaxSilenceRatio: config.linkMaxSilenceRatio ?? 0.7,
     registerDivide: config.registerDivide ?? 60,
+    chordIoiFeatures: config.chordIoiFeatures ?? true,
+    centerWindowSec: config.centerWindowSec ?? 0,
     handMaskAugmentFraction: config.handMaskAugmentFraction ?? 0,
     scoreMode: config.scoreMode ?? 'min',
     scoreNeighbors: config.scoreNeighbors ?? 1,

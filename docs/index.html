@@ -25,6 +25,7 @@
         --s-c: #15803d;
         --s-d: #7c3aed;
         --warn: #dc2626;
+        --listen: #d97706;
       }
 
       * {
@@ -272,6 +273,11 @@
       .an {
         font-size: 11.5px;
         fill: var(--warn);
+        font-weight: 500;
+      }
+      .an-listen {
+        font-size: 11.5px;
+        fill: var(--listen);
         font-weight: 500;
       }
       .bd {
@@ -598,7 +604,7 @@
               </svg>
               JamCoda
             </a>
-            How predictions work · v2.13
+            How predictions work · v2.14
           </p>
           <nav class="bar-links">
             <a
@@ -643,8 +649,11 @@
             <p>
               JamCoda compares short stretches of MIDI with examples from your
               annotations, finds the phrases it recognizes clearly, and joins
-              them into takes. Each prediction you confirm or correct becomes an
-              annotation, and the next model rebuild learns from it.
+              them into the stretches you spent on each song. Where it had to
+              fill in a passage without recognizing the song clearly, it marks
+              the spot, so you know where to listen before accepting it. Each
+              prediction you confirm or correct becomes an annotation, and the
+              next model rebuild learns from it.
             </p>
           </div>
         </section>
@@ -653,7 +662,7 @@
             <svg
               viewBox="0 0 1020 174"
               role="img"
-              aria-label="A twenty-minute practice recording. The top row is the human annotation of seven takes across four pieces; the bottom row is the model's output. They agree closely except in two places: the model picks up O Little Town of Bethlehem only for its last 19 seconds, and at the end three separate takes of Winter Wonderland are predicted as one continuous segment."
+              aria-label="A twenty-minute practice recording. The top row is the player's annotation: seven stretches across four pieces, ending with three passes of Winter Wonderland a pause apart. The bottom row is the model's output, predicted without this recording in its training. It finds all four songs and carries Winter Wonderland across the pauses as one stretch. It catches only the last 17 seconds of O Little Town of Bethlehem and stops O Come Emmanuel about two and a half minutes early. Two passages are hatched as worth a listen: the handover from Winter Wonderland to White Christmas, and a faint passage inside the later Winter Wonderland."
             >
               <text x="120" y="30" class="sn" style="fill: var(--s-a)">
                 Winter Wonderland
@@ -805,6 +814,17 @@
                 fill="var(--s-a)"
               />
 
+              <defs>
+                <pattern
+                  id="listen-hatch"
+                  width="6"
+                  height="6"
+                  patternUnits="userSpaceOnUse"
+                  patternTransform="rotate(45)"
+                >
+                  <rect width="2.2" height="6" fill="#ffffff" fill-opacity="0.75" />
+                </pattern>
+              </defs>
               <text x="106" y="109" text-anchor="end" class="rl-em">model</text>
               <rect
                 x="118.4"
@@ -815,73 +835,109 @@
                 fill="var(--s-a)"
               />
               <rect
-                x="356.0"
+                x="356.1"
                 y="92"
-                width="107.3"
+                width="108.0"
                 height="26"
                 rx="2"
                 fill="var(--s-b)"
               />
               <rect
-                x="531.5"
+                x="533.2"
                 y="92"
-                width="13.8"
+                width="12.3"
                 height="26"
                 rx="2"
                 fill="var(--s-c)"
               />
               <rect
-                x="553.3"
+                x="553.6"
                 y="92"
-                width="199.5"
+                width="91.9"
                 height="26"
                 rx="2"
                 fill="var(--s-d)"
               />
               <rect
-                x="752.8"
+                x="752.3"
                 y="92"
-                width="232.9"
+                width="233.7"
                 height="26"
                 rx="2"
                 fill="var(--s-a)"
               />
-
+              <rect
+                x="348.0"
+                y="92"
+                width="8.0"
+                height="26"
+                fill="url(#listen-hatch)"
+              />
+              <rect
+                x="348.0"
+                y="115"
+                width="8.0"
+                height="3"
+                fill="var(--listen)"
+              />
+              <rect
+                x="778.3"
+                y="92"
+                width="35.6"
+                height="26"
+                fill="url(#listen-hatch)"
+              />
+              <rect
+                x="778.3"
+                y="115"
+                width="35.6"
+                height="3"
+                fill="var(--listen)"
+              />
               <line
-                x1="751.5"
+                x1="645.5"
                 y1="130"
-                x2="986"
+                x2="750.7"
                 y2="130"
                 stroke="var(--warn)"
                 stroke-width="1.5"
               />
               <line
-                x1="751.5"
+                x1="645.5"
                 y1="124"
-                x2="751.5"
+                x2="645.5"
                 y2="130"
                 stroke="var(--warn)"
                 stroke-width="1.5"
               />
               <line
-                x1="986"
+                x1="750.7"
                 y1="124"
-                x2="986"
+                x2="750.7"
                 y2="130"
                 stroke="var(--warn)"
                 stroke-width="1.5"
               />
-              <text x="868.7" y="145" text-anchor="middle" class="an">
-                three takes read as one
+              <text x="698.1" y="145" text-anchor="middle" class="an">
+                stops early
+              </text>
+              <text x="796.0" y="145" text-anchor="middle" class="an-listen">
+                worth a listen
               </text>
             </svg>
           </div>
           <figcaption>
-            A recording from December 17, 2025: four pieces over seven takes.
-            The model finds all four songs, but catches only the last 19
-            seconds of <em>O Little Town of Bethlehem</em> and merges the last
-            three takes of <em>Winter Wonderland</em>. Recognizing the piece is
-            often easier than finding where each attempt starts and ends.
+            A recording from December 17, 2025, predicted by v2.14 without
+            this recording in its training. The model finds all four songs, and
+            joins the last three passes of <em>Winter Wonderland</em>, one and
+            two seconds apart, into one stretch of work on the song, just as the
+            player annotated them. It catches only the
+            last 17 seconds of <em>O Little Town of Bethlehem</em> and stops
+            <em>O Come Emmanuel</em> early: slow hymns give a six-second window
+            few notes to go on. Hatching marks the two passages it filled in
+            without recognizing the song clearly. One is the handover to
+            <em>White Christmas</em>. The other is inside a correct take, and
+            a quick listen confirms it.
           </figcaption>
         </figure>
         <section class="stage">
@@ -896,6 +952,9 @@
               forward one second for each new window. That gives it some musical
               context without blurring every change of song. Six seconds worked
               best in experiments with windows from four to eight seconds.
+              Shorter windows notice sooner that the playing has moved off a
+              song, but they lose slow, sparse pieces, which give a short window
+              too few notes to recognize.
             </p>
             <p>
               Each window gets a label for its center. A window covering 0–6
@@ -1147,17 +1206,21 @@
           </div>
           <div class="prose">
             <p>
-              Each window becomes 37 numbers. Most describe which pitch classes
+              Each window becomes 53 numbers. Most describe which pitch classes
               are sounding: how much C, C♯, D, and so on. They are counted
               separately below middle C and from middle C upward, so bass and
               treble patterns don’t get mixed together. This approximates the
               separation between accompaniment and melody.
             </p>
             <p>
-              Longer notes and louder notes receive more weight. The remaining
-              numbers describe register, density, dynamics, note lengths,
-              silence, and the regularity of note starts. The model retains
-              these summaries, rather than the exact sequence of notes.
+              Longer notes and louder notes receive more weight. Other numbers
+              describe register, density, dynamics, note lengths, silence, and
+              the regularity of note starts. The last two groups describe the
+              shape of the chords, from the intervals between notes sounding
+              together, and the rhythmic texture, from how the gaps between
+              note starts are spread. Two passages can use the same pitch
+              classes and still differ in both. The model retains these
+              summaries, rather than the exact sequence of notes.
             </p>
             <p>
               The sustain pedal matters. When the musician releases a key with
@@ -1170,7 +1233,7 @@
           <div class="tablewrap">
             <table>
               <caption class="eyebrow">
-                The 37 features
+                The 53 features
               </caption>
               <thead>
                 <tr>
@@ -1226,6 +1289,19 @@
                   <td class="n">2</td>
                   <td>Gaps in the playing and regularity of note starts</td>
                 </tr>
+                <tr>
+                  <td>Chord intervals</td>
+                  <td class="n">6</td>
+                  <td>Which intervals occur between notes sounding together</td>
+                </tr>
+                <tr>
+                  <td>Gaps between note starts</td>
+                  <td class="n">10</td>
+                  <td>
+                    How note starts are spaced, from under 80 milliseconds to
+                    over four seconds
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -1234,7 +1310,8 @@
               An explicit tempo estimate was tried and removed. Slow practice
               and a faster performance of the same piece could look too
               different. Rhythm still enters through note density, duration and
-              regularity.
+              regularity, and through the spread of gaps between note starts,
+              which describes rhythmic texture without settling on a tempo.
             </p>
           </div>
           <details>
@@ -1252,6 +1329,14 @@
                 notes. Linking stops at a ratio of 0.7, but a four-second gap
                 inside a six-second window reaches only about 0.67. Short pauses
                 can slip through.
+              </p>
+              <p>
+                Chord intervals split the window into seven bins, note which
+                pitch classes sound together in each, and count every pair by
+                interval class, one to six semitones; the six counts are
+                normalized to sum to one. The gaps between consecutive note
+                starts fall into ten bins, from under 80 milliseconds to four
+                seconds and over, also normalized to sum to one.
               </p>
             </div>
           </details>
@@ -1271,18 +1356,29 @@
               etc.
             </p>
             <p>
+              An annotation marks a stretch of <em>working on one song</em>, not
+              a single take. Repeated takes, repeated sections and one hand at a
+              time all belong to it, as long as the playing stays part of the
+              song, and a pause of a few seconds doesn’t end it. It stops when
+              the playing turns into noodling, and it ends on the song’s last
+              notes, leaving out any flourish. Noodling after one song sounds
+              much like noodling after another, and so does a closing flourish,
+              which is why they are left unannotated: they are what teaches the
+              model what “no song” sounds like.
+            </p>
+            <p>
               The model learns what “no song” sounds like only from recordings
               the player has marked complete. In a recording that isn’t
               finished, an unlabeled stretch is often a song the player hasn’t
               labeled yet, and learning it as “no song” would teach the model to
               overlook that song. Marking a recording complete tells the model
               its unlabeled time really is something else, so it’s worth doing,
-              but only once every take in it is labeled.
+              but only once everything in it is labeled.
             </p>
             <p>
-              The model described here was trained from more than 1,000
-              annotations across 145 recordings. Those produced about 236,000
-              windows, reduced to 15,406 prototypes. A song with lots of
+              The model described here was trained from 1,430 annotations of 84
+              songs across 172 recordings. Those produced about 257,000 training
+              windows, reduced to 15,421 prototypes. A song with lots of
               annotated playing gets more examples, allowing the model to
               remember different passages and different ways of playing them.
             </p>
@@ -1308,9 +1404,10 @@
               <p>
                 The default prototype budget is 16,000, divided between labels in
                 proportion to the square root of their training-window counts.
-                The <code>__none__</code> label has a separate cap of 60. Within
-                each label, training takes an evenly spaced, deterministic
-                sample. Caps and available examples mean the saved total can be
+                The <code>__none__</code> label has a separate cap of 60; giving
+                it up to ten times as many barely changed its predictions, and
+                began to cost real song time. Within each label, training takes
+                an evenly spaced, deterministic sample. Caps and available examples mean the saved total can be
                 below the budget.
               </p>
               <p>
@@ -1368,16 +1465,16 @@
                 <strong>Reconsider the gaps left over.</strong> A neighboring
                 song can claim a gap if it ranks well enough on average across
                 that stretch. This rescue pass skips gaps with the same song on
-                both sides, to avoid merging more repeated takes.
+                both sides. The first rule already chose not to join that song
+                across the gap, and the rescue should not undo that.
               </li>
               <li>
                 <strong>Drop a short run inside another song.</strong> If a run
                 of one song lasting 30 seconds or less has a single other song
                 directly on both sides, leave it unlabeled. It is almost always
                 the model misreading a moment of the surrounding piece, most
-                often where a take restarts. Giving it to the surrounding song
-                would erase that restart and merge two takes, so it is dropped
-                instead.
+                often where a take restarts, so it is removed rather than left
+                standing as the wrong song.
               </li>
             </ol>
             <p>
@@ -1394,6 +1491,17 @@
               in v2.11; the fifth arrived in v2.13. Each applies only to models
               rebuilt since it arrived, so updating the app never silently
               changes the predictions of a model you already have.
+            </p>
+            <p>
+              Joining two anchors of the same song is deliberate. Most gaps
+              between them are pauses inside one stretch of work on the song:
+              a restart, a page turn, a moment to think. Some are noodling
+              between two separate stretches, and nothing tried so far tells
+              the two apart from the playing alone. Half of those gaps are
+              under five seconds, shorter than the window, so every window
+              across one still contains some of the song on either side. The
+              model therefore joins them, and marks the places where it did so
+              on weak evidence, so the reviewer can decide.
             </p>
           </div>
         </section>
@@ -1424,7 +1532,23 @@
               it an annotation that the next rebuild can learn from. Rebuilding
               is a manual action. Marking a file complete clears its predictions
               and blocks further prediction runs, though Prediction Lab can
-              still preview results on it.
+              still preview results on it, with or without that recording in
+              the model’s training.
+            </p>
+            <p>
+              Each suggestion keeps a record of how the model reached it:
+              which passages it recognized outright, which it filled in, and,
+              for the filled-in ones, how far down the model’s list of guesses
+              the song was. A filled-in passage of three seconds or more,
+              where the song was on average no better than the model’s third
+              guess, is marked <em>worth a listen</em> and hatched on the piano
+              roll and on the whole-recording view. Reviewing a suggestion
+              lists those passages, plays each with a few seconds either side,
+              and offers to accept the suggestion with the passage cut out.
+              That is the usual fix when a passage turns out to be noodling
+              between two stretches of work on the song. On this library a recording gets
+              about five marks, and about one in three covers a real error, so
+              a mark is a place to listen, not a verdict.
             </p>
             <p class="note">
               The confidence shown on a suggestion is not the model’s raw
@@ -1442,23 +1566,31 @@
           <div class="stage-head col"><h2>How well it works</h2></div>
           <div class="prose">
             <p>
-              The figures below come from a fixed September 2026 snapshot. Each
-              recording was predicted using a model trained on the other
-              recordings. This leave-one-file-out evaluation checks recognition
-              of a performance the model has not already stored.
+              The figures below come from a fixed September 23, 2026 snapshot
+              of this library. Each recording was predicted using a model
+              trained on the other recordings. This leave-one-file-out
+              evaluation checks recognition of a performance the model has not
+              already stored.
             </p>
             <p>
-              Accuracy is reported on the 103 recordings marked complete. In an
+              Accuracy is reported on the 142 recordings marked complete. In an
               unfinished file, an unlabeled passage might be a song the player
               hasn’t gotten to yet. Scoring a correct prediction there as a false
               positive would measure annotation progress as much as model
               quality.
             </p>
+            <p>
+              The scores follow what an annotation means: a stretch of work on
+              one song. Two annotations of the same song less than three
+              seconds apart count as one stretch, the gap a pause; a longer gap
+              between them is noodling, and a prediction that carries the song
+              across it has called that noodling the song.
+            </p>
           </div>
           <div class="tablewrap">
             <table>
               <caption class="eyebrow">
-                103 completed recordings · 688 annotated takes ·
+                v2.14 · 142 completed recordings · 1,024 stretches of work ·
                 leave-one-file-out
               </caption>
               <thead>
@@ -1470,87 +1602,119 @@
               </thead>
               <tbody>
                 <tr>
-                  <td>Segment F1</td>
+                  <td>Song time on the right song</td>
                   <td class="n">93.4%</td>
                   <td>
-                    Combined recall and precision of same-song time overlap
+                    Annotated time predicted as its own song; 0.6% goes to a
+                    different song and 6.0% to none
                   </td>
                 </tr>
                 <tr>
-                  <td>Recall</td>
-                  <td class="n">93.7%</td>
+                  <td>Stretches found</td>
+                  <td class="n">943 / 1,024</td>
                   <td>
-                    Annotated time covered by a prediction of the right song
+                    Stretches of work at least half covered by their own song
                   </td>
                 </tr>
                 <tr>
-                  <td>Precision</td>
-                  <td class="n">93.0%</td>
+                  <td>Segment F1</td>
+                  <td class="n">94.2%</td>
                   <td>
-                    Predicted time overlapping an annotation of the same song
+                    Combined recall (93.4%) and precision (95.0%) of same-song
+                    time overlap
                   </td>
                 </tr>
                 <tr>
-                  <td>Individual takes matched</td>
-                  <td class="n">394 / 688</td>
+                  <td>Unannotated time called a song</td>
+                  <td class="n">44.4%</td>
                   <td>
-                    Takes paired one-to-one with a same-song prediction that
-                    overlaps at least half their combined time
+                    Of the 5.3 unannotated hours: 17% in a gap between two
+                    stretches of that song, 18% at the edge of a stretch, 10%
+                    elsewhere
                   </td>
                 </tr>
                 <tr>
-                  <td>Median ending error</td>
-                  <td class="n">+1.33s</td>
-                  <td>Among matched takes; positive means late</td>
+                  <td>Gaps between stretches carried across</td>
+                  <td class="n">175 / 246</td>
+                  <td>
+                    Gaps of three seconds or more between two stretches of one
+                    song, spanned by a single prediction
+                  </td>
                 </tr>
                 <tr>
-                  <td>Endings within two seconds</td>
-                  <td class="n">40.9%</td>
-                  <td>Among matched takes</td>
+                  <td>Review edits, estimated</td>
+                  <td class="n">2.4</td>
+                  <td>
+                    Per recording: a split, a merge, a new annotation, or a
+                    deletion or relabel; boundary trims not counted
+                  </td>
                 </tr>
                 <tr>
-                  <td>Starts within two seconds</td>
-                  <td class="n">62.4%</td>
-                  <td>Among matched takes</td>
+                  <td>Marked worth a listen</td>
+                  <td class="n">5.4</td>
+                  <td>
+                    Per recording; 31% of marks cover at least two seconds of
+                    error
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
           <div class="prose">
             <p>
-              The overlap score is high, but only 394 of 688 takes are
-              individually matched. One prediction can cover several attempts at
-              the same piece and get most of their song-labeled time right while
-              matching at most one attempt. That is what happens at the end of
-              the example recording.
+              The model rarely names the wrong song. Its mistakes are mostly
+              about where a stretch ends: it treats noodling between two
+              stretches of a song as the song, and runs the edges of a stretch
+              a few seconds long. The first of these is what the review marks
+              point to.
+            </p>
+            <p>
+              These scores don’t treat each annotation as a single take paired
+              with at most one prediction. Scored that way, a prediction that
+              joins two stretches of the same song loses a take even when all
+              of its song time is right, and the model is penalized most for
+              the pauses a player takes inside a stretch of practice.
             </p>
             <p>
               Comparisons between versions use the same snapshot, and resample
               the recordings thousands of times to estimate how much of a
-              change could be chance. Boundary comparisons also
-              track the takes both runs matched, so an apparent improvement
-              can’t be explained solely by dropping difficult takes. These
-              results describe this practice library; they don’t establish
-              accuracy for other players or repertoires.
+              change could be chance. These results describe this practice
+              library; they don’t establish accuracy for other players or
+              repertoires.
             </p>
           </div>
         </section>
-
         <section class="stage">
           <div class="stage-head col"><h2>Where it still needs help</h2></div>
           <div class="prose">
             <p>
-              <strong>Repeated takes merge.</strong> The same-song linking rule
-              helps preserve a performance through an ambiguous passage. It can
-              also join two separate attempts. Short pauses don’t always pass
-              the silence threshold, and gap merging can join nearby segments
-              again. Repeated takes are the largest remaining source of missed
-              boundaries.
+              <strong>Noodling between two stretches of a song is counted as
+              the song.</strong> To the model, a pause inside a stretch and
+              noodling between two stretches look alike: unclear playing,
+              often quiet, with the song on either side. Of the 246 such gaps of
+              three seconds or more, 175 are carried across, and 89 of the 246
+              are shorter than the six-second window. A larger “no song”
+              budget, stricter decoding settings, shorter windows and extra
+              features for the middle of each window were all tried; each
+              separated some noodling only by splitting as many real stretches
+              of work. So the model joins them, and the review marks the
+              passages it filled in on weak evidence.
             </p>
             <p>
-              <strong>A weak passage can cut a take short or split it.</strong>
+              <strong>Slow, sparse playing is hard to place.</strong> A slow
+              hymn or a passage of sustained chords gives a six-second window
+              few notes to go on. In the example recording the model stops
+              <em>O Come Emmanuel</em> two and a half minutes early. In one
+              recording from November 16, 2025, 24 of the 54 minutes
+              predicted as <em>Take Five</em> are marked worth a listen: slow,
+              sustained chords at about a third of the note density of the
+              player’s own <em>Take Five</em>, where the model’s best guesses
+              scatter across other slow pieces.
+            </p>
+            <p>
+              <strong>A weak passage can cut a stretch short or split it.</strong>
               When recognition fades partway through a performance, the model
-              may stop the song too soon, or break one take into two
+              may stop the song too soon, or break one stretch into two
               predictions. In a recording from December 20, 2025,
               <em>The Christmas Song</em> comes out as two pieces with a
               20-second gap between them. An experimental rescue setting helps
@@ -1566,12 +1730,12 @@
               <em>Bridge Over Troubled Water</em>.
             </p>
             <p>
-              <strong>Warm-up makes the boundary debatable.</strong> In one
-              recording, the annotations for <em>The Entertainer</em> begin 73
-              seconds in, while the model starts near the beginning. The
-              disputed passage is warm-up on that piece. Deciding whether it
-              counts as a take needs a consistent annotation rule; a score alone
-              cannot settle it.
+              <strong>Warm-up is a judgment call.</strong> In one recording,
+              the annotations for <em>The Entertainer</em> begin 73 seconds in,
+              while the model starts near the beginning. The disputed passage is
+              warm-up on that piece. Whether warm-up is already work on the song
+              or still noodling is the player’s call, and a consistent answer
+              matters more to the model than which answer it is.
             </p>
           </div>
         </section>
@@ -1619,13 +1783,24 @@
               snapshot of 142 complete recordings, because those fragments are
               short.
             </p>
+            <p>
+              v2.14 adds the chord-interval and note-gap features. Scored as
+              single takes it looked like a step back, matching 39 fewer takes,
+              because it joins more stretches of the same song. Scored as
+              stretches of work, it gives far less playing to the wrong song
+              (1,231 seconds against 2,910), splits half as many stretches and
+              leaves about 40% fewer stray segments, for about 10% fewer review
+              edits on both snapshots. It raises F1 from 93.15% to 94.22% on the
+              September 23 snapshot and from 93.37% to 94.05% on the September 7
+              one.
+            </p>
           </div>
           <figure>
             <div class="figbox">
               <svg
-                viewBox="0 0 940 384"
+                viewBox="0 0 1120 384"
                 role="img"
-                aria-label="Complete-file segment F1 across five release configurations. Measured on the September 7, 2026 dataset: v2.8 86.3, v2.9 87.8, v2.10 91.2, v2.11 93.3, v2.12 93.4. Reported at the time on each era's smaller corpus: 83.1, 85.7, 88.2, converging on 93.3 at v2.11."
+                aria-label="Complete-file segment F1 across six release configurations. Measured on the September 7, 2026 dataset: v2.8 86.3, v2.9 87.8, v2.10 91.2, v2.11 93.3, v2.12 93.4, v2.14 94.1. Reported at the time on each era's smaller corpus: 83.1, 85.7, 88.2, converging on 93.3 at v2.11."
               >
                 <circle cx="156" cy="26" r="5" fill="var(--accent)" />
                 <text x="168" y="30" class="nd">Sep 7, 2026, one dataset</text>
@@ -1644,7 +1819,7 @@
                 <line
                   x1="150"
                   y1="300"
-                  x2="880"
+                  x2="1060"
                   y2="300"
                   stroke="var(--rule)"
                   stroke-width="1"
@@ -1653,7 +1828,7 @@
                 <line
                   x1="150"
                   y1="244.6"
-                  x2="880"
+                  x2="1060"
                   y2="244.6"
                   stroke="var(--rule)"
                   stroke-width="1"
@@ -1662,7 +1837,7 @@
                 <line
                   x1="150"
                   y1="189.2"
-                  x2="880"
+                  x2="1060"
                   y2="189.2"
                   stroke="var(--rule)"
                   stroke-width="1"
@@ -1671,7 +1846,7 @@
                 <line
                   x1="150"
                   y1="133.8"
-                  x2="880"
+                  x2="1060"
                   y2="133.8"
                   stroke="var(--rule)"
                   stroke-width="1"
@@ -1680,7 +1855,7 @@
                 <line
                   x1="150"
                   y1="78.5"
-                  x2="880"
+                  x2="1060"
                   y2="78.5"
                   stroke="var(--rule)"
                   stroke-width="1"
@@ -1704,7 +1879,7 @@
                   opacity=".5"
                 />
                 <polyline
-                  points="195,220.5 360,193.6 525,130.9 690,90.8 855,90.0"
+                  points="195,220.5 360,193.6 525,130.9 690,90.8 855,90.0 1020,77.6"
                   fill="none"
                   stroke="var(--accent)"
                   stroke-width="2"
@@ -1754,6 +1929,8 @@
                 <text x="690" y="77" text-anchor="middle" class="nd-em">93.3</text>
                 <circle cx="855" cy="90.0" r="5" fill="var(--accent)" />
                 <text x="869" y="94" class="nd-em">93.4</text>
+                <circle cx="1020" cy="77.6" r="5" fill="var(--accent)" />
+                <text x="1034" y="81.6" class="nd-em">94.1</text>
 
                 <text x="195" y="326" text-anchor="middle" class="rl">
                   v2.8
@@ -1779,16 +1956,22 @@
                 <text x="690" y="344" text-anchor="middle" class="tk">
                   + bridge linking
                 </text>
-                <text x="855" y="326" text-anchor="middle" class="rl-em">
-                  v2.12 · current
+                <text x="855" y="326" text-anchor="middle" class="rl">
+                  v2.12
                 </text>
                 <text x="855" y="344" text-anchor="middle" class="tk">
                   + cleaner no-song · 16k
                 </text>
+                <text x="1020" y="326" text-anchor="middle" class="rl-em">
+                  v2.14 · current
+                </text>
+                <text x="1020" y="344" text-anchor="middle" class="tk">
+                  + chord and note-gap features
+                </text>
 
                 <text x="24" y="180" class="nd">complete-file</text>
                 <text x="24" y="196" class="nd">segment F1 (%)</text>
-                <text x="515" y="372" text-anchor="middle" class="nd">
+                <text x="605" y="372" text-anchor="middle" class="nd">
                   release configuration, oldest to newest
                 </text>
               </svg>
@@ -1800,16 +1983,19 @@
               time. This is a comparison of settings, not a full reconstruction
               of each old model. v2.12 is level with v2.11 on this dataset; on
               the larger September 21 library, measured at its release, it
-              scores 92.9% against v2.11’s 91.8%.
+              scores 92.9% against v2.11’s 91.8%. v2.13 is not plotted: its one
+              rule removes short wrong fragments and barely moves the score.
             </figcaption>
           </figure>
           <div class="prose">
             <p>
               Several plausible changes failed: equal prototype budgets
               discarded useful examples, one-hand training copies reduced
-              accuracy, stricter per-window rank checks broke takes into more
-              fragments, and giving a misread run to the song around it scored
-              higher but merged separate takes. The
+              accuracy, and stricter per-window rank checks broke takes into
+              more fragments. None of the attempts to stop the model carrying a
+              song across noodling worked without splitting real stretches as
+              often: a larger “no song” budget, stricter decoding, shorter
+              windows, and extra features for the middle of each window. The
               <a
                 href="https://github.com/jordanderson/jamcoda/blob/main/ml/CHANGELOG.md"
                 >ML changelog</a
@@ -1822,10 +2008,13 @@
       <footer>
         <div class="wrap col">
           <p>
-            Figures and example use model v2.12: 145 training recordings, 1,007 annotations,
-            66 songs and 15,406 prototypes. Evaluation snapshot: September 7,
-            2026, dataset <span class="mono">90836c7f…</span>. Example
-            recording: <span class="mono">Jmx-A00058-Dec-17-2025</span>.
+            Figures use model v2.14: 172 training recordings, 1,430 annotations,
+            84 songs and 15,421 prototypes. Evaluation snapshot: September 23,
+            2026, dataset <span class="mono">71ca3e73…</span>; the release
+            chart uses September 7, 2026, dataset
+            <span class="mono">90836c7f…</span>. Example recording:
+            <span class="mono">Jmx-A00058-Dec-17-2025</span>, predicted by a
+            v2.14 model trained without it.
           </p>
           <p>
             Implementation:

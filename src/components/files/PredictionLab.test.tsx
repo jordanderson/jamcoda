@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PropsWithChildren } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
@@ -28,6 +28,35 @@ const renderLab = (overrides: Partial<Parameters<typeof PredictionLab>[0]> = {})
     />,
     { wrapper }
   )
+
+const MODELS = [
+  {
+    name: 'model.json', isLibraryModel: true, modelVersion: 'v2.13', createdAt: '2026-09-24T05:01:33.264Z',
+    featureCount: 37, chordIoiFeatures: false, labelCount: 85, error: null
+  },
+  {
+    name: 'model-chord-ioi.json', isLibraryModel: false, modelVersion: 'v2.13', createdAt: '2026-09-24T05:05:00.000Z',
+    featureCount: 53, chordIoiFeatures: true, labelCount: 85, error: null
+  },
+  {
+    name: 'model-v2.14.json', isLibraryModel: false, modelVersion: null, createdAt: null,
+    featureCount: null, chordIoiFeatures: false, labelCount: null,
+    error: 'Model was trained with a different feature set'
+  }
+]
+
+const fetchMock = vi.fn()
+beforeEach(() => {
+  fetchMock.mockReset()
+  fetchMock.mockImplementation(async (url: string) => {
+    const body = url.endsWith('/models') ? MODELS : { modelVersion: 'x', segments: [], rawSegments: [] }
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  })
+  vi.stubGlobal('fetch', fetchMock)
+})
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 const open = async () => {
   await userEvent.click(screen.getByRole('button', { name: /Prediction Lab/ }))
@@ -160,5 +189,66 @@ describe('PredictionLab queue provenance', () => {
     renderLab({ currentPredictions: [prediction], queueModelVersion: OLD })
     await open()
     expect(screen.queryByText(/written by an older model/)).not.toBeInTheDocument()
+  })
+})
+
+describe('PredictionLab model choice', () => {
+  const previewBody = () => {
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/run'))
+    return JSON.parse((call![1] as RequestInit).body as string)
+  }
+
+  it('lists the library models, and will not offer one this build cannot load', async () => {
+    renderLab()
+    await open()
+    const select = screen.getByLabelText('Model')
+    expect(await within(select).findByRole('option', { name: /model-chord-ioi.json — v2.13, .*53 features/ })).toBeEnabled()
+    expect(within(select).getByRole('option', { name: /model.json \(library model\)/ })).toBeEnabled()
+    expect(within(select).getByRole('option', { name: 'model-v2.14.json — cannot load' })).toBeDisabled()
+  })
+
+  it('sends the chosen model by name and the hold-out choice with a preview', async () => {
+    renderLab()
+    await open()
+    await within(screen.getByLabelText('Model')).findByRole('option', { name: /model-chord-ioi.json/ })
+    await userEvent.selectOptions(screen.getByLabelText('Model'), 'model-chord-ioi.json')
+    await userEvent.click(screen.getByRole('checkbox', { name: /Hold this file out/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }))
+
+    await vi.waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/run'))).toBe(true))
+    const body = previewBody()
+    expect(body.modelName).toBe('model-chord-ioi.json')
+    expect(body.holdOut).toBe(true)
+    expect(body.dryRun).toBe(true)
+  })
+
+  it('holds a completed file out by default, and an unfinished one not', async () => {
+    const { unmount } = renderLab({ isFileComplete: true })
+    await open()
+    expect(screen.getByRole('checkbox', { name: /Hold this file out/ })).toBeChecked()
+    unmount()
+
+    renderLab({ isFileComplete: false })
+    await open()
+    expect(screen.getByRole('checkbox', { name: /Hold this file out/ })).not.toBeChecked()
+  })
+
+  it('applies only a run of the library model as saved', async () => {
+    const base = {
+      label: 'x', segments: [], rawSegments: [],
+      request: { segment: {}, decoder: {} }
+    }
+    renderLab({
+      runs: [
+        { ...base, id: 1 },
+        { ...base, id: 2, request: { ...base.request, modelName: 'model-chord-ioi.json' } },
+        { ...base, id: 3, request: { ...base.request, holdOut: true } }
+      ]
+    })
+    await open()
+    const apply = screen.getAllByRole('button', { name: /Apply/ })
+    expect(apply[0]).toBeEnabled()
+    expect(apply[1]).toBeDisabled()
+    expect(apply[2]).toBeDisabled()
   })
 })

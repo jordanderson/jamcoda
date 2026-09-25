@@ -7,6 +7,14 @@ export function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
+/** A positive whole number as an English ordinal: 1st, 2nd, 3rd, 4th, 11th, 22nd. */
+export function formatOrdinal(n: number): string {
+  const lastTwo = n % 100
+  if (lastTwo >= 11 && lastTwo <= 13) return `${n}th`
+  const suffix = ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'
+  return `${n}${suffix}`
+}
+
 /** Seconds as `h:mm:ss` (hours always shown), for long-position markers. */
 export function formatTimeHms(seconds: number): string {
   const hours = Math.floor(seconds / 3600)

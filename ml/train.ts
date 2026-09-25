@@ -111,7 +111,11 @@ Options:
                                (default: 30; 0 disables)
   --none-from-all-files  Train __none__ on the unannotated time of every annotated
                          file, not only files marked complete (the default)
-  --skip-eval            Skip leave-one-file-out evaluation
+  --no-chord-ioi-features  Leave out the chord-interval and inter-onset-interval
+                         features (the base 37; the v2.13 feature set)
+  --center-window <float>  Also extract the base features over this many seconds
+                         at each window's center (experimental; default: 0, off)
+  --skip-eval           Skip leave-one-file-out evaluation
   --help                 Show this help
 `);
 }
@@ -150,7 +154,9 @@ async function main() {
     linkRescueRank: optionalNum('--link-rescue-rank', -1),
     linkRescueLookaheadSec: optionalNum('--link-rescue-lookahead', 0),
     dropFlankedRunSec: optionalNum('--drop-flanked-run-sec', 0),
-    noneFromCompleteFilesOnly: hasFlag('--none-from-all-files') ? false : undefined
+    noneFromCompleteFilesOnly: hasFlag('--none-from-all-files') ? false : undefined,
+    chordIoiFeatures: hasFlag('--no-chord-ioi-features') ? false : undefined,
+    centerWindowSec: optionalNum('--center-window', 0)
   };
 
   if (config.windowSec <= 0 || config.stepSec <= 0) {

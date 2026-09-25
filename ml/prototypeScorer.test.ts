@@ -34,7 +34,9 @@ describe('contiguous nearest-prototype scoring', () => {
       label: i < 20 ? '__none__' : i < 40 ? 'A' : 'B',
       fileId: i % 2, fileName: '', fileIsComplete: true, startTime: i, endTime: i + 6
     }));
-    const config: TrainConfig = { windowSec: 6, stepSec: 1, k: 7, maxNoneToSongRatio: 1.5, prototypeBudget: 40 };
+    const config: TrainConfig = {
+      windowSec: 6, stepSec: 1, k: 7, maxNoneToSongRatio: 1.5, prototypeBudget: 40, chordIoiFeatures: false
+    };
     for (const decoder of ['anchor', 'smooth', 'viterbi'] as const) {
       for (const scoreMode of ['min', 'avg'] as const) {
         for (const scoreNeighbors of [1, 3]) {

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import * as AnnotationModel from '@models/Annotation';
 import * as FileModel from '@models/File';
 import * as PredictionReviewModel from '@models/PredictionReview';
-import { resolveStoredMidiPath, toStoredMidiPath } from '@config/library';
+import { dbPathFromEnv, resolveStoredMidiPath, toStoredMidiPath } from '@config/library';
 import {
   countModifiedSegments,
   removeExcludedRangesFromSegments,
@@ -14,12 +14,16 @@ import type { JmxBookmark, JmxSkip } from '@server/types';
 import {
   DECODE_ONLY_CONFIG_KEYS,
   extractNotesFromMidi,
+  loadAnnotatedMidiFiles,
   loadModel,
   predictWindows,
+  refitConfigOf,
+  trainModel,
   windowsToSegments,
   type DecodeOnlyConfig,
   type PredictConfig,
-  type SongSegment
+  type SongSegment,
+  type SongSegmentModel
 } from '../../ml/songSegmentation';
 
 /**
@@ -49,6 +53,13 @@ export interface RunPredictionOptions {
    */
   decoderOverrides?: DecodeOnlyConfig;
   /**
+   * Predict with a model retrained from the saved model's settings on every
+   * annotated file except this one: what the model says about a recording it
+   * has never seen. The saved model was trained on this file's annotations, so
+   * on an annotated file it largely remembers them. Dry runs only.
+   */
+  holdOut?: boolean;
+  /**
    * Only silence gaps (`jmxSkip.millis`) at or above this many seconds become
    * boundary split hints (default 30). Bookmarks always split; silence gaps
    * are noisier, so short gaps are ignored.
@@ -65,6 +76,8 @@ export interface RunPredictionResult {
   modelConfig: { windowSec: number; stepSec: number; k: number };
   /** The decoder settings actually used, after any overrides. */
   decodeConfig: DecodeOnlyConfig;
+  /** Whether the segments came from a model retrained without this file. */
+  heldOut: boolean;
   segments: SongSegment[];
   /**
    * What the model said before annotated ranges were removed and bookmark and
@@ -132,7 +145,8 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
     config,
     clearUnpromoted = true,
     dryRun = false,
-    decoderOverrides
+    decoderOverrides,
+    holdOut = false
   } = options;
 
   const file = FileModel.findById(fileId);
@@ -152,9 +166,17 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
     );
   }
 
+  if (holdOut && !dryRun) {
+    throw new PredictionImportError(
+      'A held-out model is for previews only and is never written to the review queue',
+      'invalid'
+    );
+  }
+
   const midiPath = resolveMidiPath(file.local_path);
 
-  const model = loadModel(modelPath);
+  const savedModel = loadModel(modelPath);
+  const model = holdOut ? fitHeldOutModel(savedModel, fileId) : savedModel;
   if (decoderOverrides) {
     // Copy key by key rather than spreading. The type says decode-only, but a
     // caller reaching past it must not be able to change how the windows are
@@ -206,7 +228,7 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
   const skipSplitCount = countModifiedSegments(bookmarkSplitSegments, skipSplitSegments);
   const segments = skipSplitSegments;
 
-  const modelVersion = options.modelVersion || `${model.modelType}@${model.createdAt}`;
+  const modelVersion = options.modelVersion || `${savedModel.modelType}@${savedModel.createdAt}`;
 
   let clearedCount = 0;
   let insertedCount = 0;
@@ -225,7 +247,8 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
           predictedEndTime: segment.endTime,
           predictedConfidence: segment.confidence,
           status: 'unsure' as const,
-          modelVersion
+          modelVersion,
+          predictedParts: segment.parts ?? null
         }))
       ).length;
     }
@@ -247,6 +270,7 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
         .filter((key) => model.config[key] !== undefined)
         .map((key) => [key, model.config[key]])
     ),
+    heldOut: holdOut,
     segments,
     rawSegments: dryRun ? rawSegments : [],
     rawSegmentCount: rawSegments.length,
@@ -260,6 +284,23 @@ export function runPredictionImport(options: RunPredictionOptions): RunPredictio
     insertedCount,
     dryRun
   };
+}
+
+/**
+ * Refit `saved` on every annotated file but `fileId`, from the database's
+ * current annotations.
+ *
+ * The refit keeps the saved model's config, so it extracts the same features
+ * and decodes the same way. Only fit-time settings the saved model never recorded,
+ * other than its features, take today's defaults.
+ */
+function fitHeldOutModel(saved: SongSegmentModel, fileId: number): SongSegmentModel {
+  const files = loadAnnotatedMidiFiles(dbPathFromEnv()).filter((file) => file.fileId !== fileId);
+  if (files.length === 0) {
+    throw new PredictionImportError('No other annotated file to train a held-out model on', 'invalid');
+  }
+  const { model } = trainModel(files, refitConfigOf(saved.config));
+  return { ...model, config: { ...saved.config } };
 }
 
 function parseBookmarks(bookmarksJson: string | null | undefined): JmxBookmark[] {

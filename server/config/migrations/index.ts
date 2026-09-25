@@ -8,6 +8,7 @@ import { bookmarksMigration } from './004-file-bookmarks';
 import { skipsMigration } from './005-file-skips';
 import { dropIgnoredSectionsMigration } from './006-drop-ignored-sections';
 import { libraryRelativePathsMigration } from './007-library-relative-paths';
+import { predictionEvidenceMigration } from './008-prediction-evidence';
 import { nowUnix } from '@utils/time';
 import { transaction } from '../transaction';
 
@@ -22,7 +23,8 @@ const migrations: Migration[] = [
   bookmarksMigration,
   skipsMigration,
   dropIgnoredSectionsMigration,
-  libraryRelativePathsMigration
+  libraryRelativePathsMigration,
+  predictionEvidenceMigration
 ];
 
 export function runMigrations(db: DatabaseSync, dbPath: string): MigrationResult {

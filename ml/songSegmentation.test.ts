@@ -7,6 +7,8 @@ import {
   MODEL_VERSION,
   NO_SONG_LABEL,
   buildSamplesForFile,
+  refitConfigOf,
+  FEATURE_NAMES,
   loadModel,
   saveModel,
   trainModelFromSamples,
@@ -18,11 +20,13 @@ import {
   type WindowSample
 } from './songSegmentation';
 
+// Fixtures here build 37-feature vectors by hand, so they fit the base set.
 const config: TrainConfig = {
   windowSec: 4,
   stepSec: 1,
   k: 7,
   maxNoneToSongRatio: 1.5,
+  chordIoiFeatures: false,
   prototypeBudget: 120,
   maxNonePrototypes: 30,
   featureScaling: 'minmax',
@@ -62,6 +66,47 @@ describe('feature extraction', () => {
     const samples = buildSamplesForFile(file, notes, { windowSec: 4, stepSec: 1, registerDivide: 60 });
     assert.ok(samples.length > 0);
     assert.equal(samples[0].features.length, 37);
+  });
+
+  it('appends normalized chord intervals and IOI bins only when the config asks', () => {
+    const file = makeFile();
+    const notes = makeNotes([
+      [60, 0.2, 0.8], [64, 0.2, 0.8], [67, 0.2, 0.8],
+      [60, 1.4, 0.2], [64, 1.4, 0.2]
+    ]);
+    const windowConfig = { windowSec: 4, stepSec: 1, registerDivide: 60 };
+    const base = buildSamplesForFile(file, notes, windowConfig)[0];
+    const extended = buildSamplesForFile(file, notes, { ...windowConfig, chordIoiFeatures: true })[0];
+    assert.equal(base.features.length, 37);
+    assert.equal(extended.features.length, 53);
+    assert.deepEqual(extended.features.slice(0, 37), base.features);
+
+    const chord = extended.features.slice(37, 43);
+    const ioi = extended.features.slice(43);
+    assert.ok(Math.abs(chord.reduce((sum, value) => sum + value, 0) - 1) < 1e-9);
+    assert.ok(chord[2] > 0 && chord[3] > 0 && chord[4] > 0, 'C-E-G holds a minor third, major third and fourth');
+    assert.ok(Math.abs(ioi.reduce((sum, value) => sum + value, 0) - 1) < 1e-9);
+  });
+
+  it('appends the base features of a short window at the center when asked', () => {
+    const file = makeFile();
+    // Playing at both edges of a 6s window and a 2s pause in its middle.
+    const notes = makeNotes([
+      ...Array.from({ length: 8 }, (_, i) => [60 + (i % 4) * 2, i * 0.25, 0.2] as [number, number, number]),
+      ...Array.from({ length: 8 }, (_, i) => [67 + (i % 4) * 2, 4 + i * 0.25, 0.2] as [number, number, number])
+    ]);
+    const windowConfig = { windowSec: 6, stepSec: 1, registerDivide: 60, chordIoiFeatures: false };
+    const plain = buildSamplesForFile(file, notes, windowConfig)[0];
+    const centered = buildSamplesForFile(file, notes, { ...windowConfig, centerWindowSec: 2 })[0];
+    assert.equal(centered.features.length, 74);
+    assert.deepEqual(centered.features.slice(0, 37), plain.features);
+
+    const alone = buildSamplesForFile(file, notes, { ...windowConfig, windowSec: 2 })
+      .find((window) => window.startTime === 2)!;
+    assert.deepEqual(centered.features.slice(37), alone.features, 'the center is the base set over seconds 2–4');
+    const silence = FEATURE_NAMES.indexOf('silence_ratio');
+    assert.equal(centered.features[37 + silence], 1, 'the center hears the pause');
+    assert.ok(plain.features[silence] < 0.5, 'the full window mostly hears playing');
   });
 
   it('separates low and high register pitch-class profiles', () => {
@@ -210,9 +255,9 @@ describe('anchor-link decoder', () => {
         });
       }
     };
-    const songA = [0.7, 0.1, ...new Array(36).fill(0.15)];
-    const songB = [0.1, 0.7, ...new Array(36).fill(0.15)];
-    const none = [0, ...new Array(37).fill(0)];
+    const songA = [0.7, 0.1, ...new Array(35).fill(0.15)];
+    const songB = [0.1, 0.7, ...new Array(35).fill(0.15)];
+    const none = new Array(37).fill(0);
     push(1, 'Song A', songA, 40);
     push(1, NO_SONG_LABEL, none, 40);
     push(1, 'Song B', songB, 40);
@@ -224,13 +269,13 @@ describe('anchor-link decoder', () => {
     // three labels are too few for the bridge rescue's rank test to mean
     // anything (a song is always near the top of a list of three).
     const model = makeModelForDecoding({ linkPolicy: 'legacy' });
-    const songA = [0.7, 0.1, ...new Array(36).fill(0.15)];
-    const none = [0, ...new Array(37).fill(0)];
+    const songA = [0.7, 0.1, ...new Array(35).fill(0.15)];
+    const none = new Array(37).fill(0);
     const windows = [
       ...Array.from({ length: 10 }, (_, i) => ({ startTime: i, endTime: i + 4, features: none })),
       ...Array.from({ length: 5 }, (_, i) => ({ startTime: 10 + i, endTime: 14 + i, features: songA })),
       // ambiguous gap that should be linked back to Song A
-      ...Array.from({ length: 5 }, (_, i) => ({ startTime: 15 + i, endTime: 19 + i, features: [0.5, 0.3, ...new Array(36).fill(0.15)] })),
+      ...Array.from({ length: 5 }, (_, i) => ({ startTime: 15 + i, endTime: 19 + i, features: [0.5, 0.3, ...new Array(35).fill(0.15)] })),
       ...Array.from({ length: 5 }, (_, i) => ({ startTime: 20 + i, endTime: 24 + i, features: songA })),
       ...Array.from({ length: 10 }, (_, i) => ({ startTime: 25 + i, endTime: 29 + i, features: none }))
     ];
@@ -488,7 +533,7 @@ describe('per-label scoring fairness', () => {
       for (let i = 0; i < n; i++) {
         samples.push({
           fileId: 1, fileName: '', fileIsComplete: true, startTime: i, endTime: i + 4, label,
-          features: [0.5, 0.3, ...new Array(36).fill(0.2)]
+          features: [0.5, 0.3, ...new Array(35).fill(0.2)]
         });
       }
     };
@@ -506,7 +551,7 @@ describe('per-label scoring fairness', () => {
     // equally often.
     let seed = 42;
     const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
-    const base = [0.5, 0.3, 0.2, ...new Array(35).fill(0.25)];
+    const base = [0.5, 0.3, 0.2, ...new Array(34).fill(0.25)];
     const jitter = () => base.map((v) => v + (rnd() - 0.5) * 0.2);
 
     const samples: WindowSample[] = [];
@@ -615,5 +660,94 @@ describe('loadModel', () => {
     assert.equal(loaded.config.scoreMode, 'min');
     assert.equal(loaded.config.featureScaling, 'minmax');
     assert.equal(loaded.config.registerDivide, 60);
+    assert.equal(loaded.config.chordIoiFeatures, false);
+  });
+
+  it('loads a chord/IOI model with its own feature set, and reads an absent setting as the base set', () => {
+    const samples: WindowSample[] = Array.from({ length: 40 }, (_, i) => ({
+      fileId: 1, fileName: '', fileIsComplete: true, startTime: i, endTime: i + 4,
+      label: i < 20 ? 'Song A' : NO_SONG_LABEL,
+      features: i < 20 ? [0.8, 0.2, ...new Array(51).fill(0.1)] : new Array(53).fill(0)
+    }));
+    const dir = mkdtempSync(path.join(tmpdir(), 'jamcoda-model-'));
+    const modelPath = path.join(dir, 'chord-ioi.json');
+    const model = trainModelFromSamples(samples, { ...config, chordIoiFeatures: true });
+    saveModel(model, modelPath);
+
+    const loaded = loadModel(modelPath);
+    assert.equal(loaded.featureNames.length, 53);
+    assert.equal(loaded.config.chordIoiFeatures, true);
+
+    const { chordIoiFeatures: _dropped, ...withoutSetting } = model.config;
+    const unmarkedPath = path.join(dir, 'unmarked.json');
+    writeFileSync(unmarkedPath, JSON.stringify({ ...model, config: withoutSetting }));
+    assert.throws(() => loadModel(unmarkedPath), /different feature set/);
+  });
+});
+
+describe('chord/IOI features as the training default', () => {
+  const windows = (featureCount: number): WindowSample[] => Array.from({ length: 40 }, (_, i) => ({
+    fileId: 1, fileName: '', fileIsComplete: true, startTime: i, endTime: i + 4,
+    label: i < 20 ? 'Song A' : NO_SONG_LABEL,
+    features: i < 20 ? [0.8, 0.2, ...new Array(featureCount - 2).fill(0.1)] : new Array(featureCount).fill(0)
+  }));
+  const { chordIoiFeatures: _unset, ...unsetConfig } = config;
+
+  it('trains a model that records the setting it was built with', () => {
+    const model = trainModelFromSamples(windows(53), unsetConfig);
+    assert.equal(model.config.chordIoiFeatures, true);
+    assert.equal(model.featureNames.length, 53);
+  });
+
+  it('refuses windows extracted for a different feature set than the config trains', () => {
+    // Extracting with the unresolved config and fitting with the resolved one
+    // would save a feature list that does not describe the vectors.
+    assert.throws(() => trainModelFromSamples(windows(37), unsetConfig), /37 features, but this config extracts 53/);
+  });
+
+  it('refits a model saved without the setting on the base features, never on the new default', () => {
+    assert.equal(refitConfigOf(unsetConfig).chordIoiFeatures, false);
+    assert.equal(refitConfigOf({ ...unsetConfig, chordIoiFeatures: true }).chordIoiFeatures, true);
+  });
+});
+
+describe('segment parts', () => {
+  const window = (i: number, label: string, basis?: 'anchor' | 'bridge') => ({
+    startTime: i, endTime: i + 6, label, confidence: 0.5,
+    ...(basis ? { basis, rank: basis === 'anchor' ? 0 : i } : {})
+  });
+  const windows = [
+    ...Array.from({ length: 5 }, (_, i) => window(i, 'Song A', 'anchor')),
+    ...Array.from({ length: 3 }, (_, i) => window(5 + i, 'Song A', 'bridge')),
+    ...Array.from({ length: 5 }, (_, i) => window(8 + i, 'Song A', 'anchor')),
+    ...Array.from({ length: 2 }, (_, i) => window(13 + i, NO_SONG_LABEL)),
+    ...Array.from({ length: 10 }, (_, i) => window(15 + i, 'Song A', 'anchor'))
+  ];
+
+  it('covers each segment with how its stretches were reached, including a gap the merge closed', () => {
+    const [segment] = windowsToSegments(windows, { minSegmentSec: 0, minSegmentConfidence: 0, mergeGapSec: 5 });
+    const parts = segment.parts!;
+    assert.deepEqual(parts.map((part) => part.basis), ['anchor', 'bridge', 'anchor', 'joined', 'anchor']);
+    assert.equal(parts[0].startTime, segment.startTime);
+    assert.equal(parts.at(-1)!.endTime, segment.endTime);
+    for (let i = 1; i < parts.length; i++) {
+      assert.equal(parts[i].startTime, parts[i - 1].endTime, 'parts are contiguous');
+    }
+    const joined = parts.find((part) => part.basis === 'joined')!;
+    assert.equal(joined.endTime - joined.startTime, 2);
+  });
+
+  it('averages the song rank over each part, and gives a joined gap none', () => {
+    const [segment] = windowsToSegments(windows, { minSegmentSec: 0, minSegmentConfidence: 0, mergeGapSec: 5 });
+    const parts = segment.parts!;
+    assert.equal(parts[0].meanRank, 0);
+    assert.equal(parts[1].meanRank, 6, 'the bridge windows 5, 6 and 7 rank 5, 6 and 7');
+    assert.equal(parts.find((part) => part.basis === 'joined')!.meanRank, undefined);
+  });
+
+  it('keeps the two runs apart, each with its own parts, when the gap is too wide to merge', () => {
+    const segments = windowsToSegments(windows, { minSegmentSec: 0, minSegmentConfidence: 0, mergeGapSec: 1 });
+    assert.equal(segments.length, 2);
+    assert.ok(segments.every((segment) => !segment.parts!.some((part) => part.basis === 'joined')));
   });
 });

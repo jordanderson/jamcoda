@@ -14,6 +14,20 @@ export interface SettingHelp {
 }
 
 export const SETTING_HELP: Record<string, SettingHelp> = {
+  model: {
+    title: 'Model',
+    body: [
+      'Which trained model makes the prediction. The library model (ml/model.json) is the one the app predicts and rebuilds with. Any other model file in the library’s ml folder — an experiment built with npm run ml:train -- --out, say — can be previewed beside it.',
+      'Candidates from different models differ in what was learned, so compare them with the same settings. Only the library model’s runs can be applied to the review queue. A model this version of the app cannot load is listed but cannot be chosen.'
+    ]
+  },
+  holdOut: {
+    title: 'Hold this file out',
+    body: [
+      'Trains a fresh model with the chosen model’s settings on every annotated recording except this one, then predicts. The saved model learned from this file’s own annotations, so on an annotated file it partly recalls them. A held-out run shows what the model makes of a recording it has never heard, which is how npm run ml:eval scores a file and how every new recording is predicted.',
+      'On by default for a completed file, where the annotations are the answer being checked. Off by default otherwise, because the app’s own predictions for an unfinished file do come from a model trained on its annotations so far. It takes a few seconds, trains on the annotations as they are now, and is never written to the review queue.'
+    ]
+  },
   minSegmentSec: {
     title: 'Min segment',
     body: [

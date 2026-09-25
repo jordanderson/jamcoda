@@ -14,7 +14,7 @@ export const NO_SONG_LABEL = '__none__';
  * to name its report files, so runs stay referable without manual renaming.
  * Keep `ml/CHANGELOG.md` in sync with each bump.
  */
-export const MODEL_VERSION = 'v2.13';
+export const MODEL_VERSION = 'v2.14';
 
 /**
  * Version 2 features (v2.8 boundary snapping & cadence/flourish trimming, v2.7 acoustic sustain decay).
@@ -41,7 +41,9 @@ export const MODEL_VERSION = 'v2.13';
  * (tempo_bpm was ablated in v2.6: practice sessions have variable tempo
  * between slow practice and full speed, which added false-negative noise).
  *
- * `loadModel` rejects a model whose own `featureNames` disagree with this
+ * A model trained with `chordIoiFeatures` appends `CHORD_IOI_FEATURE_NAMES`
+ * to this list; `featureNamesFor` gives the list a config extracts.
+ * `loadModel` rejects a model whose own `featureNames` disagree with that
  * list, so it is part of the saved model's contract and is exported for
  * callers that build or check one.
  */
@@ -64,6 +66,37 @@ export const FEATURE_NAMES = [
   'pitch_span',
   'regularity'
 ] as const;
+
+/**
+ * Opt-in chord-shape and rhythm-texture features (`chordIoiFeatures`):
+ *   chordInterval_1..6   pairwise interval classes among pitch classes sounding
+ *                        together, over seven sub-bins, normalized to sum 1
+ *   ioi_*                inter-onset intervals in ten bins from under 80ms to
+ *                        4s and over, normalized to sum 1; rhythm texture
+ *                        without an absolute tempo
+ */
+export const CHORD_IOI_FEATURE_NAMES = [
+  'chordInterval_1', 'chordInterval_2', 'chordInterval_3', 'chordInterval_4', 'chordInterval_5', 'chordInterval_6',
+  'ioi_lt_80ms', 'ioi_80_150ms', 'ioi_150_250ms', 'ioi_250_400ms', 'ioi_400_650ms',
+  'ioi_650_1000ms', 'ioi_1000_1500ms', 'ioi_1500_2500ms', 'ioi_2500_4000ms', 'ioi_ge_4000ms'
+] as const;
+
+/**
+ * Opt-in center features (`centerWindowSec`): the base features again, over a
+ * short window at the middle of each window, where the window's label applies.
+ */
+export const CENTER_FEATURE_NAMES = FEATURE_NAMES.map((name) => `center_${name}`);
+
+/** The features a model with this config extracts, in vector order. */
+export function featureNamesFor(
+  config: Pick<TrainConfig, 'chordIoiFeatures' | 'centerWindowSec'>
+): readonly string[] {
+  return [
+    ...FEATURE_NAMES,
+    ...(config.chordIoiFeatures ? CHORD_IOI_FEATURE_NAMES : []),
+    ...((config.centerWindowSec ?? 0) > 0 ? CENTER_FEATURE_NAMES : [])
+  ];
+}
 
 export const CHROMA_SIZE = 12;
 /** Index of the first low-register chroma feature (`pcLow_C`). */
@@ -175,6 +208,23 @@ export interface TrainConfig {
    * Default 60.
    */
   registerDivide?: number;
+  /**
+   * Append `CHORD_IOI_FEATURE_NAMES` to each window's features. On by default
+   * when training (v2.14). The model records it, so prediction extracts the
+   * features the model was trained on; a model saved without it extracts the
+   * base set, and `refitConfigOf` keeps it that way when such a model is
+   * refit. See the v2.14 entry in `ml/CHANGELOG.md`.
+   */
+  chordIoiFeatures?: boolean;
+  /**
+   * Length in seconds of a shorter window centered in each window, whose base
+   * features are appended as `CENTER_FEATURE_NAMES` (default 0, off; must be
+   * under `windowSec`). The full window has enough notes to recognize a slow,
+   * sparse song; the center one shows whether the middle of the window, where
+   * its label applies, is still that song or a pause or noodling. The
+   * model records it, and a model saved without it extracts no center features.
+   */
+  centerWindowSec?: number;
   /**
    * Fraction of annotated (song) windows that also get a hand-masked copy: the
    * low or high register chroma is zeroed and the window is added again under
@@ -331,11 +381,47 @@ export interface SongSegmentModel {
   };
 }
 
+/**
+ * How the decoder reached a window's song.
+ *
+ * `anchor`: recognized outright, in a run of windows whose top song beats the
+ * runner-up by `anchorMargin`. Every other value is a song the window's own
+ * evidence did not settle: `bridge`, between two anchor runs of that song;
+ * `tail`, past a song's outermost anchor run; `linked`, legacy extension from
+ * an anchor run; `divided`, a gap between two songs' anchors split by
+ * `anchorGapPolicy`; `rescued`, a leftover span given to a neighbor by its mean
+ * rank; `decoded`, any song from the viterbi or smooth decoders, which have no
+ * anchors.
+ */
+export type WindowBasis = 'anchor' | 'bridge' | 'tail' | 'linked' | 'divided' | 'rescued' | 'decoded';
+
+/** A stretch of a segment and how it was reached; `joined` is a gap closed by `mergeGapSec`. */
+export type SegmentBasis = WindowBasis | 'joined';
+
+export interface SegmentPart {
+  startTime: number;
+  endTime: number;
+  basis: SegmentBasis;
+  /**
+   * Mean `WindowPrediction.rank` of the segment's song over the part's windows.
+   * Absent for a `joined` part, which has no windows of its song.
+   */
+  meanRank?: number;
+}
+
 export interface WindowPrediction {
   startTime: number;
   endTime: number;
   label: string;
   confidence: number;
+  /** Set on every window labeled with a song. */
+  basis?: WindowBasis;
+  /**
+   * How many labels the model scored above this window's song: 0 where it was
+   * the model's own first choice. Set by the anchor decoder on every window
+   * labeled with a song.
+   */
+  rank?: number;
 }
 
 export interface SongSegment {
@@ -344,6 +430,12 @@ export interface SongSegment {
   endTime: number;
   durationSec: number;
   confidence: number;
+  /**
+   * The segment's stretches in time order, covering it from start to end,
+   * as decoded. A caller that trims or splits the segment afterwards must clip
+   * them to match.
+   */
+  parts?: SegmentPart[];
 }
 
 export interface PredictConfig {

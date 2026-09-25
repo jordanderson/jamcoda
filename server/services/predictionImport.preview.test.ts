@@ -159,3 +159,50 @@ test('an override of a training field is not accepted through this door', () => 
   const forced = run({ dryRun: true, decoderOverrides: overrides });
   assert.equal(forced.modelConfig.windowSec, 6, 'the model config must still describe the built model');
 });
+
+test('a held-out preview needs another annotated file, and is never written', () => {
+  assert.throws(() => run({ dryRun: true, holdOut: true }), /No other annotated file/);
+  assert.throws(() => run({ dryRun: false, holdOut: true }), /previews only/);
+});
+
+test('a held-out preview predicts from a model that never saw this file', () => {
+  const otherPath = join(tempDir, 'other.mid');
+  writeFileSync(otherPath, buildMidi());
+  const otherId = FileModel.create({
+    jamcorderPath: '/device/other.mid',
+    localPath: 'other.mid',
+    filename: 'other.mid',
+    fileSize: 1,
+    jamcorderModified: 0,
+    dateRecorded: '2026-09-07',
+    midiDuration: 180
+  });
+  AnnotationModel.create({ fileId: otherId, songName: 'Other Low', startTime: 0, endTime: 60 });
+  AnnotationModel.create({ fileId: otherId, songName: 'Other High', startTime: 60, endTime: 120 });
+
+  const saved = run({ dryRun: true });
+  const heldOut = run({ dryRun: true, holdOut: true });
+  assert.equal(heldOut.heldOut, true);
+  assert.equal(saved.heldOut, false);
+  // The refit knows only the songs annotated in the other file, as a model
+  // that never saw this one should.
+  const heldOutSongs = new Set(heldOut.rawSegments.map((segment) => segment.songName));
+  assert.ok(heldOutSongs.size > 0);
+  for (const song of heldOutSongs) assert.match(song, /^Other /);
+  // It reports the saved model it was refit from, and that model's windowing.
+  assert.equal(heldOut.modelVersion, saved.modelVersion);
+  assert.deepEqual(heldOut.modelConfig, saved.modelConfig);
+  assert.equal(PredictionReviewModel.list({ fileId }).length, 0);
+});
+
+test('a committed run stores each prediction\'s evidence parts, covering its bounds', () => {
+  const inserted = run({ dryRun: false });
+  assert.ok(inserted.insertedCount > 0);
+  for (const row of PredictionReviewModel.list({ fileId })) {
+    const parts = JSON.parse(row.predicted_parts_json ?? '[]') as Array<{ startTime: number; endTime: number }>;
+    assert.ok(parts.length > 0, 'every stored prediction carries parts');
+    assert.equal(parts[0].startTime, row.predicted_start_time);
+    assert.equal(parts[parts.length - 1].endTime, row.predicted_end_time);
+  }
+  PredictionReviewModel.deleteUnpromotedByFileId(fileId);
+});

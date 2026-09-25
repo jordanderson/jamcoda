@@ -370,3 +370,57 @@ test('getUnreviewedCoveredSeconds returns zero for a file with no pending review
   const fileId = createTestFile();
   assert.equal(PredictionReviewModel.getUnreviewedCoveredSeconds(fileId), 0);
 });
+
+test('stores and returns a prediction\'s evidence parts', () => {
+  const fileId = createTestFile();
+  const parts = [
+    { startTime: 10, endTime: 60, basis: 'anchor', meanRank: 0 },
+    { startTime: 60, endTime: 70, basis: 'bridge', meanRank: 4 }
+  ];
+  const [id] = PredictionReviewModel.createMany([{
+    fileId, predictedSongName: 'Bethena', predictedStartTime: 10, predictedEndTime: 70, predictedParts: parts
+  }]);
+  assert.deepEqual(JSON.parse(PredictionReviewModel.findById(id)!.predicted_parts_json!), parts);
+  const [bare] = PredictionReviewModel.createMany([{
+    fileId, predictedSongName: 'Bethena', predictedStartTime: 80, predictedEndTime: 90
+  }]);
+  assert.equal(PredictionReviewModel.findById(bare)!.predicted_parts_json, null);
+});
+
+test('promoteWithCut keeps both sides of a cut as annotations, and the source as an accepted edit', () => {
+  const fileId = createTestFile();
+  const id = PredictionReviewModel.create({
+    fileId, predictedSongName: 'Bethena', predictedStartTime: 10, predictedEndTime: 100,
+    predictedConfidence: 0.7, modelVersion: 'knn-song-segmenter@x'
+  });
+
+  const { promotions } = PredictionReviewModel.promoteWithCut(id, 50, 60);
+  assert.equal(promotions.length, 2);
+  const annotations = AnnotationModel.findByFileId(fileId)
+    .map((a) => [a.song_name, a.start_time, a.end_time]);
+  assert.deepEqual(annotations, [['Bethena', 10, 50], ['Bethena', 60, 100]]);
+
+  const source = PredictionReviewModel.findById(id)!;
+  assert.equal(source.status, 'edited', 'the song was right, so the source is not invalid');
+  assert.equal(source.predicted_confidence, 0.7);
+  const second = PredictionReviewModel.findById(promotions[1].review.id)!;
+  assert.equal(second.split_from_review_id, id);
+  assert.equal(second.status, 'edited');
+  assert.equal(second.predicted_confidence, null, 'the confidence fit counts the prediction once');
+});
+
+test('promoteWithCut trims instead when the cut reaches an end, and refuses a cut outside the review', () => {
+  const fileId = createTestFile();
+  const id = PredictionReviewModel.create({
+    fileId, predictedSongName: 'Bethena', predictedStartTime: 10, predictedEndTime: 100
+  });
+  assert.throws(() => PredictionReviewModel.promoteWithCut(id, 120, 130), /inside the review/);
+
+  const { promotions } = PredictionReviewModel.promoteWithCut(id, 90, 100);
+  assert.equal(promotions.length, 1);
+  assert.deepEqual(
+    AnnotationModel.findByFileId(fileId).map((a) => [a.start_time, a.end_time]),
+    [[10, 90]]
+  );
+  assert.throws(() => PredictionReviewModel.promoteWithCut(id, 20, 30), /already promoted/);
+});

@@ -4,6 +4,8 @@ import { candidateCountLabel, candidateSpans, type CandidateRun } from './predic
 import type { RollAnnotation, RollPrediction } from '../midi/pianoRollTypes'
 import { useAnnotationResize } from '@/hooks/useAnnotationResize'
 import type { AnnotationResizeEdge } from '../midi/PianoRollTimelines'
+import { EvidenceOverlay, listenSummary } from '../midi/EvidenceOverlay'
+import type { EvidencePart } from '@core/predictionEvidence'
 
 /**
  * Minimum rendered width for a resizable annotation span. The two resize
@@ -29,6 +31,8 @@ export interface OverviewSpan {
   label: string
   start: number
   end: number
+  /** A prediction's evidence parts, drawn as fading and hatching inside the span. */
+  parts?: EvidencePart[]
 }
 
 /**
@@ -98,12 +102,13 @@ export const SpanRow = memo(function SpanRow({ spans, durationSec, onSeek, empty
         // its rendered one, so a neighbor can never revoke resizability.
         const showHandles = onResizePointerDown !== undefined && naturalWidth >= minSpanPercent
         const handleClasses = resizingKey === span.key ? 'opacity-100' : 'opacity-60 hover:opacity-100'
+        const listen = listenSummary(span.parts)
         return (
           <Fragment key={span.key}>
             <button
               type="button"
               onClick={() => onSeek(span.start)}
-              title={`${span.label} — ${formatClock(span.start)} to ${formatClock(span.end)}`}
+              title={`${span.label} — ${formatClock(span.start)} to ${formatClock(span.end)}${listen ? `\n${listen}` : ''}`}
               className="group absolute top-0 h-full overflow-hidden"
               style={{ left: `${left}%`, width: `${width}%` }}
             >
@@ -117,9 +122,10 @@ export const SpanRow = memo(function SpanRow({ spans, durationSec, onSeek, empty
                   backgroundColor: stringToTimelineColor(span.label)
                 }}
               >
+                <EvidenceOverlay start={span.start} end={span.end} parts={span.parts} fade />
                 {/* Clipped at a line boundary rather than mid-glyph, and broken
                     mid-word so a narrow span still shows the start of the name. */}
-                <span className="line-clamp-2 break-words">{span.label}</span>
+                <span className="relative line-clamp-2 break-words">{span.label}</span>
               </span>
             </button>
             {showHandles && (
@@ -235,6 +241,29 @@ function formatClock(seconds: number): string {
   return `${minutes}:${String(total % 60).padStart(2, '0')}`
 }
 
+/** What the fading and hatching inside a predicted span mean. */
+function EvidenceLegend() {
+  return (
+    <div className="flex items-center gap-3 text-[11px] text-gray-500">
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-2.5 w-4 rounded-sm bg-sky-300" />
+        heard clearly
+      </span>
+      <span className="flex items-center gap-1">
+        <span className="inline-block h-2.5 w-4 rounded-sm bg-sky-300/40" />
+        filled in
+      </span>
+      <span className="flex items-center gap-1">
+        <span
+          className="inline-block h-2.5 w-4 rounded-sm border-b-2 border-amber-600 bg-sky-300"
+          style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,0.28) 0 2px, transparent 2px 6px)' }}
+        />
+        worth a listen
+      </span>
+    </div>
+  )
+}
+
 /** Evenly spaced clock labels, so a position on the bar means something. */
 function TimeAxis({ durationSec }: { durationSec: number }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1]
@@ -331,13 +360,34 @@ export function FileOverview({
     ? `overview-annotation-${resizingAnnotationId}`
     : null
 
+  // This component re-renders with the playhead every frame. Built inline,
+  // these arrays would be new each time and every memoised `SpanRow` below,
+  // evidence overlays included, would redraw with them.
+  const predictionSpans = useMemo(() => predictions.map((prediction): OverviewSpan => ({
+    key: `overview-prediction-${prediction.id}`,
+    label: prediction.songName,
+    start: prediction.startTime,
+    end: prediction.endTime,
+    ...(prediction.parts ? { parts: prediction.parts } : {})
+  })), [predictions])
+  const candidateRows = useMemo(() => candidates.map((run) => ({
+    run,
+    spans: candidateSpans(run, isFileComplete),
+    detail: candidateCountLabel(run, isFileComplete)
+  })), [candidates, isFileComplete])
+  const showsEvidence = predictionSpans.some((span) => span.parts)
+    || candidateRows.some((row) => row.spans.some((span) => span.parts))
+
   if (durationSec <= 0) return null
   if (annotations.length === 0 && predictions.length === 0 && candidates.length === 0) return null
 
   return (
     <div className="mt-4 pt-4 border-t space-y-2">
-      <div className="text-xs font-semibold text-gray-700">
-        Whole recording <span className="font-normal text-gray-500">· click a span to jump there, drag its edges to resize</span>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="text-xs font-semibold text-gray-700">
+          Whole recording <span className="font-normal text-gray-500">· click a span to jump there, drag its edges to resize</span>
+        </div>
+        {showsEvidence && <EvidenceLegend />}
       </div>
 
       <TimelineBar
@@ -364,24 +414,19 @@ export function FileOverview({
           durationSec={durationSec}
           currentTime={currentTime}
           onSeek={onSeek}
-          spans={predictions.map((prediction) => ({
-            key: `overview-prediction-${prediction.id}`,
-            label: prediction.songName,
-            start: prediction.startTime,
-            end: prediction.endTime
-          }))}
+          spans={predictionSpans}
         />
       )}
 
-      {candidates.map((run) => (
+      {candidateRows.map(({ run, spans, detail }) => (
         <TimelineBar
           key={`overview-candidate-${run.id}`}
           label={`Candidate ${run.id}: ${run.label}`}
-          detail={candidateCountLabel(run, isFileComplete)}
+          detail={detail}
           durationSec={durationSec}
           currentTime={currentTime}
           onSeek={onSeek}
-          spans={candidateSpans(run, isFileComplete)}
+          spans={spans}
         />
       ))}
 

@@ -21,6 +21,8 @@ function review(overrides: Partial<PredictionReview> = {}): PredictionReview {
     updated_at: 0,
     reviewed_at: null,
     promoted_at: null,
+    predicted_parts_json: null,
+    split_from_review_id: null,
     ...overrides
   };
 }

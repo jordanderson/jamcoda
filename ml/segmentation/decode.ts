@@ -7,14 +7,17 @@
  */
 import { clamp, roundTo } from '@core/cli/args';
 import { snapSegmentBoundaries, type BoundaryNote } from '@core/boundaries';
+import { clipParts } from '@core/timeRanges';
 import {
   NO_SONG_LABEL,
   SILENCE_RATIO_INDEX,
   type NoteEvent,
   type PredictConfig,
+  type SegmentPart,
   type SongSegment,
   type SongSegmentModel,
   type TrainConfig,
+  type WindowBasis,
   type WindowPrediction,
   type WindowSample
 } from './types';
@@ -242,10 +245,11 @@ function anchorLinkDecode(
   noneLabelIndex: number,
   /** Per-window: may this window be linked into a neighboring anchor run? */
   linkable: boolean[]
-): { labels: number[]; confidence: number[] } {
+): { labels: number[]; confidence: number[]; basis: Array<WindowBasis | undefined> } {
   const n = evidence.length;
   const labels = new Array<number>(n).fill(-1);
   const confidence = new Array<number>(n).fill(0);
+  const basis = new Array<WindowBasis | undefined>(n).fill(undefined);
 
   const anchorMargin = config.anchorMargin ?? 0.15;
   const minAnchorRun = Math.max(1, config.minAnchorRun ?? 3);
@@ -295,6 +299,7 @@ function anchorLinkDecode(
       for (let k = i; k < j; k++) {
         labels[k] = label;
         confidence[k] = evidence[k].margin;
+        basis[k] = 'anchor';
       }
       if (config.linkPolicy !== 'bridge') {
         // Extend this run to the right.
@@ -303,6 +308,7 @@ function anchorLinkDecode(
           if (!canFill(k, label)) break;
           labels[k] = label;
           confidence[k] = fillConf;
+          basis[k] = 'linked';
         }
         // Extend this run to the left.
         for (let k = i - 1; k >= 0; k--) {
@@ -310,6 +316,7 @@ function anchorLinkDecode(
           if (!canFill(k, label)) break;
           labels[k] = label;
           confidence[k] = fillConf;
+          basis[k] = 'linked';
         }
       }
     }
@@ -345,12 +352,15 @@ function anchorLinkDecode(
       return false;
     };
 
-    const claim = (k: number, run: { label: number; fillConf: number }, limit = Infinity, distance = 0): boolean => {
+    const claim = (
+      k: number, run: { label: number; fillConf: number }, how: WindowBasis, limit = Infinity, distance = 0
+    ): boolean => {
       if (k < 0 || k >= n || labels[k] !== -1 || !canLink(k, run.label)) return false;
       // Past the leash the song must still be the model's own first choice.
       if (distance > limit && evidence[k].bestLabel !== run.label) return false;
       labels[k] = run.label;
       confidence[k] = run.fillConf;
+      basis[k] = how;
       return true;
     };
 
@@ -361,10 +371,10 @@ function anchorLinkDecode(
     for (let a = 0; a < anchors.length; a++) {
       const run = anchors[a];
       if (anchors[a + 1]?.label === run.label) {
-        for (let k = run.end; claim(k, run); k++);
+        for (let k = run.end; claim(k, run, 'bridge'); k++);
       }
       if (anchors[a - 1]?.label === run.label) {
-        for (let k = run.start - 1; claim(k, run); k--);
+        for (let k = run.start - 1; claim(k, run, 'bridge'); k--);
       }
     }
 
@@ -379,11 +389,11 @@ function anchorLinkDecode(
       let advanced = false;
       for (let a = 0; a < anchors.length; a++) {
         if (rightAlive[a]) {
-          rightAlive[a] = claim(anchors[a].end + d - 1, anchors[a], rightLimit[a], d);
+          rightAlive[a] = claim(anchors[a].end + d - 1, anchors[a], 'tail', rightLimit[a], d);
           advanced = advanced || rightAlive[a];
         }
         if (leftAlive[a]) {
-          leftAlive[a] = claim(anchors[a].start - d, anchors[a], leftLimit[a], d);
+          leftAlive[a] = claim(anchors[a].start - d, anchors[a], 'tail', leftLimit[a], d);
           advanced = advanced || leftAlive[a];
         }
       }
@@ -429,6 +439,7 @@ function anchorLinkDecode(
         const owner = i < split ? left : right;
         labels[i] = owner.label;
         confidence[i] = owner.fillConf;
+        basis[i] = 'divided';
       }
     }
   }
@@ -490,6 +501,7 @@ function anchorLinkDecode(
             if (leftAlive) {
               labels[lo] = left;
               confidence[lo] = rescueConfidence;
+              basis[lo] = 'rescued';
               lo++;
             }
           }
@@ -498,6 +510,7 @@ function anchorLinkDecode(
             if (rightAlive) {
               labels[hi - 1] = right;
               confidence[hi - 1] = rescueConfidence;
+              basis[hi - 1] = 'rescued';
               hi--;
             }
           }
@@ -518,6 +531,7 @@ function anchorLinkDecode(
         for (let k = i; k < j; k++) {
           labels[k] = best;
           confidence[k] = rescueConfidence;
+          basis[k] = 'rescued';
         }
       }
       i = j;
@@ -545,6 +559,7 @@ function anchorLinkDecode(
         for (let k = i; k < j; k++) {
           labels[k] = -1;
           confidence[k] = 0;
+          basis[k] = undefined;
         }
       }
       i = j;
@@ -555,7 +570,7 @@ function anchorLinkDecode(
     if (labels[i] === -1) labels[i] = noneLabelIndex;
   }
 
-  return { labels, confidence };
+  return { labels, confidence, basis };
 }
 
 
@@ -584,16 +599,20 @@ export function decodeWindowScores(
     const linkable = windows.map(
       (window) => window.features[SILENCE_RATIO_INDEX] < maxLinkSilence
     );
-    const { labels, confidence } = anchorLinkDecode(
+    const { labels, confidence, basis } = anchorLinkDecode(
       evidence, model.config, noneLabelIndex, linkable
     );
     const predictions: WindowPrediction[] = [];
     for (let i = 0; i < windowCount; i++) {
+      const scores = scoresList[i];
+      let rank = 0;
+      for (const score of scores) if (score > scores[labels[i]]) rank++;
       predictions.push({
         startTime: windows[i].startTime,
         endTime: windows[i].endTime,
         label: model.labels[labels[i]],
-        confidence: confidence[i]
+        confidence: confidence[i],
+        ...(basis[i] ? { basis: basis[i], rank } : {})
       });
     }
     return predictions;
@@ -633,10 +652,12 @@ export function decodeWindowScores(
     });
   }
 
-  if (decoder === 'viterbi') {
-    return predictions;
-  }
-  return smoothWindowPredictions(predictions, options.smoothingWindows);
+  const decoded = decoder === 'viterbi'
+    ? predictions
+    : smoothWindowPredictions(predictions, options.smoothingWindows);
+  return decoded.map((window) => (
+    window.label === NO_SONG_LABEL ? window : { ...window, basis: 'decoded' as const }
+  ));
 }
 
 export function smoothWindowPredictions(
@@ -733,12 +754,37 @@ export function windowsToSegments(
     const endTime = boundEnd(endIndex);
     if (endTime <= startTime) return;
 
+    // Each window covers from its own bound to the next one's, so consecutive
+    // windows reached the same way make one contiguous part.
+    const parts: SegmentPart[] = [];
+    const rankSums: Array<{ sum: number; count: number }> = [];
+    for (let i = runStartIndex; i <= endIndex; i++) {
+      const how = windows[i].basis ?? 'decoded';
+      const last = parts[parts.length - 1];
+      if (last && last.basis === how) {
+        last.endTime = boundEnd(i);
+      } else {
+        parts.push({ startTime: boundStart(i), endTime: boundEnd(i), basis: how });
+        rankSums.push({ sum: 0, count: 0 });
+      }
+      const rank = windows[i].rank;
+      if (rank !== undefined) {
+        rankSums[rankSums.length - 1].sum += rank;
+        rankSums[rankSums.length - 1].count++;
+      }
+    }
+    parts.forEach((part, index) => {
+      const { sum, count } = rankSums[index];
+      if (count > 0) part.meanRank = roundTo(sum / count);
+    });
+
     provisional.push({
       songName: label,
       startTime,
       endTime,
       durationSec: endTime - startTime,
-      confidence: confidenceSum / (endIndex - runStartIndex + 1)
+      confidence: confidenceSum / (endIndex - runStartIndex + 1),
+      parts
     });
   };
 
@@ -768,11 +814,15 @@ export function windowsToSegments(
         + (segment.confidence * (segment.endTime - segment.startTime))
       ) / Math.max(1e-9, combinedDuration);
 
+      const joined: SegmentPart[] = segment.startTime > last.endTime
+        ? [{ startTime: last.endTime, endTime: segment.startTime, basis: 'joined' }]
+        : [];
+      last.parts = [...(last.parts ?? []), ...joined, ...(segment.parts ?? [])];
       last.endTime = segment.endTime;
       last.durationSec = last.endTime - last.startTime;
       last.confidence = weightedConfidence;
     } else {
-      merged.push({ ...segment });
+      merged.push({ ...segment, parts: [...(segment.parts ?? [])] });
     }
   }
 
@@ -799,11 +849,21 @@ export function windowsToSegments(
   }
 
   return candidates
-    .map((segment) => ({
-      ...segment,
-      startTime: roundTo(segment.startTime),
-      endTime: roundTo(segment.endTime),
-      durationSec: roundTo(segment.durationSec),
-      confidence: roundTo(segment.confidence)
-    }));
+    .map((segment) => {
+      const startTime = roundTo(segment.startTime);
+      const endTime = roundTo(segment.endTime);
+      return {
+        ...segment,
+        startTime,
+        endTime,
+        durationSec: roundTo(segment.durationSec),
+        confidence: roundTo(segment.confidence),
+        parts: clipParts(segment.parts ?? [], startTime, endTime).map((part) => ({
+          ...part,
+          startTime: roundTo(part.startTime),
+          endTime: roundTo(part.endTime)
+        }))
+      };
+    });
 }
+

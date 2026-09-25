@@ -1,3 +1,4 @@
+import type { EvidencePart } from '@core/predictionEvidence';
 /**
  * Response and request shapes for the local backend API.
  *
@@ -36,6 +37,11 @@ export interface PromotePredictionReviewResponse {
   review: PredictionReview;
   annotationId: number;
   created: boolean;
+}
+
+/** Promoting a review with a stretch cut out leaves one or two annotations. */
+export interface PromoteWithCutResponse {
+  promotions: PromotePredictionReviewResponse[];
 }
 
 /** Batch promotion response for all promotable reviewed rows. */
@@ -104,6 +110,13 @@ export interface RunPredictionForFileRequest {
   minSegmentConfidence?: number;
   mergeGapSec?: number;
   modelPath?: string;
+  /** A model in the library's `ml/` folder, by file name. Takes precedence over `modelPath`. */
+  modelName?: string;
+  /**
+   * Predict with a model retrained without this file, so it has never seen
+   * the file's annotations. Previews only.
+   */
+  holdOut?: boolean;
   /**
    * Compute the segments and return them without writing any review rows.
    * A preview is also allowed on a file marked complete, which a committed run
@@ -121,6 +134,8 @@ export interface PredictedSegment {
   endTime: number;
   durationSec: number;
   confidence: number;
+  /** How the model reached the song over each stretch; see `core/predictionEvidence.ts`. */
+  parts?: EvidencePart[];
 }
 
 /** Detailed response for prediction run stats and inserted rows. */
@@ -146,6 +161,10 @@ export interface RunPredictionForFileResponse {
   dryRun?: boolean;
   /** The decoder settings actually used, after any overrides. */
   decodeConfig?: PredictionDecoderOverrides;
+  /** File name of the model that ran. */
+  modelName?: string;
+  /** Whether the segments came from a model retrained without this file. */
+  heldOut?: boolean;
   /** Present only for a dry run; a committed run has already written its rows. */
   segments?: PredictedSegment[];
   /**
@@ -223,6 +242,20 @@ export interface RebuildStatusResponse {
   /** Song names in the DB the model has never seen. */
   missingLabels: string[];
   hasPendingChanges: boolean;
+}
+
+/** A model file in the library's `ml/` folder, as `GET /api/prediction-reviews/models` lists it. */
+export interface LibraryModelSummary {
+  name: string;
+  /** `ml/model.json`, the model the app predicts and rebuilds with. */
+  isLibraryModel: boolean;
+  modelVersion: string | null;
+  createdAt: string | null;
+  featureCount: number | null;
+  chordIoiFeatures: boolean;
+  labelCount: number | null;
+  /** Why this build cannot load the model, or null when it can. */
+  error: string | null;
 }
 
 /** Songs page list payload. */

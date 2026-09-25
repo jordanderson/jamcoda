@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { ensureDirForFile, hasFlag, parseInt_, readArg } from '@core/cli/args';
-import { compareReports, type ComparableReport } from './evalComparison';
+import { compareReports, type ComparableReport, type SessionMetric } from './evalComparison';
 import { errorMessage } from '@core/errors';
 
 /**
@@ -80,6 +80,43 @@ async function main() {
   if (close.count > 0) {
     console.log(`  median ending error    ${sec(close.baselineMedianEndSec)} -> ${sec(close.variantMedianEndSec)}`);
     console.log(`  median next-start error ${sec(close.baselineMedianNextStartSec)} -> ${sec(close.variantMedianNextStartSec)}`);
+  }
+
+  console.log();
+  if (result.sessions) {
+    console.log('Complete files scored as sessions (lower is better; file bootstrap 95% on the difference)');
+    const labels: Record<SessionMetric, string> = {
+      wrongSongSec: 'wrong song (s)',
+      missedSec: 'missed song (s)',
+      bleedSec: 'unannotated called a song (s)',
+      gapFillSec: '  in a same-song gap (s)',
+      overrunSec: '  next to its session (s)',
+      strayBleedSec: '  stray (s)',
+      gapsBridged: 'same-song gaps bridged',
+      sessionsSplit: 'sessions split',
+      sessionsMissed: 'sessions not found',
+      unsupportedSegments: 'unsupported segments',
+      reviewEdits: 'review edits (estimate)'
+    };
+    const count = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(0));
+    for (const [metric, label] of Object.entries(labels) as Array<[SessionMetric, string]>) {
+      const row = result.sessions[metric];
+      console.log(`  ${label.padEnd(31)} ${count(row.baseline).padStart(7)} -> ${count(row.variant).padStart(7)}`
+        + `  ${row.delta >= 0 ? '+' : ''}${count(row.delta)} [${count(row.ci95[0])}, ${count(row.ci95[1])}]`);
+    }
+    const binsOf = (report: ComparableReport) => report.sessionComplete?.gapsByLength;
+    const baseBins = binsOf(baseline);
+    const variantBins = binsOf(variant);
+    if (baseBins && variantBins) {
+      console.log('  same-song gaps bridged, by gap length');
+      baseBins.forEach((bin, index) => {
+        const range = `${bin.fromSec}–${bin.toSec ?? '∞'}s`;
+        console.log(`    ${range.padEnd(8)} ${String(bin.gaps).padStart(4)} gaps:`
+          + ` ${bin.bridged} -> ${variantBins[index].bridged}`);
+      });
+    }
+  } else {
+    console.log('Session scoring: one of the reports predates it. Regenerate both with the current ml:eval.');
   }
 
   const outArg = readArg('--out');

@@ -27,13 +27,367 @@ How to read the numbers:
   This is the closest single number to "predictions vs annotations".
 - **Matched takes** — annotations paired one-to-one with a same-song
   prediction that overlaps at least half their combined time. F1 can rise
-  while this falls, when one prediction swallows two takes.
+  while this falls, when one prediction swallows two takes. An annotation
+  here marks a session of work on one song rather than a single take (see
+  "What an annotation means" in `ml/README.md`), so read this alongside the
+  session scores.
+- **Session scores** — each complete file's time split into correct, wrong
+  song and missed song time, and unannotated time called a song (gap fill,
+  overrun, stray), with an estimate of the review edits the prediction needs.
+  Same-song annotations under three seconds apart score as one session;
+  entries before the window-length sweep of September 24, 2026 used one
+  second. See `ml/sessionEvaluation.ts`.
 - **Points** — percentage points: 93.10% to 93.15% is +0.05 points.
 - **95% interval** — from a paired bootstrap over files: the recordings are
   resampled thousands of times and the difference between two runs
   recomputed. An interval that excludes zero means the change is unlikely to
   be chance.
 - See `ml/eval.ts` for how these are computed.
+
+---
+
+## September 24, 2026 — where a prediction's evidence is weak (measurement; predictions unchanged)
+
+### In plain terms
+
+No model change tried so far tells a pause inside a session from noodling
+between two sessions, so the model keeps joining them and the review points at
+the places worth checking. That needs a signal the reviewer can trust. The
+decoder now records how it reached each window's song, and how highly the model
+ranked that song there. The ranking is the useful part: across a stretch where the
+model carried a song through a noodling gap, the song ranks a median 1.8
+places below the model's first choice; everywhere else the decoder filled in,
+it ranks first. Flagging stretches that rank the song at least second, over at
+least three seconds, gives about five flags per recording, and about one in
+three covers a real error.
+
+### What changed
+
+- `WindowPrediction.basis` and `.rank`: how the anchor decoder reached the
+  window's song (`anchor`, `bridge`, `tail`, `linked`, `divided`, `rescued`;
+  `decoded` for the other decoders) and how many labels scored above it.
+- `SongSegment.parts`: the segment's stretches in time order, each with its
+  basis and the song's mean rank over it, plus `joined` for a gap closed by
+  `mergeGapSec`. `clipParts` in `core/timeRanges.ts` keeps them covering a
+  segment that is trimmed, split or snapped.
+- Session scores split predicted time by basis (`timeByBasis`), name what
+  covers each bridged gap (`mainBasis`, `bridgedGapsByBasis`), and list every
+  non-anchor part with its length, gap overlap, correct time and mean rank
+  (`weakParts`).
+- Predictions are unchanged: v2.14's complete-file F1, review-edit estimate
+  and bridged-gap count reproduce exactly.
+
+### Measurements
+
+v2.14, current library (`71ca3e73…`), leave-one-file-out, complete files.
+How much of each basis's predicted time is an error (wrong song, or song over
+unannotated time):
+
+| Basis | Predicted time | Error |
+|---|---|---|
+| anchor | 119,785s | 1.2% |
+| bridge | 65,105s | 5.5% |
+| tail | 9,899s | 26.4% |
+| rescued | 6,106s | 31.2% |
+| joined | 434s | 27.2% |
+
+Of 175 bridged same-song gaps, 136 are mainly covered by a `bridge` stretch,
+18 by `joined`, 6 by `rescued`, 5 by `tail`, and 10 by `anchor`, where the
+model heard the song in the gap outright and no flag can find it.
+
+Non-anchor stretches are too many to flag as they are: 70.5 per recording,
+because inside a session the decoder alternates between anchor runs and short
+bridges, and 3% of them touch a gap. Their length separates weakly (median
+16s where they touch a gap, 4s where not). The song's mean rank separates
+well: median 1.8 where the stretch touches a gap, 0.0 elsewhere (90th
+percentile 1.6).
+
+| Flag a non-anchor stretch when | Flags per recording | Covering ≥2s of error | Share of weak-stretch error time covered |
+|---|---|---|---|
+| always | 70.5 | 8% | all |
+| mean rank ≥ 1 | 11.4 | 23% | 73% |
+| mean rank ≥ 1, ≥ 3s | 8.9 | 26% | 70% |
+| mean rank ≥ 2, ≥ 3s | 5.4 | 31% | 59% |
+| mean rank ≥ 3, ≥ 3s | 3.7 | 34% | 51% |
+| mean rank ≥ 5, ≥ 3s | 2.0 | 36% | 33% |
+| `joined` only | 1.8 | 13% | 1% |
+
+---
+
+## September 24, 2026 — center-window features: no effect on gap bridging (experimental)
+
+### In plain terms
+
+The window-length sweep suggested hearing two time scales at once: the full
+six seconds to recognize a slow song, plus a short window at the middle, where
+the label applies, to tell whether that moment is still the song or a pause
+or noodling. The short window does pick up that difference, but the model does
+not use it to keep gaps open: bridging is unchanged at either length. A three-second center trims some
+stray segments and split sessions and misses more sessions, and missing a
+session is the costlier edit. The setting stays, off, for experiments.
+
+### What changed
+
+- `TrainConfig.centerWindowSec` (default 0, off) appends the base 37
+  features over that many seconds at each window's center, as
+  `CENTER_FEATURE_NAMES`. The model records it, and a model saved without it
+  extracts no center features.
+- `windowFeatureOptions(config)` gathers every setting that decides a window's
+  features. A setting missing from a saved model takes the value that matches
+  how models were built before the setting was added.
+- `ml:train --center-window <sec>` and `centerWindowSec` on
+  `POST /api/prediction-reviews/rebuild-model`.
+
+### Measurements
+
+v2.14 settings with `centerWindowSec` added, current library (`71ca3e73…`),
+leave-one-file-out, complete files, paired file bootstrap (3,000 resamples,
+seed 42) against v2.14:
+
+| Center | Δ F1 | Gaps bridged (of 246) | Missed song | Sessions not found | Sessions split | Unsupported segments | Review edits |
+|---|---|---|---|---|---|---|---|
+| none (v2.14) | — | 175 | — | 81 | 27 | 59 | 342 |
+| 2s | −1.244 [−2.078, −0.557] | 171 | +4,009s [+1,098, +7,276] | 102 | 21 | 41 | −7 [−25, +11] |
+| 3s | −0.380 [−0.994, +0.243] | 173 | +875s [−1,478, +3,116] | 93 | 17 | 43 | −16 [−34, −1] |
+
+A center window adds 37 features to every window, and a leave-one-file-out
+run takes about 545 seconds instead of 350.
+
+Neither the feature set, the window length, the `__none__` budget nor a
+decode setting separates a pause inside a session from noodling between two
+of them without costing sessions elsewhere. The remaining approach is to let
+the model bridge and show the annotator where its evidence was weak.
+
+---
+
+## September 24, 2026 — window length on session scores: 6 seconds stays (not shipped)
+
+### In plain terms
+
+Most gaps between two sessions of a song are shorter than the six-second
+window, so a shorter window should notice more of them. It does: four seconds
+bridges 30 fewer gaps, and fewer of the long ones too. But shorter windows
+lose far more song than they save, and the songs they lose are the slow,
+sparse ones, which give a short window too few notes to recognize: O Come
+Emmanuel, Ashokan Farewell, Moonlight Sonata, Gymnopédie No. 1. Seven seconds
+is no better than six. Six stays.
+
+From this entry on, session scores treat two annotations of one song under
+three seconds apart as one session, the gap a pause rather than noodling. On
+v2.14 that leaves 1,024 sessions and 246 same-song gaps, 175 of them bridged
+(71%), and an estimate of 342 review edits.
+
+### Measurements
+
+v2.14 settings with `windowSec` changed, current library (`71ca3e73…`),
+leave-one-file-out, complete files, paired file bootstrap (3,000 resamples,
+seed 42) against 6 seconds:
+
+| Window | Δ F1 | Gaps bridged (of 246) | Missed song | No-song called a song | Sessions not found | Review edits |
+|---|---|---|---|---|---|---|
+| 6s (v2.14) | — | 175 | — | — | 81 | 342 |
+| 4s | −1.469 [−2.421, −0.721] | 145 | +6,763s [+3,643, +10,819] | −1,566s [−2,587, −568] | 119 | +29 [+11, +47] |
+| 5s | −0.820 [−1.884, +0.009] | 161 | +2,926s [+35, +6,329] | −1,353s [−2,224, −585] | 103 | +20 [−2, +43] |
+| 7s | −0.241 [−0.762, +0.200] | 180 | −2,060s [−3,955, −573] | +805s [+177, +1,456] | 76 | +3 [−16, +22] |
+
+Bridged gaps by length:
+
+| Window | 3–6s (89) | 6–12s (71) | 12–30s (50) | 30s+ (36) |
+|---|---|---|---|---|
+| 4s | 62 | 48 | 24 | 11 |
+| 5s | 75 | 46 | 26 | 14 |
+| 6s | 74 | 51 | 32 | 18 |
+| 7s | 76 | 52 | 32 | 20 |
+
+Songs with at least ten annotated minutes that lose the most recall at 5
+seconds (recall at 6s → 5s → 4s): O Come Emmanuel 70.2% → 25.8% → 26.7%,
+Ashokan Farewell 87.9% → 63.4% → 69.2%, Pure Imagination 94.2% → 70.8% →
+86.6%, Moonlight Sonata 93.4% → 79.0% → 77.4%, Gymnopédie No. 1 77.6% → 66.1%
+→ 74.1%, The Christmas Song 91.6% → 80.5% → 80.5%.
+
+A shorter window separates sessions and a longer one recognizes sparse songs,
+and one length cannot do both. Features from two window lengths at once, or a
+window sized to the playing's density, are untried.
+
+---
+
+## September 24, 2026 — a larger "no song" budget does not stop gap bridging (not shipped)
+
+### In plain terms
+
+v2.14 carries a song across 79% of the noodling gaps between two sessions of
+it. The obvious suspect was the `__none__` class: it has to stand for all
+noodling, flourishes and silence with 60 stored examples, against about 190
+per song. Giving it up to ten times as many barely changes bridging, and
+starts costing real song time instead. The cause is elsewhere: most of these
+gaps are shorter than the model's six-second window.
+
+### Measurements
+
+v2.14 settings, current library (`71ca3e73…`), leave-one-file-out, complete
+files, paired file bootstrap (3,000 resamples, seed 42) against
+`maxNonePrototypes` 60. Songs' budgets do not depend on this cap, so raising
+it adds `__none__` prototypes without taking any from songs; uncapped,
+`__none__`'s square-root share of the 16,000 budget is 636.
+
+| `__none__` prototypes | Gaps bridged (of 366) | Missed song | Stray bleed | Review edits | Δ F1 |
+|---|---|---|---|---|---|
+| 60 (v2.14) | 289 | — | — | 462 | — |
+| 120 | 288 | +53s [−17, +138] | −38s [−88, 0] | −4 [−8, −1] | +0.015 [−0.012, +0.046] |
+| 240 | 288 | +229s [+5, +589] | −40s [−92, +2] | −2 [−7, +3] | −0.050 [−0.168, +0.041] |
+| 480 | 285 | +836s [+287, +1,691] | −197s [−475, −23] | −3 [−10, +4] | −0.135 [−0.369, +0.031] |
+| 636 (uncapped) | 287 | +939s [+279, +1,875] | −420s [−860, −69] | −3 [−16, +9] | −0.187 [−0.449, +0.037] |
+
+120 is a clean but tiny gain, four edits in 462, and 60 stands.
+
+### Why: the gaps are shorter than a window
+
+Across the 142 complete files, the 366 gaps between two sessions of the same
+song have a median length of 4.9s (quartiles 2.5s and 11.6s):
+
+| Gap length | 1–3s | 3–6s | 6–12s | 12–30s | 30–60s | 60s+ |
+|---|---|---|---|---|---|---|
+| Gaps | 120 | 89 | 71 | 50 | 19 | 17 |
+
+209 of them (57%) are shorter than the six-second window, so every window
+across such a gap also contains several seconds of the song, and any two
+predictions the decoder leaves apart within five seconds are joined again by
+`mergeGapSec`. No `__none__` example can change what those windows contain.
+
+### Decoder settings trade bridged gaps for split sessions
+
+Decode-only overrides of v2.14 on the same dataset, against v2.14 as built:
+
+| Setting | Gaps bridged | Sessions split | Missed song | Review edits | Δ F1 |
+|---|---|---|---|---|---|
+| v2.14 | 289 | 24 | — | 462 | — |
+| `mergeGapSec` 2 | 266 | 47 | +147s [+96, +205] | +0 [−16, +14] | −0.010 [−0.027, +0.006] |
+| `mergeGapSec` 0 | 246 | 161 | +443s [+323, +573] | +101 [+74, +131] | −0.068 [−0.096, −0.043] |
+| `linkMaxSilenceRatio` 0.4 | 217 | 119 | +5,650s [+3,634, +7,893] | +45 [+20, +69] | −1.003 [−1.472, −0.551] |
+| `linkTailSec` 0 | 290 | 22 | +380s [+208, +576] | −7 [−14, −1] | −0.031 [−0.076, +0.011] |
+| `linkPolicy` legacy | 294 | 24 | −5,701s | +15 [0, +32] | −1.934 [−2.554, −1.389] |
+
+Every setting that opens gaps closes fewer of the pauses inside sessions:
+`mergeGapSec` 2 unbridges 23 gaps and splits 23 sessions. To the decoder, a
+pause within a session and noodling between two sessions are the same thing,
+a stretch of weak evidence, often quiet, flanked by the song. Bridging by gap
+length, v2.14 as built:
+
+| Gap length | 1–3s | 3–6s | 6–12s | 12–30s | 30s+ |
+|---|---|---|---|---|---|
+| Bridged | 114 of 120 | 74 of 89 | 51 of 71 | 32 of 50 | 18 of 36 |
+
+Even half the gaps over 30 seconds are bridged, so length is not the whole
+story, but no decode setting separates them without splitting sessions at the
+same rate.
+
+---
+
+## September 24, 2026 — v2.14: chord intervals and inter-onset intervals, judged as sessions (accepted)
+
+### In plain terms
+
+Two new groups of features describe what a window sounds like beyond which
+notes are in it: the intervals inside its chords, and the spread of gaps
+between its notes. With them the model calls much less of your playing the
+wrong song, splits fewer practice sessions in two, and leaves fewer stray
+segments. It also joins more pairs of sessions of the same song across the
+noodling between them.
+
+Scored as takes, that looked like a loss: 57 matched takes lost for 18
+gained. But an annotation here is a session of work on one song, not a take
+(see "What an annotation means" in `ml/README.md`), so the new session scores
+judge it instead. Counting the edits a review would need, the new features
+save 53 on the current library and 28 on the September 7 snapshot, both with
+intervals clear of zero. They ship as the default.
+
+Both models carry a song across three quarters of the noodling gaps between
+its sessions, and call close to half of all declared no-song time a song.
+That, not the difference between them, is the largest error the session
+scores find, and it is the next thing to fix.
+
+### What changed
+
+- `TrainConfig.chordIoiFeatures`, on by default, appends
+  `CHORD_IOI_FEATURE_NAMES` to each window:
+  - six simultaneous-pitch interval classes: the window is split into seven
+    sub-bins, each records the pitch classes sounding together, and the
+    pairwise interval classes are counted and normalized to sum 1;
+  - ten inter-onset-interval bins from under 80ms to 4s and over, normalized
+    to sum 1. They describe rhythm texture without an absolute tempo.
+- The model records the setting, and `featureNamesFor(config)` gives the list
+  it extracts. A model saved without it extracts the base 37, and
+  `refitConfigOf` keeps that true when `ml:eval` or a held-out preview refits
+  it, so the new default never moves an existing model.
+- `trainModel` and `evaluateLeaveOneOut` extract with the resolved config, and
+  the fit refuses windows whose length does not match the config's feature
+  list.
+- `ml:train --no-chord-ioi-features` and `chordIoiFeatures: false` on
+  `POST /api/prediction-reviews/rebuild-model` build the v2.13 feature set.
+- `MODEL_VERSION` bumped to `v2.14`.
+
+### Measurements
+
+Leave-one-file-out, complete files only, paired file bootstrap (3,000
+resamples, seed 42), v2.13 settings against v2.14 on both snapshots.
+
+| Snapshot | Complete files | F1 | Δ F1, 95% interval | Matched takes | Lost / gained |
+|---|---:|---|---|---|---|
+| September 7 (`90836c7f…`) | 103 | 93.37% → 94.05% | +0.686 [+0.033, +1.410] | 394 → 388 | 24 / 18 |
+| current (`71ca3e73…`) | 142 | 93.15% → 94.22% | +1.074 [+0.418, +1.920] | 758 → 719 | 57 / 18 |
+
+Scored as sessions (lower is better; interval on the difference):
+
+| | current library | September 7 snapshot |
+|---|---|---|
+| Wrong-song seconds | 2,910 → 1,231, −1,679 [−3,685, −215] | 1,014 → 651, −363 [−891, +103] |
+| Missed song seconds | 13,381 → 12,288, −1,093 [−3,279, +1,102] | 5,770 → 5,365, −405 [−1,324, +456] |
+| No-song time called a song | 8,561 → 8,730, +169 [−952, +1,157] | 6,402 → 6,100, −302 [−1,402, +612] |
+| … inside a same-song gap | 2,868 → 3,447, +579 [+36, +1,216] | 1,744 → 1,921, +178 [−27, +419] |
+| Same-song gaps bridged | 267 → 289, +22 [+9, +37] | 186 → 197, +11 [+2, +22] |
+| Sessions split | 49 → 24, −25 [−38, −13] | 17 → 6, −11 [−24, −1] |
+| Sessions not found | 102 → 90, −12 [−30, +4] | 62 → 54, −8 [−19, +1] |
+| Unsupported segments | 97 → 59, −38 [−56, −21] | 62 → 42, −20 [−36, −7] |
+| **Review edits (estimate)** | **515 → 462, −53 [−78, −29]** | **327 → 299, −28 [−49, −9]** |
+
+The edit estimate counts a split, a merge, a new annotation and a delete as
+one edit each. The cost the new features add is in bridged gaps and the
+noodling inside them.
+
+Measured one group at a time on the current library, chord intervals alone add
++0.600 F1 and inter-onset intervals alone +0.121, without intervals or session
+scores. Z-score scaling beat min-max and raw, and doubling the new features'
+weight was worse.
+
+### Why matched takes misread it
+
+The take matcher pairs each annotation with one prediction at IoU ≥ 0.5. When
+a prediction joins two sessions of one song, one of them loses its match,
+although the error is the noodling between them, which the session scores
+count in seconds. Of the 57 lost matches, 10 are sessions absorbed by a
+prediction that matched a neighboring session; most of the other 47 are
+sessions inside a prediction spanning three or more. Files that lose the most:
+
+- Jmx-A00452 (Jun 20): 2 segments become 1, and both matches are lost.
+- Jmx-A00048: 5 segments become 1.
+- Jmx-A00084: 21 segments become 13, and 5 matches are lost.
+
+### Gap bridging, in both models
+
+| | Same-song gaps bridged | No-song time called a song |
+|---|---|---|
+| v2.13, current | 267 of 366 (73%) | 44% |
+| v2.14, current | 289 of 366 (79%) | 45% |
+| v2.13, September 7 | 186 of 237 (78%) | 56% |
+| v2.14, September 7 | 197 of 237 (83%) | 53% |
+
+Bridge linking joins same-song anchors across low-evidence windows by design,
+the 5-second merge gap joins them again, noodling in the song's key looks like
+the song, and `__none__` has 60 prototypes to represent all of it. Both new
+feature groups are normalized by their own totals, so a window of one or two
+onsets gets a confident one-bin vector, which may be why v2.14 bridges more;
+that is untested.
+
 
 ---
 

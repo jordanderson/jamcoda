@@ -13,6 +13,28 @@ export interface RangedSegment extends TimeRange {
   songName: string;
   durationSec: number;
   confidence: number;
+  /** Stretches covering the segment in time order; clipped with it by `clipParts`. */
+  parts?: TimeRange[];
+}
+
+/**
+ * `parts` fitted to `[startTime, endTime]`: parts outside it are dropped, the
+ * rest clamped, and the first and last stretched to its edges, so they still
+ * cover the whole range after its boundaries moved or it was cut into pieces.
+ */
+export function clipParts<P extends TimeRange>(parts: P[], startTime: number, endTime: number): P[] {
+  const clipped = parts
+    .filter((part) => part.endTime > startTime && part.startTime < endTime)
+    .map((part) => ({
+      ...part,
+      startTime: Math.max(part.startTime, startTime),
+      endTime: Math.min(part.endTime, endTime)
+    }));
+  if (clipped.length > 0) {
+    clipped[0].startTime = startTime;
+    clipped[clipped.length - 1].endTime = endTime;
+  }
+  return clipped;
 }
 
 /** Append `[startTime, endTime)` as a piece of `segment`, if it is long enough. */
@@ -25,7 +47,13 @@ function pushPiece<T extends RangedSegment>(
 ): void {
   const durationSec = endTime - startTime;
   if (durationSec >= minSegmentSec) {
-    into.push({ ...segment, startTime, endTime, durationSec });
+    into.push({
+      ...segment,
+      startTime,
+      endTime,
+      durationSec,
+      ...(segment.parts ? { parts: clipParts(segment.parts, startTime, endTime) } : {})
+    });
   }
 }
 

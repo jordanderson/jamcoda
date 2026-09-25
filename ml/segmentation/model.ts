@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { ensureDirForFile } from '@core/cli/args';
 import {
   CHROMA_SIZE,
-  FEATURE_NAMES,
+  featureNamesFor,
   HIGH_CHROMA_START,
   LOW_CHROMA_START,
   LOW_REGISTER_RATIO_INDEX,
@@ -213,6 +213,17 @@ export function fitModelFromSamples(
   // this same object, so reading a default off the caller's partial config
   // would let the saved config describe a model that was not built that way.
   const resolved = resolveTrainConfig(config);
+  const featureCount = featureNamesFor(resolved).length;
+  const mismatched = samples.find((sample) => sample.features.length !== featureCount);
+  if (mismatched) {
+    // Extracting with the caller's unresolved config while fitting with the
+    // resolved one gives a model whose feature list does not describe its
+    // vectors, which `loadModel` then refuses.
+    throw new Error(
+      `Training windows have ${mismatched.features.length} features, but this config extracts ${featureCount}.`
+      + ' Extract with the resolved config.'
+    );
+  }
 
   const positive = samples.filter((sample) => sample.label !== NO_SONG_LABEL);
   const allNegative = samples.filter((sample) => sample.label === NO_SONG_LABEL);
@@ -269,7 +280,7 @@ export function fitModelFromSamples(
     // model that omits `decoder`, `scoreMode` or `featureScaling` changes
     // behavior when a default changes.
     config: resolved,
-    featureNames: [...FEATURE_NAMES],
+    featureNames: [...featureNamesFor(resolved)],
     labels,
     featureMeans: means,
     featureStds: stds,
@@ -330,7 +341,7 @@ export function loadModel(modelPath: string): SongSegmentModel {
     // returns `__none__` for every window. The user sees 0 segments and no
     // error. The feature vector changed from 18 to 25 entries in v2.0, so
     // check it.
-  const expected = FEATURE_NAMES as readonly string[];
+  const expected = featureNamesFor(parsed.config ?? {});
   const actual = Array.isArray(parsed.featureNames) ? parsed.featureNames : [];
   const mismatched = actual.length !== expected.length
     || actual.some((name, idx) => name !== expected[idx]);

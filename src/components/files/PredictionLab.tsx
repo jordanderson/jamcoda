@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { FlaskConical, Play, Trash2, ChevronDown, ChevronRight, Check, HelpCircle, X } from 'lucide-react'
-import { usePreviewPredictionForFile, useRunPredictionForFile } from '@/hooks/usePredictionReviews'
+import { useLibraryModels, usePreviewPredictionForFile, useRunPredictionForFile } from '@/hooks/usePredictionReviews'
 import { TimelineBar } from './FileOverview'
 import { SETTING_HELP } from './predictionSettingHelp'
 import {
-  candidateCountLabel, candidateSpans, type CandidateRun, type SegmentParams
+  canApplyCandidate, candidateCountLabel, candidateSpans, type CandidateRun, type SegmentParams
 } from './predictionCandidates'
-import type { PredictionDecoderOverrides } from '@/api/localTypes'
+import type { LibraryModelSummary, PredictionDecoderOverrides } from '@/api/localTypes'
 import type { RollAnnotation, RollPrediction } from '../midi/pianoRollTypes'
 import { errorMessage } from '@core/errors'
 
@@ -27,9 +27,20 @@ import { errorMessage } from '@core/errors'
 interface LabParams {
   segment: SegmentParams
   decoder: PredictionDecoderOverrides
+  /** A model other than the library's, by file name; absent means `ml/model.json`. */
+  modelName?: string
+  holdOut: boolean
 }
 
-const EMPTY: LabParams = { segment: {}, decoder: {} }
+/**
+ * On a completed file the lab checks a prediction against a known answer, and
+ * the saved model has already learned that answer, so a held-out model is the
+ * fair default there. On an unfinished file the app's own predictions do come
+ * from a model trained on its annotations so far, so the plain run matches
+ * what the app does.
+ */
+const emptyParams = (isFileComplete: boolean): LabParams =>
+  ({ segment: {}, decoder: {}, holdOut: isFileComplete })
 
 /** Model defaults, shown as placeholders so an empty box is not a mystery. */
 const SEGMENT_FIELDS: Array<{ key: keyof SegmentParams; label: string; placeholder: string; step: number }> = [
@@ -50,6 +61,7 @@ const DECODER_FIELDS: Array<{ key: keyof PredictionDecoderOverrides; label: stri
 ]
 
 const SEGMENT_KEYS: string[] = SEGMENT_FIELDS.map((field) => field.key)
+const MODEL_KEYS = ['model', 'holdOut']
 
 /** `knn-song-segmenter@2026-09-04T01:47:18.913Z` reads better as a date. */
 function modelStamp(modelVersion: string): string {
@@ -57,9 +69,22 @@ function modelStamp(modelVersion: string): string {
   return match ? `${match[1]} ${match[2]}` : modelVersion
 }
 
+function modelOptionLabel(model: LibraryModelSummary): string {
+  const name = model.isLibraryModel ? `${model.name} (library model)` : model.name
+  if (model.error) return `${name} — cannot load`
+  const details = [
+    model.modelVersion,
+    model.createdAt ? modelStamp(model.createdAt) : null,
+    model.featureCount !== null ? `${model.featureCount} features` : null
+  ].filter(Boolean)
+  return details.length > 0 ? `${name} — ${details.join(', ')}` : name
+}
+
 /** Name a run by what it changed, so the list stays readable without notes. */
 function describe(params: LabParams): string {
   const parts: string[] = []
+  if (params.modelName) parts.push(`model=${params.modelName}`)
+  if (params.holdOut) parts.push('held out')
   if (params.decoder.linkPolicy) parts.push(`link=${params.decoder.linkPolicy}`)
   for (const [key, value] of Object.entries({ ...params.decoder, ...params.segment })) {
     if (key === 'linkPolicy' || value === undefined) continue
@@ -176,13 +201,14 @@ export function PredictionLab({
   queueModelVersion, runs, onRunsChange, onSeek, onError
 }: PredictionLabProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [params, setParams] = useState<LabParams>(EMPTY)
+  const [params, setParams] = useState<LabParams>(() => emptyParams(isFileComplete))
   const [nextId, setNextId] = useState(1)
   const [openHelp, setOpenHelp] = useState<string | null>(null)
   const [previewModelVersion, setPreviewModelVersion] = useState<string | null>(null)
 
   const preview = usePreviewPredictionForFile()
   const commit = useRunPredictionForFile()
+  const models = useLibraryModels(isOpen)
 
   const toggleHelp = (key: string) => setOpenHelp((current) => (current === key ? null : key))
 
@@ -191,17 +217,25 @@ export function PredictionLab({
       {
         fileId,
         ...params.segment,
-        decoderOverrides: Object.keys(params.decoder).length > 0 ? params.decoder : undefined
+        decoderOverrides: Object.keys(params.decoder).length > 0 ? params.decoder : undefined,
+        modelName: params.modelName,
+        holdOut: params.holdOut || undefined
       },
       {
         onSuccess: (result) => {
-          setPreviewModelVersion(result.modelVersion)
+          // The review queue only ever holds predictions from the library model.
+          if (!params.modelName) setPreviewModelVersion(result.modelVersion)
           onRunsChange((current) => [
             ...current,
             {
               id: nextId,
               label: describe(params),
-              request: { segment: params.segment, decoder: params.decoder },
+              request: {
+                segment: params.segment,
+                decoder: params.decoder,
+                modelName: params.modelName,
+                holdOut: params.holdOut
+              },
               segments: result.segments ?? [],
               rawSegments: result.rawSegments ?? []
             }
@@ -232,7 +266,10 @@ export function PredictionLab({
   const setDecoder = (key: keyof PredictionDecoderOverrides, value: number | undefined) =>
     setParams((current) => ({ ...current, decoder: { ...current.decoder, [key]: value } }))
 
-  const helpInSegmentGroup = openHelp !== null && SEGMENT_KEYS.includes(openHelp)
+  const helpGroup = openHelp === null
+    ? null
+    : MODEL_KEYS.includes(openHelp) ? 'model' : SEGMENT_KEYS.includes(openHelp) ? 'segment' : 'decoder'
+  const modelList = models.data ?? []
   // Only knowable once a preview has reported which model it used.
   const isStaleQueue = Boolean(
     queueModelVersion && previewModelVersion && queueModelVersion !== previewModelVersion
@@ -253,6 +290,61 @@ export function PredictionLab({
       {isOpen && (
         <div className="px-6 pb-6 space-y-5">
           <div>
+            <h3 className="text-sm font-semibold text-gray-900">Model and training</h3>
+            <p className="text-xs text-gray-500 mb-2">
+              Which trained model predicts. Runs from different models differ in what was
+              learned, not just in how it is decoded.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1 text-xs text-gray-600">
+                  <label htmlFor="lab-model" className="truncate">Model</label>
+                  <HelpButton settingKey="model" openKey={openHelp} onToggle={toggleHelp} />
+                </div>
+                <select
+                  id="lab-model"
+                  value={params.modelName ?? ''}
+                  onChange={(event) => setParams((current) => ({
+                    ...current,
+                    modelName: event.target.value === '' ? undefined : event.target.value
+                  }))}
+                  className="w-full px-2 py-1 border rounded text-sm text-gray-900"
+                >
+                  {modelList.length === 0 && <option value="">model.json (library model)</option>}
+                  {modelList.map((model) => (
+                    <option
+                      key={model.name}
+                      value={model.isLibraryModel ? '' : model.name}
+                      disabled={Boolean(model.error)}
+                      title={model.error ?? undefined}
+                    >
+                      {modelOptionLabel(model)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1 text-xs text-gray-600">
+                  <span className="truncate">Training</span>
+                  <HelpButton settingKey="holdOut" openKey={openHelp} onToggle={toggleHelp} />
+                </div>
+                <label className="flex items-center gap-2 py-1 text-sm text-gray-900">
+                  <input
+                    type="checkbox"
+                    checked={params.holdOut}
+                    onChange={(event) => setParams((current) => ({ ...current, holdOut: event.target.checked }))}
+                  />
+                  Hold this file out
+                  <span className="text-xs text-gray-500">(retrains without it, a few seconds)</span>
+                </label>
+              </div>
+            </div>
+            {helpGroup === 'model' && openHelp && (
+              <HelpPanel settingKey={openHelp} onClose={() => setOpenHelp(null)} />
+            )}
+          </div>
+
+          <div>
             <h3 className="text-sm font-semibold text-gray-900">Segment shaping</h3>
             <p className="text-xs text-gray-500 mb-2">
               Applied after decoding. These never touch the model.
@@ -272,7 +364,7 @@ export function PredictionLab({
                 />
               ))}
             </div>
-            {helpInSegmentGroup && openHelp && (
+            {helpGroup === 'segment' && openHelp && (
               <HelpPanel settingKey={openHelp} onClose={() => setOpenHelp(null)} />
             )}
           </div>
@@ -322,7 +414,7 @@ export function PredictionLab({
                 />
               ))}
             </div>
-            {!helpInSegmentGroup && openHelp && (
+            {helpGroup === 'decoder' && openHelp && (
               <HelpPanel settingKey={openHelp} onClose={() => setOpenHelp(null)} />
             )}
           </div>
@@ -335,11 +427,13 @@ export function PredictionLab({
               className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
             >
               <Play className="w-4 h-4" />
-              {preview.isPending ? 'Previewing…' : 'Preview'}
+              {preview.isPending
+                ? (params.holdOut ? 'Retraining without this file…' : 'Previewing…')
+                : 'Preview'}
             </button>
             <button
               type="button"
-              onClick={() => setParams(EMPTY)}
+              onClick={() => setParams(emptyParams(isFileComplete))}
               className="px-3 py-2 rounded-lg border text-sm text-gray-700 hover:bg-gray-50"
             >
               Reset to defaults
@@ -385,7 +479,8 @@ export function PredictionLab({
                   key: `lab-current-${prediction.id}`,
                   label: prediction.songName,
                   start: prediction.startTime,
-                  end: prediction.endTime
+                  end: prediction.endTime,
+                  ...(prediction.parts ? { parts: prediction.parts } : {})
                 }))}
               />
               {isStaleQueue && (
@@ -412,10 +507,12 @@ export function PredictionLab({
                     <button
                       type="button"
                       onClick={() => handleApply(run)}
-                      disabled={commit.isPending || isFileComplete}
+                      disabled={commit.isPending || isFileComplete || !canApplyCandidate(run)}
                       title={isFileComplete
                         ? 'A completed file\u2019s annotations are final, so predictions cannot be written to it'
-                        : 'Re-run for real and replace the unpromoted review queue'}
+                        : !canApplyCandidate(run)
+                          ? 'Only the library model, as saved, writes to the review queue; this run is for comparing'
+                          : 'Re-run for real and replace the unpromoted review queue'}
                       className="px-2 py-1 rounded border text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-40 flex items-center gap-1"
                     >
                       <Check className="w-3 h-3" />

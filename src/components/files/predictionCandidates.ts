@@ -26,6 +26,10 @@ export interface CandidateRun {
   request: {
     segment: SegmentParams
     decoder: PredictionDecoderOverrides
+    /** A model other than the library's, by file name. */
+    modelName?: string
+    /** Predicted by a model retrained without this file. */
+    holdOut?: boolean
   }
   /** What would be written: the model's output minus already-annotated time. */
   segments: PredictedSegment[]
@@ -41,6 +45,15 @@ export interface CandidateRun {
  * Defaulted because an older server, or a candidate captured before a reload,
  * may not carry both lists, and this must never be what takes the page down.
  */
+/**
+ * Only a run of the library model, trained as saved, can be written to the
+ * review queue: that is the model every other prediction in the app comes
+ * from. Another model or a held-out refit is for comparing, not for keeping.
+ */
+export function canApplyCandidate(run: CandidateRun): boolean {
+  return !run.request.modelName && !run.request.holdOut
+}
+
 export function candidateSegments(run: CandidateRun, isFileComplete: boolean): PredictedSegment[] {
   return (isFileComplete ? run.rawSegments : run.segments) ?? []
 }
@@ -50,7 +63,8 @@ export function candidateSpans(run: CandidateRun, isFileComplete: boolean): Over
     key: `candidate-${run.id}-${index}`,
     label: segment.songName,
     start: segment.startTime,
-    end: segment.endTime
+    end: segment.endTime,
+    ...(segment.parts && segment.parts.length > 0 ? { parts: segment.parts } : {})
   }))
 }
 

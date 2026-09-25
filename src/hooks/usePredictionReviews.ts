@@ -66,6 +66,23 @@ export function usePromotePredictionReview() {
   });
 }
 
+/** Promote a review with one stretch cut out; see `promoteWithCut` on the server. */
+export function usePromotePredictionReviewWithCut() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, cutStart, cutEnd }: { id: number; cutStart: number; cutEnd: number }) =>
+      predictionReviewsApi.promoteWithCut(id, { cutStart, cutEnd }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['predictionReviews'] });
+      queryClient.invalidateQueries({ queryKey: ['predictionReviewQueue'] });
+      queryClient.invalidateQueries({ queryKey: ['filesByDate'] });
+      queryClient.invalidateQueries({ queryKey: ['fileDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['songPlayHistory'] });
+    }
+  });
+}
+
 export function usePromoteReviewedPredictionReviews() {
   const queryClient = useQueryClient();
 
@@ -118,7 +135,18 @@ export function useRebuildPredictionModel() {
       // A fresh model is newer than every prior annotation edit, so the
       // staleness badge clears.
       queryClient.invalidateQueries({ queryKey: ['rebuildStatus'] });
+      queryClient.invalidateQueries({ queryKey: ['libraryModels'] });
     }
+  });
+}
+
+/** Model files the Prediction Lab can preview with. Fetched only while the lab is open. */
+export function useLibraryModels(enabled: boolean) {
+  return useQuery({
+    queryKey: ['libraryModels'],
+    queryFn: () => predictionReviewsApi.listModels(),
+    enabled,
+    staleTime: 15000
   });
 }
 

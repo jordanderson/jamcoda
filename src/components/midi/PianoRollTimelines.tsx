@@ -9,6 +9,7 @@ import {
 } from './pianoRollColors'
 import type { RollAnnotation, RollPrediction } from './pianoRollTypes'
 import { BAND_DESCRIPTIONS, calibratedConfidence } from '@core/predictionConfidence'
+import { EvidenceOverlay, listenSummary } from './EvidenceOverlay'
 
 /**
  * The two chip rows below the notes: annotations and predictions.
@@ -182,6 +183,7 @@ export const PredictionTimeline = memo(function PredictionTimeline({
           prediction.endTime - prediction.startTime
         )
         const confidencePct = calibrated?.label ?? null
+        const listen = listenSummary(prediction.parts)
 
         return (
           <button
@@ -206,11 +208,12 @@ export const PredictionTimeline = memo(function PredictionTimeline({
             }}
             aria-label={`Predicted ${prediction.songName} (${prediction.startTime.toFixed(1)} to ${prediction.endTime.toFixed(1)} seconds)${
               calibrated ? `, ${BAND_DESCRIPTIONS[calibrated.band]} at ${calibrated.label} confidence` : ''
-            }`}
+            }${listen ? `; ${listen}` : ''}`}
             title={`Predicted ${prediction.songName}${
               calibrated ? ` -- ${BAND_DESCRIPTIONS[calibrated.band]}, ${calibrated.label} confidence` : ''
-            } (${prediction.startTime.toFixed(1)}s - ${prediction.endTime.toFixed(1)}s)`}
+            } (${prediction.startTime.toFixed(1)}s - ${prediction.endTime.toFixed(1)}s)${listen ? `\n${listen}` : ''}`}
           >
+            <EvidenceOverlay start={prediction.startTime} end={prediction.endTime} parts={prediction.parts} />
             {labelOffsets.map((offset) => (
               <span
                 key={`${prediction.id}-${offset}`}

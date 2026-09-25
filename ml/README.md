@@ -12,23 +12,26 @@ Goal:
 ## Model Summary
 
 Current model is a lightweight prototype-based segmenter (`knn-song-segmenter` v2,
-release stamp `v2.12`):
+release stamp `v2.14`):
 
 - extracts windowed MIDI features (split-register pitch-class profiles —
   chroma separated into low and high register at `registerDivide`, default
   middle C, with notes extended acoustically under CC 64 damper pedal up to 0.7s
   with 0.5x decayed tail weight and weighted by sqrt(velocity/127) for melodic prominence — plus
   onset density, pitch/velocity/duration/polyphony stats, register balance,
-  rhythmic regularity, silence ratio and register span)
+  rhythmic regularity, silence ratio and register span, plus chord-interval
+  classes and tempo-free inter-onset intervals, 53 in all; see v2.14 in
+  [`CHANGELOG.md`](CHANGELOG.md))
 - condenses training windows into a fixed budget of stored examples
   (*prototypes*, 16,000 by default) instead of keeping every window, so
   retraining and prediction stay fast. With `__none__` drawn only from complete
   files (below), 12,000 / 16,000 / 24,000 score +0.26 / +0.82 / +1.01 F1 over
   8,000 on the current library, and only 16,000 and 24,000 clear zero. 24,000
   adds +0.18 over 16,000 (file bootstrap 95% [−0.24, +0.63]) for 1.5x the
-  prediction time, so 16,000 is the default. At 16,000 a 63-minute recording
-  predicts in about 4 seconds, a rebuild takes about 3, and the model file is
-  about 17 MB
+  prediction time, so 16,000 is the default. At 16,000 with the v2.14
+  features, the library's longest recording (133 minutes) predicts in about 6
+  seconds from the command line (4 with the base 37), a rebuild takes about 4,
+  and the model file is about 25 MB
 - draws `__none__` training windows only from files marked complete. In an
   unfinished file, unannotated time is unreviewed, mostly real playing, and
   often takes of songs not yet annotated; training on it as silence costs a new
@@ -67,6 +70,12 @@ release stamp `v2.12`):
      left unlabeled rather than absorbed, which would merge the two takes
 - converts window runs into segments. Boundaries come from window **centers**,
   because a window label applies at its center. Training uses the same rule.
+  Each segment carries `parts`: its stretches in time order with how the
+  decoder reached them (`anchor`, `bridge`, `tail`, `rescued`, and `joined` for
+  a gap the merge closed) and the song's mean rank over each, 0 where the model
+  ranked the song first throughout. Non-anchor stretches with a mean rank of 2
+  or more are the places most worth checking in a review: see the September 24,
+  2026 entry on weak evidence in [`CHANGELOG.md`](CHANGELOG.md)
 - filters and merges the segments with confidence and duration limits
 
 This is intentionally simple so you can retrain often as annotations grow. The
@@ -85,6 +94,22 @@ Training pulls from:
 Prediction review/promotion uses:
 - `prediction_reviews` table
 - optional promotion into `annotations`
+
+### What an annotation means
+
+An annotation marks a stretch of **working on one song**: repeated takes,
+repeated sections and one-hand practice all belong to it, as long as the playing
+stays part of the song. It stops when the playing turns into noodling, and it
+ends on the song's last notes, leaving out any flourish. A restart inside an
+annotation is not a boundary, and a gap of under three seconds between two
+annotations of the same song is a pause, not noodling.
+
+On a file marked complete, unannotated time therefore means no song: only
+noodling, flourishes and silence. That is what `__none__` learns from.
+Noodling or a flourish sounds much the same whichever song it follows, which is
+why they are left out of annotations. Two annotations of the same song with a
+gap between them are two sessions with noodling in between, and a prediction
+that joins them has labeled that noodling as the song.
 
 ## Commands
 
@@ -147,6 +172,14 @@ Notes:
   annotated file instead of only files marked complete (the default). It is the
   pre-v2.12 behavior. The setting is fit-only and recorded in the model, so it
   never changes how a saved model decodes. See the model summary above.
+- `--center-window <sec>` also extracts the base 37 features over that many
+  seconds at each window's center. It is experimental and off by default: it
+  does not reduce gap bridging. See the September 24, 2026 center-window entry in
+  [`CHANGELOG.md`](CHANGELOG.md).
+- `--no-chord-ioi-features` leaves out the six chord-interval and ten
+  inter-onset-interval features, building the v2.13 feature set of 37. The
+  model records the setting; a model saved without it extracts the base 37,
+  and is refit that way by `ml:eval` and held-out previews.
 - `--link-max-silence` sets the `silence_ratio` at which a window stops being
   linkable into an anchor run (default 0.7; 1 disables the rule).
 - `--link-policy` is `bridge` by default, which stops a finished song running
@@ -341,6 +374,35 @@ as JSON. It reads reports only — it never opens the database or the model.
 Read the interval, not just the delta. A gain whose interval crosses zero rests
 on a few files.
 
+### Score by what an annotation means
+
+Matched annotations treat each annotation as a take, which is not what one is
+here (see [What an annotation means](#what-an-annotation-means)). `ml:eval`
+therefore also scores each complete file as sessions (`sessionComplete`,
+`sessionByFileComplete`, from `ml/sessionEvaluation.ts`). Same-song annotations
+under three seconds apart (`MIN_SESSION_GAP_SEC`) are joined into one session
+first, the pause included. Each file's time is then divided into:
+
+- **correct**, **wrong song** and **missed** song time, over annotated time;
+- unannotated time **called a song**, split three ways: **gap fill**, inside a
+  gap between two sessions of one song and predicted as that song; **overrun**,
+  predicted as the song of an adjacent session; and **stray**, a song neither
+  neighbor is.
+
+It also counts the edits a review would need: a split for each same-song gap a
+single prediction spans (**bridged**), a merge for each session covered by two
+or more predictions of its song (**split**), a new annotation for each session
+less than half covered (**not found**), and a delete or relabel for each
+**unsupported** segment, less than half of whose time is correct. Boundary trims
+are measured in seconds, not counted as edits.
+
+`ml:compare` prints every total for both runs with a file bootstrap interval on
+the difference, and bridged same-song gaps by gap length (`gapsByLength`).
+Lower is better throughout. Many same-song gaps are shorter than the six-second
+window, and every window across such a gap also contains some of the song, so
+the model cannot be expected to keep those gaps open. Read bridging of gaps
+under six seconds as a limit of the window length, not a model mistake.
+
 ### Read the complete-files row, not the aggregate
 
 Segment precision is reported three ways: over files marked complete, over the
@@ -410,6 +472,15 @@ You do not need terminal commands for routine iteration:
   only place a prediction can be held against a known answer. On such a file the
   lab shows the model's segments *before* annotated time is subtracted, since
   otherwise a fully annotated file leaves nothing to look at.
+  A **Model** picker previews any model file in the library's `ml/` folder
+  beside the library model (`GET /api/prediction-reviews/models` lists them,
+  with the reason for any this build cannot load), so an experiment built with
+  `ml:train -- --out` can be checked on the recording that motivated it.
+  **Hold this file out** trains a fresh model with the chosen model's settings
+  on every other annotated file, then predicts: the saved model learned this file's
+  annotations, so on an annotated file it partly remembers the answer.
+  It is on by default for a completed file and takes a few seconds. Only a run
+  of the library model as saved can be applied to the review queue.
   The "Current review queue" row is *stored* output, which can predate the model
   on disk — comparing a candidate against it mixes a model change with a settings
   change. Once a preview has reported which model it used, a mismatch is called
@@ -420,8 +491,22 @@ You do not need terminal commands for routine iteration:
   what it does and which way to move it, including which fields the default
   anchor decoder ignores outright; the copy lives in
   `src/components/files/predictionSettingHelp.ts`.
+- **Where to listen.** Each stored prediction keeps its evidence parts
+  (`prediction_reviews.predicted_parts_json`). While it awaits review, the
+  piano-roll chip hatches every stretch worth a listen (`listenStretches` in
+  `core/predictionEvidence.ts`: filled in by the decoder, the song on average
+  no higher than the model's third choice, three seconds or longer), and the
+  whole-recording overview also fades each filled-in stretch more the weaker
+  its evidence. The review modal lists the flagged stretches, plays each with a
+  three-second lead-in and two-second lead-out, and offers **Confirm without
+  it** (`POST /api/prediction-reviews/:id/promote-with-cut`), which promotes the
+  prediction with that stretch cut out. On v2.14 that is about five flags per
+  recording, and about one in three covers a real error; `ml:eval` reports it
+  as "worth a listen". Predictions stored before parts were kept show none;
+  re-run predictions on a file to get them.
 - `POST /api/prediction-reviews/run` accepts `dryRun` and `decoderOverrides` in
-  addition to the segment filters. `decoderOverrides` takes only decode-only
+  addition to the segment filters, plus `modelName` (a file name in the
+  library's `ml/` folder, never a path) and `holdOut` (dry runs only). `decoderOverrides` takes only decode-only
   fields (`DECODE_ONLY_CONFIG_KEYS`); anything else is dropped, so a preview can
   never show segments from a model that was never built.
 - `POST /api/prediction-reviews/rebuild-model` accepts the same training knobs
@@ -628,6 +713,7 @@ experiment, including the ones that failed.
 - `ml/prototypeScorer.ts`: packed nearest-prototype scoring for the default `min`/single-neighbor mode
 - `ml/evalCache.ts`: dataset/config/source fingerprints and the persistent per-fold score cache
 - `ml/boundaryEvaluation.ts`: take-level boundary matching and signed start/end error
+- `ml/sessionEvaluation.ts`: complete-file scoring by what an annotation means (sessions, bleed into unannotated time, review edits)
 - `ml/evalComparison.ts` + `ml/compareEvals.ts`: paired comparison of two eval reports (`ml:compare`)
 - `ml/train.ts`: CLI training entrypoint
 - `ml/predict.ts`: CLI prediction entrypoint (model only, no DB writes)

@@ -14,6 +14,7 @@ import {
   predictWindowsFromSamples,
   decodeWindowScores,
   scoreWindowsFromSamples,
+  refitConfigOf,
   resolveTrainConfig,
   trainModelFromSamples,
   windowsToSegments,
@@ -23,6 +24,7 @@ import {
 } from './songSegmentation';
 import { datasetIdentity, digest, EvalScoreCache, scoringConfig, scoringSourceIdentity } from './evalCache';
 import { matchBoundaries, summarizeBoundaries, type BoundaryMatch } from './boundaryEvaluation';
+import { scoreSessions, summarizeSessions, type SessionScoreRow, type SessionScoreSummary } from './sessionEvaluation';
 import { errorMessage } from '@core/errors';
 import { libraryModelPath } from '@config/library';
 
@@ -103,6 +105,13 @@ interface EvalReport {
   scoreCache: { hits: number; misses: number; enabled: boolean };
   boundaryComplete: ReturnType<typeof summarizeBoundaries>;
   boundaryMatchesComplete: BoundaryMatch[];
+  /**
+   * Complete files scored by what an annotation means here — a stretch of
+   * working on one song, ended before noodling — rather than as takes. See
+   * `ml/sessionEvaluation.ts`.
+   */
+  sessionComplete: SessionScoreSummary;
+  sessionByFileComplete: SessionScoreRow[];
   generatedAt: string;
   mode: 'insample' | 'loo';
   modelPath: string;
@@ -285,6 +294,7 @@ function finalizeSegmentSummary(target: SegmentEvalSummary) {
 }
 
 const byFileSegment: FileSegmentEvalRow[] = [];
+const sessionByFileComplete: SessionScoreRow[] = [];
 const bySongSegment = new Map<string, SongSegmentEvalRow>();
 
 function accumulateSongSegment(songName: string, annotationSec: number, matchedSec: number, predictedSec: number, matchedPredictedSec: number) {
@@ -407,7 +417,7 @@ async function main() {
     }
     model.config.linkPolicy = linkPolicy;
   }
-  if (mode === 'loo') model.config = resolveTrainConfig(model.config);
+  if (mode === 'loo') model.config = resolveTrainConfig(refitConfigOf(model.config));
   const modelVersion = model.modelVersion ?? `v${model.version}`;
   const outPath = outArg ? path.resolve(outArg) : defaultReportPath(mode, modelVersion);
   const ignored = decoderIgnoredOptions(model.config.decoder);
@@ -454,11 +464,7 @@ async function main() {
     const truthWindows = buildSamplesForFile(
       file,
       notes,
-      {
-        windowSec: model.config.windowSec,
-        stepSec: model.config.stepSec,
-        registerDivide: model.config.registerDivide ?? 60
-      }
+      model.config
     );
     windowsByFile.set(file.fileId, truthWindows);
     totalTruthWindows += truthWindows.length;
@@ -611,6 +617,9 @@ async function main() {
       completeAnnotations += file.annotations.length;
       completePredictions += segments.length;
       boundaryMatchesComplete.push(...matchBoundaries(file.fileId, file.annotations, segments));
+      sessionByFileComplete.push(
+        scoreSessions(file.fileId, file.annotations, segments, truthWindows.at(-1)?.endTime ?? 0)
+      );
     }
     if (fileSegmentRow) {
       byFileSegment.push(fileSegmentRow);
@@ -716,6 +725,8 @@ async function main() {
     dataset, modelSha256, scoringSourceSha256, trainConfig: model.config, timingMs, scoreCache,
     boundaryComplete: summarizeBoundaries(boundaryMatchesComplete, completeAnnotations, completePredictions),
     boundaryMatchesComplete,
+    sessionComplete: summarizeSessions(sessionByFileComplete),
+    sessionByFileComplete: sessionByFileComplete.sort((a, b) => a.fileId - b.fileId),
     generatedAt: new Date().toISOString(),
     mode,
     modelPath,
@@ -759,6 +770,25 @@ async function main() {
     console.log(`  start/end mean absolute error=${boundaries.start.meanAbsoluteSec.toFixed(2)}s/${boundaries.end.meanAbsoluteSec.toFixed(2)}s;`
       + ` mean signed error=${boundaries.start.meanSignedSec.toFixed(2)}s/${boundaries.end.meanSignedSec.toFixed(2)}s (positive = late)`);
   }
+  const sessions = report.sessionComplete;
+  console.log(
+    `  complete-file sessions: ${sessions.sessionsFound}/${sessions.sessions} found;`
+    + ` ${pct(sessions.correctShare)} of song time correct`
+    + ` (wrong song ${formatCount(Math.round(sessions.wrongSongSec))}s, missed ${formatCount(Math.round(sessions.missedSec))}s);`
+    + ` ${pct(sessions.bleedShare)} of unannotated time called a song`
+    + ` (gap fill ${formatCount(Math.round(sessions.gapFillSec))}s, overrun ${formatCount(Math.round(sessions.overrunSec))}s,`
+    + ` stray ${formatCount(Math.round(sessions.strayBleedSec))}s)`
+  );
+  console.log(
+    `  review edits ≈ ${sessions.reviewEdits}: ${sessions.gapsBridged}/${sessions.sameSongGaps} same-song gaps bridged,`
+    + ` ${sessions.sessionsSplit} sessions split, ${sessions.sessions - sessions.sessionsFound} not found,`
+    + ` ${sessions.unsupportedSegments} unsupported segments`
+  );
+  console.log(
+    `  worth a listen: ${sessions.listenFlags.flags} flagged stretches`
+    + ` (${(sessions.listenFlags.flags / Math.max(1, sessions.files)).toFixed(1)} per file),`
+    + ` ${sessions.listenFlags.coveringError} covering at least 2s of error`
+  );
   console.log(
     `  files=${formatCount(report.filesEvaluated)}`
     + ` windows=${formatCount(report.windowsEvaluated)}`

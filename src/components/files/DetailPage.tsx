@@ -13,6 +13,7 @@ import { useAnnotationActions } from '@/hooks/useAnnotationActions';
 import {
   usePredictionReviews,
   usePromotePredictionReview,
+  usePromotePredictionReviewWithCut,
   useRunPredictionForFile,
   useUpdatePredictionReview
 } from '@/hooks/usePredictionReviews';
@@ -81,6 +82,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
   const { data: midiBlob, isLoading: isDownloading, error: downloadError } = useLocalFileDownload(fileId, !!file);
   const {
     play,
+    playSegment,
     pause,
     stop,
     loadMidi,
@@ -99,6 +101,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
   const runPredictionForFile = useRunPredictionForFile();
   const updatePredictionReview = useUpdatePredictionReview();
   const promotePredictionReview = usePromotePredictionReview();
+  const promoteWithCut = usePromotePredictionReviewWithCut();
   const setFileCompletion = useSetFileCompletion();
   // Previewed Prediction Lab runs. They live here, not in the lab, so the
   // overview beside the piano roll can draw them against the notes. Nothing is
@@ -222,6 +225,12 @@ export function DetailPage({ fileId }: DetailPageProps) {
     setSnapToPlayback(true);
     void seekTo(time);
   }, [seekTo]);
+
+  /** Play one stretch and stop, following it on the roll. */
+  const handleListen = useCallback((range: { startTime: number; endTime: number }) => {
+    setSnapToPlayback(true);
+    void playSegment(range.startTime, range.endTime);
+  }, [playSegment]);
 
   const handlePlayPause = useCallback(() => {
     if (isPlaying) {
@@ -506,6 +515,34 @@ export function DetailPage({ fileId }: DetailPageProps) {
     }
   }, [promotePredictionReview.mutateAsync, selectedPredictionReviewId, showToast, updatePredictionReview.mutateAsync]);
 
+  const handleConfirmWithoutStretch = useCallback(async (
+    review: PredictionReview,
+    stretch: { startTime: number; endTime: number }
+  ) => {
+    try {
+      const { promotions } = await promoteWithCut.mutateAsync({
+        id: review.id,
+        cutStart: stretch.startTime,
+        cutEnd: stretch.endTime
+      });
+      const left = `${formatTime(stretch.startTime)}–${formatTime(stretch.endTime)}`;
+      showToast({
+        type: 'success',
+        message: promotions.length === 2
+          ? `Promoted "${getPredictionDisplaySongName(review)}" as two annotations, leaving out ${left}.`
+          : `Promoted "${getPredictionDisplaySongName(review)}", trimmed to leave out ${left}.`
+      });
+      if (selectedPredictionReviewId === review.id) {
+        setSelectedPredictionReviewId(null);
+      }
+    } catch (error) {
+      showToast({
+        type: 'error',
+        message: errorMessage(error, 'Failed to promote prediction.')
+      });
+    }
+  }, [promoteWithCut.mutateAsync, selectedPredictionReviewId, showToast]);
+
   const handleEditAndPromoteReview = useCallback((review: PredictionReview) => {
     const { songName, startTime, endTime } = resolveReviewFields(review);
     setAnnotationModalData({
@@ -600,7 +637,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
   const loadingMidi = !showError && (isDownloading || (!!midiBlob && (!isLoaded || loadedFileId !== fileId)));
   const rollReady = !loadingMidi && isLoaded && !!sequence && loadedFileId === fileId;
   const isPredictionActionPending = (
-    updatePredictionReview.isPending || promotePredictionReview.isPending
+    updatePredictionReview.isPending || promotePredictionReview.isPending || promoteWithCut.isPending
   );
 
   return (
@@ -632,6 +669,10 @@ export function DetailPage({ fileId }: DetailPageProps) {
           onConfirmAndPromote={(review) => { void handleConfirmAndPromoteReview(review); }}
           onEditAndPromote={handleEditAndPromoteReview}
           onMarkInvalid={(review) => { void handleMarkInvalidReview(review); }}
+          onConfirmWithout={(review, stretch) => { void handleConfirmWithoutStretch(review, stretch); }}
+          isPlaying={isPlaying}
+          onListen={handleListen}
+          onPause={pause}
         />
       )}
 

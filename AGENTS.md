@@ -49,6 +49,8 @@ Check these before writing a local copy:
   `instanceof Error` check.
 - `core/timeRanges.ts`, `core/predictionReview.ts`, `core/math.ts` — domain
   rules used on both sides of the HTTP boundary.
+- `core/predictionEvidence.ts` — a prediction's evidence parts, where to
+  listen (`listenStretches`), and what a cut keeps (`cutPieces`).
 - `core/predictionConfidence.ts` — display calibration, plus
   `confidenceFeatures`, which `ml:fit-confidence` also calls so the fit and the
   scorer agree on what the weights multiply.
@@ -73,6 +75,12 @@ Check these before writing a local copy:
   values while still `unsure`, and the two paths then disagree.
 - Merge requires the same file and same resolved song; it creates one `edited`
   row and marks the sources `invalid`.
+- Promoting with a cut (`promoteWithCut`) keeps the source `edited`, never
+  `invalid`, and gives the second piece `split_from_review_id` and no
+  confidence. `ml:fit-confidence` reads `invalid` as the model being wrong and
+  would otherwise count one prediction twice.
+- Where a reviewer should listen has one definition, `listenStretches` in
+  `core/predictionEvidence.ts`, used by the UI and measured by `ml:eval`.
 - Song rename updates annotation and prediction-review name fields together.
 - The prediction pipeline has one implementation,
   `server/services/predictionImport.ts`, called by both the API route and

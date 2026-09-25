@@ -81,6 +81,14 @@ export interface PredictionReview {
   updated_at: number;
   reviewed_at: number | null;
   promoted_at: number | null;
+  /**
+   * The prediction's evidence parts as JSON (`EvidencePart[]` in
+   * `core/predictionEvidence.ts`), over the predicted bounds. Null for rows
+   * written before parts were stored, and for a row cut from another.
+   */
+  predicted_parts_json: string | null;
+  /** Set on the second half of a review cut in two: the review it was cut from. */
+  split_from_review_id: number | null;
 }
 
 /** Real-time sync status payload polled by the sync modal. */

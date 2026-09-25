@@ -390,3 +390,31 @@ describe('FileOverview candidates', () => {
     expect(screen.getByText(/Candidate 1/)).toBeInTheDocument()
   })
 })
+
+describe('FileOverview evidence', () => {
+  const withParts = [{
+    id: 8, songName: 'Moonlight Sonata', startTime: 100, endTime: 200, confidence: 0.5,
+    parts: [
+      { startTime: 100, endTime: 150, basis: 'anchor', meanRank: 0 },
+      { startTime: 150, endTime: 162, basis: 'bridge', meanRank: 4 },
+      { startTime: 162, endTime: 200, basis: 'anchor', meanRank: 0 }
+    ]
+  }]
+
+  it('hatches the stretch worth a listen, names it on hover, and explains the marks', () => {
+    render(
+      <FileOverview currentTime={0} durationSec={240} annotations={annotations} predictions={withParts} onSeek={vi.fn()} />
+    )
+    expect(screen.getAllByTestId('listen-stretch')).toHaveLength(1)
+    expect(screen.getByTitle(/1 stretch worth a listen: 2:30–2:42/)).toBeInTheDocument()
+    expect(screen.getByText('worth a listen')).toBeInTheDocument()
+  })
+
+  it('shows no legend when no prediction carries evidence', () => {
+    render(
+      <FileOverview currentTime={0} durationSec={240} annotations={annotations} predictions={predictions} onSeek={vi.fn()} />
+    )
+    expect(screen.queryByText('worth a listen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('listen-stretch')).not.toBeInTheDocument()
+  })
+})

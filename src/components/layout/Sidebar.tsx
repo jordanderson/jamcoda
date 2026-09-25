@@ -84,16 +84,16 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
   const rebuildBadgeCount = rebuildStatusData?.pendingAnnotationCount || rebuildStatusData?.missingLabels.length || 0
 
   return (
-    <aside className="w-64 bg-gray-900 text-white h-screen flex flex-col">
-      <div className="p-6 border-b border-gray-800">
+    <aside className="w-52 shrink-0 bg-gray-900 text-white h-screen flex flex-col">
+      <div className="px-5 py-6 border-b border-gray-800">
         <h1 className="flex items-center gap-1 font-wordmark text-[30px] leading-8 text-white">
           <JamCodaLogo className="h-6 w-auto shrink-0" />
           JamCoda
         </h1>
-        <p className="text-sm text-gray-400 mt-1">Jamcorder Practice Journal</p>
+        <p className="text-xs text-gray-400 mt-1">Jamcorder Practice Journal</p>
       </div>
 
-      <nav className="flex-1 p-4">
+      <nav className="flex-1 p-3">
         <ul className="space-y-2">
           {navItems.map((item) => {
             const IconComponent = item.icon
@@ -101,7 +101,7 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
               <li key={item.id}>
                 <button
                   onClick={() => handleNavClick(item.path)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${
                     currentRoute.startsWith(item.path)
                       ? 'bg-gray-800 text-white'
                       : 'text-gray-300 hover:bg-gray-800'
@@ -116,11 +116,11 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
         </ul>
       </nav>
 
-      <div className="p-4 border-t border-gray-800 space-y-3">
+      <div className="p-3 border-t border-gray-800 space-y-3">
         <button
           onClick={handleRebuildModel}
           disabled={rebuildModel.isPending}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:bg-emerald-900 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 whitespace-nowrap bg-emerald-700 hover:bg-emerald-600 disabled:bg-emerald-900 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium"
         >
           {rebuildModel.isPending ? (
             <>
@@ -144,7 +144,7 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
         </button>
         <button
           onClick={() => setIsSettingsOpen(true)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm font-medium"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm font-medium"
         >
           <Settings className="w-4 h-4" />
           Settings
