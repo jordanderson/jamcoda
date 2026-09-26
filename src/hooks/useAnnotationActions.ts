@@ -78,9 +78,9 @@ export function useAnnotationActions({
     times: { startTime: number; endTime: number }
   ) => {
     const invalid = !Number.isFinite(times.startTime) || !Number.isFinite(times.endTime)
-      ? 'Resized annotation has invalid time values.'
+      ? 'Resized label has invalid time values.'
       : times.startTime >= times.endTime
-        ? 'Annotation start time must be less than end time.'
+        ? 'Label start time must be less than end time.'
         : null
 
     if (invalid) {
@@ -94,7 +94,7 @@ export function useAnnotationActions({
         data: { startTime: times.startTime, endTime: times.endTime }
       })
     } catch (error) {
-      fail(error, 'Failed to resize annotation.')
+      fail(error, 'Failed to resize label.')
       throw error
     }
   }, [fail, reject, updateAnnotation.mutateAsync])
@@ -105,7 +105,7 @@ export function useAnnotationActions({
     gapIndex: number
   ) => {
     if (getGapAction(gap, annotation) !== 'split') {
-      reject('This gap is at the edge of the annotation and cannot be split into two segments.')
+      reject('This gap is at the edge of the label and cannot be split into two segments.')
       return
     }
 
@@ -116,9 +116,9 @@ export function useAnnotationActions({
           holeStartTime: gap.startTime,
           holeEndTime: gap.endTime
         })
-        succeed(`Split annotation at gap ${formatTime(gap.startTime)} - ${formatTime(gap.endTime)}.`)
+        succeed(`Split label at gap ${formatTime(gap.startTime)} - ${formatTime(gap.endTime)}.`)
       } catch (error) {
-        fail(error, 'Failed to split annotation at this gap.')
+        fail(error, 'Failed to split label at this gap.')
       }
     })
   }, [fail, reject, splitAnnotation.mutateAsync, succeed, withGapBusy])
@@ -136,7 +136,7 @@ export function useAnnotationActions({
       || holeEnd >= annotation.end_time
       || holeStart >= holeEnd
     ) {
-      reject('The selected split region must be strictly inside the existing annotation.')
+      reject('The selected split region must be strictly inside the existing label.')
       return
     }
 
@@ -152,7 +152,7 @@ export function useAnnotationActions({
       )
       onRegionSplitDone()
     } catch (error) {
-      fail(error, 'Failed to split annotation.')
+      fail(error, 'Failed to split label.')
     }
   }, [fail, onRegionSplitDone, reject, splitAnnotation.mutateAsync, succeed])
 
@@ -176,9 +176,9 @@ export function useAnnotationActions({
     await withGapBusy(`${annotation.id}:${gapIndex}`, async () => {
       try {
         await updateAnnotation.mutateAsync({ id: annotation.id, data: trimmed.data })
-        succeed(`Trimmed annotation ${trimmed.edge} to ${formatTime(trimmed.at)}.`)
+        succeed(`Trimmed label ${trimmed.edge} to ${formatTime(trimmed.at)}.`)
       } catch (error) {
-        fail(error, 'Failed to trim annotation at this gap.')
+        fail(error, 'Failed to trim label at this gap.')
       }
     })
   }, [fail, reject, succeed, updateAnnotation.mutateAsync, withGapBusy])
@@ -197,7 +197,7 @@ export function useAnnotationActions({
       Math.abs(snapped.startTime - annotation.start_time) < ALREADY_SNAPPED_SEC
       && Math.abs(snapped.endTime - annotation.end_time) < ALREADY_SNAPPED_SEC
     ) {
-      succeed('Annotation is already aligned with played notes.')
+      succeed('Label is already aligned with played notes.')
       return
     }
 

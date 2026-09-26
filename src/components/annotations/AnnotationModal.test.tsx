@@ -16,11 +16,11 @@ describe('AnnotationModal', () => {
       />
     );
 
-    expect(screen.getByRole('heading', { name: /create annotation/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /create label/i })).toBeInTheDocument();
     expect(screen.getByText(/region:/i)).toBeInTheDocument();
-    expect(screen.queryByText(/inside existing annotation/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /split annotation/i })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /create annotation/i })).toBeInTheDocument();
+    expect(screen.queryByText(/inside existing label/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /split label/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create label/i })).toBeInTheDocument();
   });
 
   it('renders split option when the selected region is inside an existing annotation', () => {
@@ -44,11 +44,11 @@ describe('AnnotationModal', () => {
       />
     );
 
-    expect(screen.getByText(/inside existing annotation/i)).toBeInTheDocument();
+    expect(screen.getByText(/inside existing label/i)).toBeInTheDocument();
     expect(screen.getByText('Moonlight Sonata')).toBeInTheDocument();
     expect(screen.getByText(/split into two segments/i)).toBeInTheDocument();
 
-    const splitButtons = screen.getAllByRole('button', { name: /split annotation/i });
+    const splitButtons = screen.getAllByRole('button', { name: /split label/i });
     expect(splitButtons.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -74,7 +74,7 @@ describe('AnnotationModal', () => {
       />
     );
 
-    const splitButtons = screen.getAllByRole('button', { name: /split annotation/i });
+    const splitButtons = screen.getAllByRole('button', { name: /split label/i });
     fireEvent.click(splitButtons[0]);
 
     expect(onSplitAnnotation).toHaveBeenCalledTimes(1);
@@ -96,7 +96,7 @@ describe('AnnotationModal', () => {
 
     const input = screen.getByPlaceholderText(/type to search or enter new song name/i);
     fireEvent.change(input, { target: { value: 'New Song' } });
-    fireEvent.click(screen.getByRole('button', { name: /create annotation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /create label/i }));
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit).toHaveBeenCalledWith('New Song');

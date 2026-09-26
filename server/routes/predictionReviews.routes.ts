@@ -491,7 +491,7 @@ router.post('/rebuild-model', route('rebuild model', async (req: Request, res: R
   const files = loadAnnotatedMidiFiles(dbPath);
   if (files.length < 2) {
     return res.status(400).json({
-      error: `Need at least 2 annotated files to train robustly. Found ${files.length}.`
+      error: `Need at least 2 labeled files to train robustly. Found ${files.length}.`
     });
   }
 

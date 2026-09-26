@@ -46,7 +46,7 @@ export function TopSongsChart({
       </div>
 
       {visible.length === 0 && (
-        <p className="text-sm text-gray-500">No annotated songs in this range.</p>
+        <p className="text-sm text-gray-500">No labeled songs in this range.</p>
       )}
 
       <div className="space-y-2.5">

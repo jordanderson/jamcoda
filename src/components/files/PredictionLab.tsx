@@ -452,7 +452,7 @@ export function PredictionLab({
           <div className="space-y-3">
             {annotations.length > 0 && (
               <TimelineBar
-                label={`Annotations ${isFileComplete
+                label={`Labels ${isFileComplete
                   ? '(this file is complete, so these are the answer)'
                   : '(so far)'}`}
                 durationSec={durationSec}
@@ -509,7 +509,7 @@ export function PredictionLab({
                       onClick={() => handleApply(run)}
                       disabled={commit.isPending || isFileComplete || !canApplyCandidate(run)}
                       title={isFileComplete
-                        ? 'A completed file\u2019s annotations are final, so predictions cannot be written to it'
+                        ? 'A completed file\u2019s labels are final, so predictions cannot be written to it'
                         : !canApplyCandidate(run)
                           ? 'Only the library model, as saved, writes to the review queue; this run is for comparing'
                           : 'Re-run for real and replace the unpromoted review queue'}

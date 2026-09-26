@@ -234,7 +234,7 @@ export function SongsPage() {
         const rebuildResult = await rebuildModel.mutateAsync({});
         setRenameFeedback({
           type: 'success',
-          message: `Renamed "${oldSongName}" to "${newSongName}" (${renameResult.annotationsUpdated} annotations, ${renameResult.predictionReviewsPredictedUpdated + renameResult.predictionReviewsReviewedUpdated} prediction fields) and rebuilt model (${rebuildResult.filesUsed} files).`
+          message: `Renamed "${oldSongName}" to "${newSongName}" (${renameResult.annotationsUpdated} labels, ${renameResult.predictionReviewsPredictedUpdated + renameResult.predictionReviewsReviewedUpdated} prediction fields) and rebuilt model (${rebuildResult.filesUsed} files).`
         });
       } catch (error) {
         setRenameFeedback({
@@ -265,7 +265,7 @@ export function SongsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Songs</h1>
           <p className="text-gray-600 mt-1">
             {songFilter === null
-              ? 'All annotated song segments, ordered by most recently played date.'
+              ? 'All labeled song segments, ordered by most recently played date.'
               : `${rows.length} segment${rows.length === 1 ? '' : 's'} of “${songFilter}” — play takes from different sessions.`}
           </p>
         </div>
@@ -362,7 +362,7 @@ export function SongsPage() {
               Rename and Rebuild Model
             </button>
             <span className="text-xs text-indigo-800">
-              Updates annotations and prediction reviews, then retrains `data/ml/model.json`.
+              Updates labels and prediction reviews, then retrains `data/ml/model.json`.
             </span>
           </div>
         </div>
@@ -435,8 +435,8 @@ export function SongsPage() {
                 <tr>
                   <td className="px-4 py-6 text-gray-500" colSpan={6}>
                     {songFilter === null
-                      ? 'No annotated songs yet.'
-                      : `No annotated segments for “${songFilter}”.`}
+                      ? 'No labeled songs yet.'
+                      : `No labeled segments for “${songFilter}”.`}
                   </td>
                 </tr>
               )}

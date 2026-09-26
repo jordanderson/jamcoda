@@ -169,7 +169,7 @@ export function AnnotationModal({
       >
         <div className="p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-2">
-            {mode === 'edit' ? 'Edit Annotation' : 'Create Annotation'}
+            {mode === 'edit' ? 'Edit Label' : 'Create Label'}
           </h2>
 
           {!allowTimeEdit && (
@@ -201,7 +201,7 @@ export function AnnotationModal({
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 uppercase tracking-wide">
                     <Scissors className="w-3.5 h-3.5" />
-                    Inside Existing Annotation
+                    Inside Existing Label
                   </div>
                   <p className="mt-1 text-sm font-bold text-gray-900 truncate">
                     {splitTargetAnnotation.song_name}
@@ -218,10 +218,10 @@ export function AnnotationModal({
                   onClick={handleSplit}
                   disabled={isSplitting}
                   className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                  title="Split annotation into two segments with this hole"
+                  title="Split label into two segments with this hole"
                 >
                   <Scissors className="w-3.5 h-3.5" />
-                  {isSplitting ? 'Splitting...' : 'Split Annotation'}
+                  {isSplitting ? 'Splitting...' : 'Split Label'}
                 </button>
               </div>
             </div>
@@ -376,7 +376,7 @@ export function AnnotationModal({
                   className="px-3.5 py-2 text-xs font-semibold text-amber-800 hover:text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                 >
                   <Scissors className="w-3.5 h-3.5" />
-                  {isSplitting ? 'Splitting...' : 'Split Annotation'}
+                  {isSplitting ? 'Splitting...' : 'Split Label'}
                 </button>
               ) : <div />}
               <div className="flex gap-3">
@@ -393,7 +393,7 @@ export function AnnotationModal({
                   disabled={!inputValue.trim() || isSplitting}
                   className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {mode === 'edit' ? 'Save Changes' : 'Create Annotation'}
+                  {mode === 'edit' ? 'Save Changes' : 'Create Label'}
                 </button>
               </div>
             </div>

@@ -50,7 +50,7 @@ export const AnnotationTimeline = memo(function AnnotationTimeline({
   if (annotations.length === 0) {
     return (
       <div className="absolute inset-0 flex items-center px-3 text-xs text-gray-400">
-        No annotations yet
+        No labels yet
       </div>
     )
   }
@@ -105,8 +105,8 @@ export const AnnotationTimeline = memo(function AnnotationTimeline({
                     event.stopPropagation()
                     onDelete(annotation.id)
                   }}
-                  aria-label={`Delete annotation ${annotation.song_name}`}
-                  title={`Delete annotation: ${annotation.song_name}`}
+                  aria-label={`Delete label ${annotation.song_name}`}
+                  title={`Delete label: ${annotation.song_name}`}
                   className="pointer-events-auto h-4 w-4 rounded-full bg-red-600/90 text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300 flex items-center justify-center"
                 >
                   <Trash2 className="w-2.5 h-2.5" />

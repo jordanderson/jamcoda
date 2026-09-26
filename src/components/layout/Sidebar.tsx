@@ -14,17 +14,17 @@ interface SidebarProps {
 }
 
 function buildRebuildBadgeTitle(status: RebuildStatusResponse | undefined): string {
-  if (!status) return 'Rebuild the segmentation model from annotations'
+  if (!status) return 'Rebuild the segmentation model from labels'
   const parts: string[] = []
   if (status.pendingAnnotationCount > 0) {
     parts.push(
-      `${status.pendingAnnotationCount} annotation${status.pendingAnnotationCount === 1 ? '' : 's'} changed since the model was built`
+      `${status.pendingAnnotationCount} label${status.pendingAnnotationCount === 1 ? '' : 's'} changed since the model was built`
     )
   }
   if (status.missingLabels.length > 0) {
     const preview = status.missingLabels.slice(0, 3).join(', ')
     const more = status.missingLabels.length > 3 ? '…' : ''
-    parts.push(`${status.missingLabels.length} new song label${status.missingLabels.length === 1 ? '' : 's'}: ${preview}${more}`)
+    parts.push(`${status.missingLabels.length} new song${status.missingLabels.length === 1 ? '' : 's'}: ${preview}${more}`)
   }
   return `Model is stale — ${parts.join('; ')}. Run Rebuild Model to retrain.`
 }
@@ -66,7 +66,7 @@ export default function Sidebar({ onStartSync, isSyncStarting }: SidebarProps) {
             : '';
           showToast({
             type: 'success',
-            message: `Model rebuilt (${result.filesUsed} files, ${result.annotationsUsed} annotations)${reScored}`
+            message: `Model rebuilt (${result.filesUsed} files, ${result.annotationsUsed} labels)${reScored}`
           })
         },
         onError: (error) => {

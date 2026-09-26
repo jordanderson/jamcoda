@@ -358,7 +358,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
   }, [currentTime, duration]);
 
   const handleDeleteAnnotation = useCallback((annotationId: number) => {
-    if (!confirm('Delete this annotation?')) return;
+    if (!confirm('Delete this label?')) return;
     deleteAnnotation.mutate(annotationId);
   }, [deleteAnnotation.mutate]);
 
@@ -502,7 +502,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
       await promotePredictionReview.mutateAsync(review.id);
       showToast({
         type: 'success',
-        message: `Promoted "${getPredictionDisplaySongName(review)}" to annotations.`
+        message: `Promoted "${getPredictionDisplaySongName(review)}" to labels.`
       });
       if (selectedPredictionReviewId === review.id) {
         setSelectedPredictionReviewId(null);
@@ -529,7 +529,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
       showToast({
         type: 'success',
         message: promotions.length === 2
-          ? `Promoted "${getPredictionDisplaySongName(review)}" as two annotations, leaving out ${left}.`
+          ? `Promoted "${getPredictionDisplaySongName(review)}" as two labels, leaving out ${left}.`
           : `Promoted "${getPredictionDisplaySongName(review)}", trimmed to leave out ${left}.`
       });
       if (selectedPredictionReviewId === review.id) {
@@ -868,11 +868,11 @@ export function DetailPage({ fileId }: DetailPageProps) {
         onError={(message) => showToast({ type: 'error', message })}
       />
 
-      {/* Annotations */}
+      {/* Labels */}
       <div className="border rounded-lg shadow-sm bg-white">
         <div className="p-6 border-b flex justify-between items-center">
           <h2 className="text-xl font-bold text-gray-900">
-            Annotations ({annotations.length})
+            Labels ({annotations.length})
           </h2>
           <div className="flex items-center gap-2">
             <button
@@ -903,7 +903,7 @@ export function DetailPage({ fileId }: DetailPageProps) {
               className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              Add Annotation
+              Add Label
             </button>
           </div>
         </div>

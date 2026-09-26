@@ -101,7 +101,7 @@ export const localFilesApi = {
 export const annotationsApi = {
   list: async (fileId: number) => {
     const response = await fetch(`/api/annotations/${fileId}`);
-    if (!response.ok) return throwApiError(response, 'Failed to get annotations');
+    if (!response.ok) return throwApiError(response, 'Failed to get labels');
     return response.json();
   },
 
@@ -137,7 +137,7 @@ export const annotationsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!response.ok) return throwApiError(response, 'Failed to create annotation');
+    if (!response.ok) return throwApiError(response, 'Failed to create label');
     return response.json();
   },
 
@@ -150,13 +150,13 @@ export const annotationsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!response.ok) return throwApiError(response, 'Failed to update annotation');
+    if (!response.ok) return throwApiError(response, 'Failed to update label');
     return response.json();
   },
 
   delete: async (id: number) => {
     const response = await fetch(`/api/annotations/${id}`, { method: 'DELETE' });
-    if (!response.ok) return throwApiError(response, 'Failed to delete annotation');
+    if (!response.ok) return throwApiError(response, 'Failed to delete label');
   },
 
   split: async (
@@ -168,7 +168,7 @@ export const annotationsApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    if (!response.ok) return throwApiError(response, 'Failed to split annotation');
+    if (!response.ok) return throwApiError(response, 'Failed to split label');
     return response.json();
   },
 

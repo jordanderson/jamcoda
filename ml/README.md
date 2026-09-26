@@ -97,6 +97,9 @@ Prediction review/promotion uses:
 
 ### What an annotation means
 
+The app calls an annotation a *label*. This document says "annotation", as the
+code does, because "label" here means a song class the model predicts.
+
 An annotation marks a stretch of **working on one song**: repeated takes,
 repeated sections and one-hand practice all belong to it, as long as the playing
 stays part of the song. It stops when the playing turns into noodling, and it

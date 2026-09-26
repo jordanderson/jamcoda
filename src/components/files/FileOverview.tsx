@@ -391,11 +391,11 @@ export function FileOverview({
       </div>
 
       <TimelineBar
-        label={`Annotations (${annotations.length})`}
+        label={`Labels (${annotations.length})`}
         durationSec={durationSec}
         currentTime={currentTime}
         onSeek={onSeek}
-        emptyLabel="No annotations yet"
+        emptyLabel="No labels yet"
         containerRef={annotationRowRef}
         minSpanPercent={annotationMinPercent}
         onResizePointerDown={handleSpanResizePointerDown}

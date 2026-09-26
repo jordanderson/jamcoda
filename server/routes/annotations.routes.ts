@@ -84,13 +84,13 @@ router.get('/songs', route('get song play history', async (_req, res) => {
   res.json({ songs: history });
 }));
 
-router.get('/:fileId', route('get annotations', async (req, res) => {
+router.get('/:fileId', route('get labels', async (req, res) => {
   const fileId = parseInt(req.params.fileId);
   const annotations = AnnotationModel.findByFileId(fileId);
   res.json(annotations);
 }));
 
-router.post('/', route('create annotation', async (req, res) => {
+router.post('/', route('create label', async (req, res) => {
   const { fileId, songName, startTime, endTime, notes } = req.body;
 
   if (!fileId || !songName || startTime === undefined || endTime === undefined) {
@@ -113,7 +113,7 @@ router.post('/', route('create annotation', async (req, res) => {
   res.status(201).json(annotation);
 }));
 
-router.put('/:id', route('update annotation', async (req, res) => {
+router.put('/:id', route('update label', async (req, res) => {
   const id = parseInt(req.params.id);
   const { songName, startTime, endTime, notes } = req.body;
 
@@ -129,7 +129,7 @@ router.put('/:id', route('update annotation', async (req, res) => {
   });
 
   if (!success) {
-    return res.status(404).json({ error: 'Annotation not found' });
+    return res.status(404).json({ error: 'Label not found' });
   }
 
   const shouldMergeSameSongOverlaps = (
@@ -149,7 +149,7 @@ router.put('/:id', route('update annotation', async (req, res) => {
   }
 
   if (!annotation) {
-    return res.status(404).json({ error: 'Annotation not found' });
+    return res.status(404).json({ error: 'Label not found' });
   }
 
   // `absorbedIds` rides along on the annotation so a client can tell an
@@ -179,12 +179,12 @@ router.post('/:id/split', async (req, res) => {
 
     const existing = AnnotationModel.findById(id);
     if (!existing) {
-      return res.status(404).json({ error: 'Annotation not found' });
+      return res.status(404).json({ error: 'Label not found' });
     }
 
     if (holeStartTime <= existing.start_time || holeEndTime >= existing.end_time) {
       return res.status(400).json({
-        error: `Split hole [${holeStartTime}, ${holeEndTime}] must be strictly within annotation bounds [${existing.start_time}, ${existing.end_time}]`
+        error: `Split hole [${holeStartTime}, ${holeEndTime}] must be strictly within label bounds [${existing.start_time}, ${existing.end_time}]`
       });
     }
 
@@ -192,16 +192,16 @@ router.post('/:id/split', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error splitting annotation:', error);
-    res.status(500).json({ error: errorMessage(error, 'Failed to split annotation') });
+    res.status(500).json({ error: errorMessage(error, 'Failed to split label') });
   }
 });
 
-router.delete('/:id', route('delete annotation', async (req, res) => {
+router.delete('/:id', route('delete label', async (req, res) => {
   const id = parseInt(req.params.id);
   const success = AnnotationModel.remove(id);
 
   if (!success) {
-    return res.status(404).json({ error: 'Annotation not found' });
+    return res.status(404).json({ error: 'Label not found' });
   }
 
   res.status(204).send();

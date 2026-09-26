@@ -70,5 +70,5 @@ export function candidateSpans(run: CandidateRun, isFileComplete: boolean): Over
 
 export function candidateCountLabel(run: CandidateRun, isFileComplete: boolean): string {
   const count = candidateSegments(run, isFileComplete).length
-  return `${count} segments${isFileComplete ? ', before annotated time is subtracted' : ''}`
+  return `${count} segments${isFileComplete ? ', before labeled time is subtracted' : ''}`
 }

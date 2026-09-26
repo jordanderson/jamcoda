@@ -648,11 +648,11 @@
             </p>
             <p>
               JamCoda compares short stretches of MIDI with examples from your
-              annotations, finds the phrases it recognizes clearly, and joins
+              labels, finds the phrases it recognizes clearly, and joins
               them into the stretches you spent on each song. Where it had to
               fill in a passage without recognizing the song clearly, it marks
               the spot, so you know where to listen before accepting it. Each
-              prediction you confirm or correct becomes an annotation, and the
+              prediction you confirm or correct becomes a label, and the
               next model rebuild learns from it.
             </p>
           </div>
@@ -662,7 +662,7 @@
             <svg
               viewBox="0 0 1020 174"
               role="img"
-              aria-label="A twenty-minute practice recording. The top row is the player's annotation: seven stretches across four pieces, ending with three passes of Winter Wonderland a pause apart. The bottom row is the model's output, predicted without this recording in its training. It finds all four songs and carries Winter Wonderland across the pauses as one stretch. It catches only the last 17 seconds of O Little Town of Bethlehem and stops O Come Emmanuel about two and a half minutes early. Two passages are hatched as worth a listen: the handover from Winter Wonderland to White Christmas, and a faint passage inside the later Winter Wonderland."
+              aria-label="A twenty-minute practice recording. The top row is the player's labels: seven stretches across four pieces, ending with three passes of Winter Wonderland a pause apart. The bottom row is the model's output, predicted without this recording in its training. It finds all four songs and carries Winter Wonderland across the pauses as one stretch. It catches only the last 17 seconds of O Little Town of Bethlehem and stops O Come Emmanuel about two and a half minutes early. Two passages are hatched as worth a listen: the handover from Winter Wonderland to White Christmas, and a faint passage inside the later Winter Wonderland."
             >
               <text x="120" y="30" class="sn" style="fill: var(--s-a)">
                 Winter Wonderland
@@ -931,7 +931,7 @@
             this recording in its training. The model finds all four songs, and
             joins the last three passes of <em>Winter Wonderland</em>, one and
             two seconds apart, into one stretch of work on the song, just as the
-            player annotated them. It catches only the
+            player labeled them. It catches only the
             last 17 seconds of <em>O Little Town of Bethlehem</em> and stops
             <em>O Come Emmanuel</em> early: slow hymns give a six-second window
             few notes to go on. Hatching marks the two passages it filled in
@@ -1344,7 +1344,7 @@
 
         <section class="stage">
           <div class="stage-head col">
-            <h2>Learning from the player’s annotations</h2>
+            <h2>Learning from the player’s labels</h2>
           </div>
           <div class="prose">
             <p>
@@ -1356,14 +1356,14 @@
               etc.
             </p>
             <p>
-              An annotation marks a stretch of <em>working on one song</em>, not
+              A label marks a stretch of <em>working on one song</em>, not
               a single take. Repeated takes, repeated sections and one hand at a
               time all belong to it, as long as the playing stays part of the
               song, and a pause of a few seconds doesn’t end it. It stops when
               the playing turns into noodling, and it ends on the song’s last
               notes, leaving out any flourish. Noodling after one song sounds
               much like noodling after another, and so does a closing flourish,
-              which is why they are left unannotated: they are what teaches the
+              which is why they are left unlabeled: they are what teaches the
               model what “no song” sounds like.
             </p>
             <p>
@@ -1376,17 +1376,17 @@
               but only once everything in it is labeled.
             </p>
             <p>
-              The model described here was trained from 1,430 annotations of 84
+              The model described here was trained from 1,430 labels of 84
               songs across 172 recordings. Those produced about 257,000 training
               windows, reduced to 15,421 prototypes. A song with lots of
-              annotated playing gets more examples, allowing the model to
+              labeled playing gets more examples, allowing the model to
               remember different passages and different ways of playing them.
             </p>
             <p>
               That also creates a bias. With more examples, a song has more
               chances to produce a close match, even when it is the wrong
               answer. Attempts to compensate for this have reduced accuracy.
-              Giving sparsely annotated songs more examples remains the
+              Giving sparsely labeled songs more examples remains the
               practical way to improve their coverage.
             </p>
             <p>
@@ -1521,7 +1521,7 @@
             </p>
             <p>
               Before suggestions enter the review queue, the app removes time
-              the player has already annotated. It also splits segments at
+              the player has already labeled. It also splits segments at
               device bookmarks and at recorded pauses of at least 30 seconds.
               These markers are applied after decoding; they don’t help the
               model identify the song.
@@ -1529,7 +1529,7 @@
             <p>
               The musician can confirm a suggestion, correct its name or
               boundaries, or reject it. Promoting an accepted suggestion makes
-              it an annotation that the next rebuild can learn from. Rebuilding
+              it a label that the next rebuild can learn from. Rebuilding
               is a manual action. Marking a file complete clears its predictions
               and blocks further prediction runs, though Prediction Lab can
               still preview results on it, with or without that recording in
@@ -1576,12 +1576,12 @@
               Accuracy is reported on the 142 recordings marked complete. In an
               unfinished file, an unlabeled passage might be a song the player
               hasn’t gotten to yet. Scoring a correct prediction there as a false
-              positive would measure annotation progress as much as model
+              positive would measure label progress as much as model
               quality.
             </p>
             <p>
-              The scores follow what an annotation means: a stretch of work on
-              one song. Two annotations of the same song less than three
+              The scores follow what a label means: a stretch of work on
+              one song. Two labels of the same song less than three
               seconds apart count as one stretch, the gap a pause; a longer gap
               between them is noodling, and a prediction that carries the song
               across it has called that noodling the song.
@@ -1605,7 +1605,7 @@
                   <td>Song time on the right song</td>
                   <td class="n">93.4%</td>
                   <td>
-                    Annotated time predicted as its own song; 0.6% goes to a
+                    Labeled time predicted as its own song; 0.6% goes to a
                     different song and 6.0% to none
                   </td>
                 </tr>
@@ -1625,10 +1625,10 @@
                   </td>
                 </tr>
                 <tr>
-                  <td>Unannotated time called a song</td>
+                  <td>Unlabeled time called a song</td>
                   <td class="n">44.4%</td>
                   <td>
-                    Of the 5.3 unannotated hours: 17% in a gap between two
+                    Of the 5.3 unlabeled hours: 17% in a gap between two
                     stretches of that song, 18% at the edge of a stretch, 10%
                     elsewhere
                   </td>
@@ -1645,7 +1645,7 @@
                   <td>Review edits, estimated</td>
                   <td class="n">2.4</td>
                   <td>
-                    Per recording: a split, a merge, a new annotation, or a
+                    Per recording: a split, a merge, a new label, or a
                     deletion or relabel; boundary trims not counted
                   </td>
                 </tr>
@@ -1669,7 +1669,7 @@
               point to.
             </p>
             <p>
-              These scores don’t treat each annotation as a single take paired
+              These scores don’t treat each label as a single take paired
               with at most one prediction. Scored that way, a prediction that
               joins two stretches of the same song loses a take even when all
               of its song time is right, and the model is penalized most for
@@ -1731,7 +1731,7 @@
             </p>
             <p>
               <strong>Warm-up is a judgment call.</strong> In one recording,
-              the annotations for <em>The Entertainer</em> begin 73 seconds in,
+              the labels for <em>The Entertainer</em> begin 73 seconds in,
               while the model starts near the beginning. The disputed passage is
               warm-up on that piece. Whether warm-up is already work on the song
               or still noodling is the player’s call, and a consistent answer
@@ -1759,7 +1759,7 @@
             <p>
               v2.12 changed where the model learns “no song”. It used to take
               every unlabeled stretch of any recording with at least one
-              annotation, including recordings the player hadn’t finished
+              label, including recordings the player hadn’t finished
               labeling. Those stretches are mostly real playing, often the very
               songs the model is trying to learn, so a new song’s unlabeled
               takes were being taught as “no song”. v2.12 learns “no song” only
@@ -2008,7 +2008,7 @@
       <footer>
         <div class="wrap col">
           <p>
-            Figures use model v2.14: 172 training recordings, 1,430 annotations,
+            Figures use model v2.14: 172 training recordings, 1,430 labels,
             84 songs and 15,421 prototypes. Evaluation snapshot: September 23,
             2026, dataset <span class="mono">71ca3e73…</span>; the release
             chart uses September 7, 2026, dataset

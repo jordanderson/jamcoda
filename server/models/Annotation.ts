@@ -286,7 +286,7 @@ export function split(
   const db = getDb();
   const current = findById(id);
   if (!current) {
-    throw new Error(`Annotation ${id} not found`);
+    throw new Error(`Label ${id} not found`);
   }
 
   if (

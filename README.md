@@ -9,13 +9,13 @@ Jamcorder produces one MIDI file per day with all your practice sessions. That's
 JamCoda does that for you. It:
 
 1. Syncs the MIDI files from the Jamcorder onto your computer.
-2. Gives you a user-friendly way to annotate song segments.
-3. Learns from your annotations to suggest which songs you played, and when.
-4. Lets you review, edit, and promote those proposed songs into new annotations.
+2. Gives you a user-friendly way to label song segments.
+3. Learns from your labels to suggest which songs you played, and when.
+4. Lets you review, edit, and promote those proposed songs into new labels.
 
-The more you annotate, the better the model gets at proposing segments for you to review.
+The more you label, the better the model gets at proposing segments for you to review.
 
-Here I run predictions on a session with nothing annotated yet, and JamCoda proposes fifteen segments. I listen to the first few, adjust their start and end times where needed, and promote them into annotations. Then I rebuild the model so it learns from the new annotations. (Turn the sound on for the video below.)
+Here I run predictions on a session with nothing labeled yet, and JamCoda proposes fifteen segments. I listen to the first few, adjust their start and end times where needed, and promote them into labels. Then I rebuild the model so it learns from the new labels. (Turn the sound on for the video below.)
 
 https://github.com/user-attachments/assets/34c06c95-3db9-446a-a16c-b6f8555c7923
 
@@ -31,17 +31,17 @@ rest sync next time. Recordings containing no notes are not imported — the
 device sometimes starts and stops a recording without anything played — and
 the sync summary reports how many were ignored.
 
-The Library page (`#/browse`) lists recordings with annotation progress, an unreviewed prediction
+The Library page (`#/browse`) lists recordings with label progress, an unreviewed prediction
 count, and song chips that jump to a timestamp. Sort by date or by most
 unreviewed predictions.
 
 ![The JamCoda library: a sidebar with Library, Songs and Analytics, and a table of recordings by date, each row showing duration, a Complete badge, an unreviewed count, and colored chips naming the takes found in that session.](docs/images/library.jpg)
 
-### Annotate
+### Label
 
 Open a recording to see its piano roll (`#/detail/:id`). Play with `P`, mark a segment
 with `S` and `E`, clear the marks with `C`, or turn on `Select Region` and drag
-across the roll. `Add Annotation` enters one by hand. Annotations can be
+across the roll. `Add Label` enters one by hand. Labels can be
 edited, split at a silent gap, trimmed, or snapped to the notes actually played.
 
 The device's own markers — passage bookmarks and the silence gaps it recorded —
@@ -50,24 +50,24 @@ appear on the roll and as chips below it that jump to their time.
 Three to five whole takes of a song, from different sessions, are usually
 enough for the model to find its later takes; eight to ten get it as good as it
 will get. See
-[How many takes to annotate](ml/README.md#how-many-takes-to-annotate).
+[How many takes to label](ml/README.md#how-many-takes-to-label).
 
-`Mark Complete` says every take in the file is annotated, so its remaining time
+`Mark Complete` says every take in the file is labeled, so its remaining time
 holds no song. Complete files are the only place the model learns what "no
-song" sounds like, so mark a file complete once every take in it is annotated,
+song" sounds like, so mark a file complete once every take in it is labeled,
 and not before. Marking a file complete also clears its predictions and blocks
 further prediction runs until it is marked incomplete.
 
-![A fully labeled session open in JamCoda: transport controls with Start, End and Following buttons, a piano roll of the notes, a pink annotation bar for Maple Leaf Rag, an empty predictions lane, a whole-recording strip of twenty-two colored takes, and clickable device markers.](docs/images/annotated_file.jpg)
+![A fully labeled session open in JamCoda: transport controls with Start, End and Following buttons, a piano roll of the notes, a pink label bar for Maple Leaf Rag, an empty predictions lane, a whole-recording strip of twenty-two colored takes, and clickable device markers.](docs/images/annotated_file.jpg)
 
 ### Review predictions
 
 `Run Predictions` generates proposals for the open file. They appear as
 segments on the roll; click one to review it against the audio, then
 `Confirm & Promote`, `Edit & Promote`, or `Mark Invalid`. Promoting turns a
-proposal into an annotation the next rebuild can learn from.
+proposal into a label the next rebuild can learn from.
 
-![An unlabeled session in JamCoda: the annotations lane reads No annotations yet, while the predictions lane below shows fifteen proposed takes named Pathetique, Turkish March, Waltz in A, Bethena, Bink's Waltz and Blue Danube, the first labeled Pathetique 89%.](docs/images/only_predicted.jpg)
+![An unlabeled session in JamCoda: the labels lane reads No labels yet, while the predictions lane below shows fifteen proposed takes named Pathetique, Turkish March, Waltz in A, Bethena, Bink's Waltz and Blue Danube, the first labeled Pathetique 89%.](docs/images/only_predicted.jpg)
 
 Prediction Lab, on the same page, previews how different prediction settings
 would change the proposals before you commit a run.
@@ -76,10 +76,10 @@ would change the proposals before you commit a run.
 
 ### Songs and analytics
 
-`#/songs` lists every annotated segment across all files, so you can play takes
+`#/songs` lists every labeled segment across all files, so you can play takes
 of one piece from different sessions back to back. Filter with the dropdown or
 `#/songs?song=<name>`, and rename a song globally — the rename updates
-annotations and prediction reviews together, then rebuilds the model so it
+labels and prediction reviews together, then rebuilds the model so it
 learns the new name.
 
 `#/analytics` groups practice time by song and date over a chosen range
@@ -90,8 +90,8 @@ Month), with top-song bars, a practice-over-time trend, and a sortable table.
 
 ### Rebuild the model
 
-`Rebuild Model` in the sidebar retrains from all current annotations and saves
-the model as `ml/model.json` in your library folder. The button shows a badge when annotations have changed
+`Rebuild Model` in the sidebar retrains from all current labels and saves
+the model as `ml/model.json` in your library folder. The button shows a badge when labels have changed
 since the model was built, or when songs exist that the model has never seen.
 Rebuild after updating JamCoda, too: the badge doesn't track new releases, and a
 new release's training changes take effect only when you rebuild.
@@ -217,9 +217,9 @@ Run migrations by hand with `npm run db:migrate`, adding
 | `npm run db:migrate`              | Apply pending migrations                                                                                      |
 | `npm run db:prune-empty`          | Delete synced recordings with no notes (dry run; `--apply` writes)                                            |
 | `npm run db:backfill-bookmarks`   | Parse JMX bookmarks and silence gaps for already-synced files                                                 |
-| `npm run db:repair-promotions`    | Re-link promotions orphaned by a deleted annotation (dry run; `--apply` writes)                               |
+| `npm run db:repair-promotions`    | Re-link promotions orphaned by a deleted label (dry run; `--apply` writes)                                    |
 | `npm run db:rescale-silent-tempo` | Rescale stored times for files that declare no tempo (dry run; `--apply` writes, `--verify` checks durations) |
-| `npm run ml:train`                | Train a model from annotations                                                                                |
+| `npm run ml:train`                | Train a model from labels                                                                                     |
 | `npm run ml:predict`              | Predict segments for one MIDI file                                                                            |
 | `npm run ml:predict-import`       | Predict and import into `prediction_reviews`                                                                  |
 | `npm run ml:predict-missing`      | Same, for every incomplete file with no predictions (`--force` re-runs)                                       |

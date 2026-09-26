@@ -87,7 +87,7 @@ const routes: MockRoute[] = [
         })
       }
       if (updateStatus !== 200) {
-        return { status: updateStatus, body: { error: 'Annotation not found' } }
+        return { status: updateStatus, body: { error: 'Label not found' } }
       }
       const patch = request.json<{ startTime?: number; endTime?: number; songName?: string }>()
       stored = stored

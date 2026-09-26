@@ -106,7 +106,7 @@ export function AnalyticsTable({ totals, series, selectedSong, onSelectSong }: A
             {rows.length === 0 && (
               <tr>
                 <td className="px-4 py-6 text-gray-500" colSpan={6}>
-                  No annotations in this range.
+                  No labels in this range.
                 </td>
               </tr>
             )}

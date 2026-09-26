@@ -28,7 +28,7 @@ describe('FileOverview', () => {
     render(
       <FileOverview currentTime={0} durationSec={240} annotations={annotations} predictions={predictions} onSeek={vi.fn()} />
     )
-    expect(screen.getByText('Annotations (2)')).toBeInTheDocument()
+    expect(screen.getByText('Labels (2)')).toBeInTheDocument()
     expect(screen.getByText('Predictions (1)')).toBeInTheDocument()
 
     render(
@@ -372,7 +372,7 @@ describe('FileOverview candidates', () => {
       />
     )
     expect(screen.getByRole('button', { name: 'Excluded Take' })).toBeInTheDocument()
-    expect(screen.getByText(/before annotated time is subtracted/)).toBeInTheDocument()
+    expect(screen.getByText(/before labeled time is subtracted/)).toBeInTheDocument()
   })
 
   it('appears for candidates even when there is nothing else to show', () => {

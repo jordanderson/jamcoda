@@ -26,9 +26,9 @@ const GAP_ACTION_LABEL: Record<GapAction, string> = {
 }
 
 const GAP_ACTION_TITLE: Record<GapAction, string> = {
-  split: 'Split annotation around this gap',
-  'trim-start': 'Trim annotation start to the end of this gap',
-  'trim-end': 'Trim annotation end to the start of this gap',
+  split: 'Split label around this gap',
+  'trim-start': 'Trim label start to the end of this gap',
+  'trim-end': 'Trim label end to the start of this gap',
   none: 'Cannot split or trim this gap'
 }
 
@@ -52,8 +52,8 @@ export const DetailAnnotationList = memo(function DetailAnnotationList({
   if (annotations.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
-        <p>No annotations yet</p>
-        <p className="text-sm mt-2">Click "Add Annotation" to mark song segments</p>
+        <p>No labels yet</p>
+        <p className="text-sm mt-2">Click "Add Label" to mark song segments</p>
       </div>
     )
   }
@@ -153,14 +153,14 @@ export const DetailAnnotationList = memo(function DetailAnnotationList({
               <button
                 onClick={() => onEdit(annotation)}
                 className="text-gray-600 hover:text-gray-900 text-sm font-medium flex items-center gap-1"
-                title="Edit annotation"
+                title="Edit label"
               >
                 <Pencil className="w-4 h-4" />
               </button>
               <button
                 onClick={() => onDelete(annotation.id)}
                 className="text-red-600 hover:text-red-700 text-sm font-medium flex items-center gap-1"
-                title="Delete annotation"
+                title="Delete label"
               >
                 <Trash2 className="w-4 h-4" />
               </button>

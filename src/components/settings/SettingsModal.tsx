@@ -203,7 +203,7 @@ export function SettingsModal({ isOpen, isSyncStarting, onStartSync, onClose, sh
             : '';
           showToast({
             type: 'success',
-            message: `Model rebuilt (${result.filesUsed} files, ${result.annotationsUsed} annotations)${reScored}`
+            message: `Model rebuilt (${result.filesUsed} files, ${result.annotationsUsed} labels)${reScored}`
           })
         },
         onError: (error) => {
@@ -303,7 +303,7 @@ export function SettingsModal({ isOpen, isSyncStarting, onStartSync, onClose, sh
             )}
           </button>
           <p className="mt-2 text-xs text-gray-500">
-            Rebuilds the segmentation model from annotations, then re-runs predictions over
+            Rebuilds the segmentation model from labels, then re-runs predictions over
             files whose unpromoted queue is entirely 'unsure'. Can take a long time.
           </p>
         </section>

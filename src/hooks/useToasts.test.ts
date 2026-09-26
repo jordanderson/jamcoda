@@ -43,8 +43,8 @@ describe('useToasts', () => {
     const { result } = renderHook(() => useToasts())
 
     act(() => {
-      result.current.showToast({ type: 'success', message: 'Annotation deleted.' })
-      result.current.showToast({ type: 'success', message: 'Annotation deleted.' })
+      result.current.showToast({ type: 'success', message: 'Label deleted.' })
+      result.current.showToast({ type: 'success', message: 'Label deleted.' })
     })
 
     const [first, second] = result.current.toasts

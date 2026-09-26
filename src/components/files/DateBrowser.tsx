@@ -111,7 +111,7 @@ export function DateBrowser({ onFileSelect, view, onViewChange }: DateBrowserPro
           {emptyRecordingCount > 0 && (
             <span
               className="text-gray-500"
-              title="Assets the Jamcorder opened and closed without recording any notes. They stay synced but are not annotatable."
+              title="Assets the Jamcorder opened and closed without recording any notes. They stay synced but cannot be labeled."
             >
               {' '}&middot; {emptyRecordingCount} empty recording{emptyRecordingCount !== 1 ? 's' : ''} hidden
             </span>
@@ -124,7 +124,7 @@ export function DateBrowser({ onFileSelect, view, onViewChange }: DateBrowserPro
         className="border border-gray-200 rounded-lg shadow-sm bg-white p-4"
       >
         <div className="flex items-baseline justify-between gap-4">
-          <h2 className="text-sm font-medium text-gray-700">Annotation progress</h2>
+          <h2 className="text-sm font-medium text-gray-700">Labeling progress</h2>
           <span className="text-2xl font-bold text-gray-900">{progress.percentage}%</span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
@@ -223,7 +223,7 @@ export function DateBrowser({ onFileSelect, view, onViewChange }: DateBrowserPro
                         </span>
                       </div>
                     ) : (
-                      <span className="text-xs text-gray-400">No annotations</span>
+                      <span className="text-xs text-gray-400">No labels</span>
                     )}
                   </td>
                   <td className="py-3 px-4">

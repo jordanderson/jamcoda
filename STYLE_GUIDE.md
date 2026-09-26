@@ -39,14 +39,14 @@ Color-coded by completion percentage:
 - **Orange** (<50%): `bg-orange-500`
 - Background: `bg-gray-200`
 
-#### 2. Annotation Pills
-- Each pill represents a single annotation (song + start time)
+#### 2. Label Pills
+- Each pill represents a single label (song + start time)
 - Format: "Song Name MM:SS"
 - Dynamic colors generated from song name hash
 - Uses HSL: `hsl(hash % 360, 70%, 85%)` for background
 - Text color: `hsl(hash % 360, 70%, 35%)`
 - Same song appears multiple times if practiced multiple times in session
-- Clickable to jump directly to that specific annotation's start time
+- Clickable to jump directly to that specific label's start time
 - Hover effect: `hover:opacity-80` for interactivity feedback
 
 ```jsx
@@ -75,7 +75,7 @@ Color-coded by completion percentage:
 - **Checkpoint Markers**:
   - Start: Green (`bg-green-500`)
   - End: Red (`bg-red-500`)
-- **Annotation Overlays**: Dynamic colors (song name hash), 30% opacity
+- **Label Overlays**: Dynamic colors (song name hash), 30% opacity
 
 #### 4. Status Indicators
 - **Success**: `text-green-600` / `bg-green-50`
@@ -112,8 +112,8 @@ import { IconName } from 'lucide-react'
 | Pause | `Pause` | Pause playback |
 | Stop | `Square` | Stop playback |
 | Add | `Plus` | Create new items |
-| Edit | `Pencil` | Edit annotations |
-| Delete | `Trash2` | Delete annotations |
+| Edit | `Pencil` | Edit labels |
+| Delete | `Trash2` | Delete labels |
 | Navigation | `Navigation` | Follow/snap mode |
 | Arrow | `ChevronRight` | List navigation |
 | Success | `CheckCircle` | Success messages |
@@ -239,7 +239,7 @@ Use `useToasts()` for the queue and render `<ToastStack>` last in the page tree:
 ```jsx
 const { toasts, showToast, dismissToast, clearToasts } = useToasts()
 
-showToast({ type: 'success', message: 'Annotation deleted.' })
+showToast({ type: 'success', message: 'Label deleted.' })
 showToast({
   type: 'success',
   message: 'Generated 4 prediction segments for this file.'

@@ -24,8 +24,8 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
   holdOut: {
     title: 'Hold this file out',
     body: [
-      'Trains a fresh model with the chosen model’s settings on every annotated recording except this one, then predicts. The saved model learned from this file’s own annotations, so on an annotated file it partly recalls them. A held-out run shows what the model makes of a recording it has never heard, which is how npm run ml:eval scores a file and how every new recording is predicted.',
-      'On by default for a completed file, where the annotations are the answer being checked. Off by default otherwise, because the app’s own predictions for an unfinished file do come from a model trained on its annotations so far. It takes a few seconds, trains on the annotations as they are now, and is never written to the review queue.'
+      'Trains a fresh model with the chosen model’s settings on every labeled recording except this one, then predicts. The saved model learned from this file’s own labels, so on a labeled file it partly recalls them. A held-out run shows what the model makes of a recording it has never heard, which is how npm run ml:eval scores a file and how every new recording is predicted.',
+      'On by default for a completed file, where the labels are the answer being checked. Off by default otherwise, because the app’s own predictions for an unfinished file do come from a model trained on its labels so far. It takes a few seconds, trains on the labels as they are now, and is never written to the review queue.'
     ]
   },
   minSegmentSec: {
@@ -71,7 +71,7 @@ export const SETTING_HELP: Record<string, SettingHelp> = {
       'How the ambiguous stretches between takes — warm-up, noodling, talking — get attached to a song.',
       'legacy: any window that is not confidently something else joins whichever song reaches it first, with no limit. Runs extend in recording order, so the earlier song claims the whole gap. This is why a finished take tends to run past its ending and the next one starts late.',
       'bridge: a stretch is linked freely only when the same song is anchored on both sides of it, which means it sits inside one take. Past a song’s outermost anchor the run gets a short leash, and two competing songs advance in step so they meet in the middle instead of the earlier one taking everything. A second pass then hands leftover stretches back to a neighboring song when the evidence across the whole stretch supports it.',
-      'bridge is the default a new model is trained with. Measured over 103 fully annotated files: the median ending error falls from +5.85s to +0.81s and complete-file F1 rises 2.17 points, recognizing four more takes.',
+      'bridge is the default a new model is trained with. Measured over 103 fully labeled files: the median ending error falls from +5.85s to +0.81s and complete-file F1 rises 2.17 points, recognizing four more takes.',
       'Empty means whatever this model was trained with — legacy for a model built before 2026-09-07.'
     ]
   },

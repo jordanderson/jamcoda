@@ -215,3 +215,11 @@ Write American English — `behavior`, `color`, `gray`, `labeled`, `neighbor`,
 own identifiers (variables, functions, types, test names) alike, with dates
 written `September 7, 2026`. Third-party names and APIs keep their own
 spelling.
+
+An *annotation* and a *label* are the same thing: a stretch of one song that
+the user marked. Anything a user reads says "label" — UI copy, toasts, server
+error text that reaches the UI, `README.md` and `docs/*.html`. Code, the schema,
+API routes and developer docs say "annotation", and identifiers are never
+renamed to match the UI. In model code and `ml/README.md`, "label" also means a
+song class the model predicts (`missingLabels`, per-label prototypes), so there
+"annotation" is the only name for what the user marked.
